@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import type { PerspectiveCamera } from 'three';
 import type { Vec3d } from '../core/math.js';
 
 // Free-fly debug camera (F3). WASD + mouse (pointer lock), Q/E down/up,
@@ -26,6 +26,7 @@ export class FreeFlyCamera {
     canvas.addEventListener('mousedown', this.handleMouseDown);
     window.addEventListener('mousemove', this.handleMouseMove);
     window.addEventListener('mouseup', this.handleMouseUp);
+    window.addEventListener('blur', this.handleBlur);
     canvas.addEventListener('wheel', this.handleWheel, { passive: false });
   }
 
@@ -35,11 +36,21 @@ export class FreeFlyCamera {
     this.canvas?.removeEventListener('mousedown', this.handleMouseDown);
     window.removeEventListener('mousemove', this.handleMouseMove);
     window.removeEventListener('mouseup', this.handleMouseUp);
+    window.removeEventListener('blur', this.handleBlur);
     this.canvas?.removeEventListener('wheel', this.handleWheel);
+    this.keys.clear();
+    this.dragging = false;
   }
 
+  private handleBlur = (): void => {
+    this.keys.clear();
+    this.dragging = false;
+  };
+
   private handleKeyDown = (e: KeyboardEvent): void => {
-    if (e.code === 'F3') return; // handled by Game toggle
+    if (e.code === 'F3' || e.code === 'F1') return; // handled by Game toggle
+    if (e.code.startsWith('F')) return; // never treat function keys as movement
+    if (e.code === 'Space') e.preventDefault();
     this.keys.add(e.code);
   };
 
@@ -51,7 +62,14 @@ export class FreeFlyCamera {
     if (!this.enabled) return;
     // Pointer lock gives smooth look; fall back to drag if unavailable.
     if (document.pointerLockElement !== this.canvas) {
-      this.canvas?.requestPointerLock();
+      try {
+        const result = this.canvas?.requestPointerLock() as unknown as
+          | Promise<void>
+          | undefined;
+        result?.catch?.(() => {});
+      } catch {
+        // Pointer lock unavailable — drag fallback still works.
+      }
     }
     this.dragging = true;
     this.lastX = e.clientX;
@@ -127,10 +145,10 @@ export class FreeFlyCamera {
     };
   }
 
-  applyToCamera(camera: THREE.PerspectiveCamera, local: Vec3d): void {
+  applyToCamera(camera: PerspectiveCamera, local: Vec3d): void {
+    camera.up.set(0, 1, 0);
     camera.position.set(local.x, local.y, local.z);
     const fwd = this.forward();
     camera.lookAt(local.x + fwd.x, local.y + fwd.y, local.z + fwd.z);
-    camera.up.set(0, 1, 0);
   }
 }

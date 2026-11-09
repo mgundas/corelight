@@ -26,6 +26,7 @@ export class Game {
   private lastTickMs = 0;
   private originShifts = 0;
   private flySpeed = 60;
+  private readonly unsubscribeOriginShifted: () => void;
 
   constructor(canvas: HTMLCanvasElement, seed: number) {
     this.world = new World(seed);
@@ -37,7 +38,7 @@ export class Game {
     this.flySpeed = this.flyCamera.speed;
 
     window.addEventListener('keydown', this.handleGlobalKey);
-    events.on('originShifted', () => {
+    this.unsubscribeOriginShifted = events.on('originShifted', () => {
       this.originShifts += 1;
     });
   }
@@ -67,6 +68,11 @@ export class Game {
   stop(): void {
     this.running = false;
     cancelAnimationFrame(this.rafId);
+    window.removeEventListener('keydown', this.handleGlobalKey);
+    this.unsubscribeOriginShifted();
+    this.flyCamera.detach();
+    this.overlay.dispose();
+    this.renderer.dispose();
   }
 
   private frame(now: number): void {

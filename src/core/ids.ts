@@ -1,18 +1,19 @@
 // Stable string entity IDs. Never use array indexes as references.
+//
+// WHY deterministic: same seed + same action stream must produce the same
+// world (needed later for saves and co-op snapshots), so sim IDs must not
+// depend on wall-clock time or Math.random.
 
 let counter = 0;
 
-const ALPHABET = '0123456789abcdefghjkmnpqrstvwxyz';
-
-/** Random-ish unique ID for gameplay use (not deterministic). */
+/**
+ * Unique ID for non-sim (presentational/UI-only) use.
+ * Process-deterministic: a bare counter, no Date.now/Math.random, so it
+ * never leaks nondeterminism into sim code paths.
+ */
 export function newId(prefix: string): string {
   counter += 1;
-  const time = Date.now().toString(36);
-  let rand = '';
-  for (let i = 0; i < 5; i += 1) {
-    rand += ALPHABET[Math.floor(Math.random() * ALPHABET.length)];
-  }
-  return `${prefix}_${time}${counter.toString(36)}${rand}`;
+  return `${prefix}_u${counter.toString(36)}`;
 }
 
 /** Deterministic ID generator for tests: seed -> repeatable sequence. */

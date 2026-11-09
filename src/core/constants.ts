@@ -11,3 +11,12 @@ export const ORIGIN_SHIFT_DISTANCE = 1000;
 
 /** Placeholder planet radius for the M00 scale sphere (Sela = 400 m). */
 export const PLACEHOLDER_PLANET_RADIUS = 400;
+
+/** Grid that floating-origin shifts snap to (keeps shifts stable). */
+export const ORIGIN_SNAP_GRID = 32;
+
+/** Default world seed when no ?seed= URL param is given. */
+export const DEFAULT_SEED = 1337;
+
+/** Low-poly detail for the M00 placeholder sphere (icosahedron subdivisions). */
+export const PLACEHOLDER_SPHERE_DETAIL = 5;

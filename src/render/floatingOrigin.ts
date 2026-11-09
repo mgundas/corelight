@@ -1,4 +1,4 @@
-import { ORIGIN_SHIFT_DISTANCE } from '../core/constants.js';
+import { ORIGIN_SHIFT_DISTANCE, ORIGIN_SNAP_GRID } from '../core/constants.js';
 import { events } from '../core/events.js';
 import { distance, vec3, type Vec3d } from '../core/math.js';
 
@@ -27,15 +27,15 @@ export function snapToGrid(value: number, grid: number): number {
 
 /**
  * If the camera is farther than ORIGIN_SHIFT_DISTANCE from the origin,
- * move the origin to the camera position (rounded to 32 m chunks) and
+ * move the origin to the camera position (rounded to ORIGIN_SNAP_GRID) and
  * return the shift delta. Otherwise return null.
  */
 export function maybeShiftOrigin(cameraWorldPos: Vec3d): Vec3d | null {
   if (distance(cameraWorldPos, origin) < ORIGIN_SHIFT_DISTANCE) return null;
   const next: Vec3d = {
-    x: snapToGrid(cameraWorldPos.x, 32),
-    y: snapToGrid(cameraWorldPos.y, 32),
-    z: snapToGrid(cameraWorldPos.z, 32),
+    x: snapToGrid(cameraWorldPos.x, ORIGIN_SNAP_GRID),
+    y: snapToGrid(cameraWorldPos.y, ORIGIN_SNAP_GRID),
+    z: snapToGrid(cameraWorldPos.z, ORIGIN_SNAP_GRID),
   };
   const delta: Vec3d = {
     x: next.x - origin.x,

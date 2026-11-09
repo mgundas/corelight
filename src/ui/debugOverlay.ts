@@ -32,6 +32,10 @@ export class DebugOverlay {
     return this.visible;
   }
 
+  dispose(): void {
+    this.el.remove();
+  }
+
   update(stats: OverlayStats): void {
     if (!this.visible) return;
     const c = stats.cameraWorld;

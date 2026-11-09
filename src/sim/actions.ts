@@ -1,4 +1,3 @@
-import { newId } from '../core/ids.js';
 import type { Vec3d } from '../core/math.js';
 import { IDENTITY_QUAT } from '../core/math.js';
 import { events } from '../core/events.js';
@@ -16,7 +15,7 @@ export function applyAction(world: World, action: Action): void {
     case 'noop':
       return;
     case 'debugSpawnMarker': {
-      const id = newId('marker');
+      const id = world.nextId('marker');
       world.entities.set(id, {
         id,
         kind: 'marker',

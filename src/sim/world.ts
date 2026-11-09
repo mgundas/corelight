@@ -12,9 +12,16 @@ export class World {
   seed: number;
   private queue: Action[] = [];
   private systems: System[] = [];
+  private idCounter = 0;
 
   constructor(seed = 1337) {
     this.seed = seed;
+  }
+
+  /** Deterministic entity ID: seed + per-world counter + call order. */
+  nextId(prefix: string): EntityId {
+    this.idCounter += 1;
+    return `${prefix}_${this.seed.toString(36)}_${this.idCounter.toString(36)}`;
   }
 
   addSystem(system: System): void {

@@ -1,8 +1,7 @@
+import { DEFAULT_SEED } from './core/constants.js';
 import { getUrlParams } from './core/urlParams.js';
 import { Game } from './game/Game.js';
 import './main.css';
-
-const DEFAULT_SEED = 1337;
 
 function boot(): void {
   const params = getUrlParams();

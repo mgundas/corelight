@@ -31,7 +31,7 @@ The coding agent updates this file at the end of every milestone. Keep it short:
 
 ## Decisions made during development
 
-(record any deviation from ARCHITECTURE.md here, with the reason)
+- M00 review fixes: `World.nextId()` (seed + per-world counter) is the only ID source in sim paths (`applyAction`); `newId()` is UI-only and counter-based (no `Date.now`/`Math.random`) to keep same-seed replays identical. `Renderer.applyOriginShift` skips `THREE.Light` objects and re-pins the sun to a fixed direction so origin shifts never change lighting. Placeholder sphere detail 24 -> 5 (detail 24 = ~5e15 tris, hangs the tab).
 
 ## Per-milestone notes
 
