@@ -1,0 +1,82 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "opencode-go/muse-spark-1.3-contributor",
+  "small_model": "opencode-go/muse-spark-1.3-contributor",
+  "autoupdate": true,
+  "share": "disabled",
+  "instructions": [
+    "docs/PROJECT.md",
+    "docs/ARCHITECTURE.md",
+    "docs/PROGRESS.md"
+  ],
+  "permission": {
+    "edit": "allow",
+    "webfetch": "allow",
+    "bash": {
+      "*": "ask",
+      "npm install*": "allow",
+      "npm i *": "allow",
+      "npm run *": "allow",
+      "npx tsc*": "allow",
+      "npx vitest*": "allow",
+      "ls*": "allow",
+      "cat *": "allow",
+      "grep *": "allow",
+      "find *": "allow",
+      "mkdir *": "allow",
+      "git status*": "allow",
+      "git diff*": "allow",
+      "git log*": "allow",
+      "git add *": "allow",
+      "git commit *": "allow",
+      "git push*": "ask",
+      "git reset --hard*": "ask",
+      "rm -rf *": "deny",
+      "sudo *": "deny"
+    }
+  },
+  "agent": {
+    "build": {
+      "model": "opencode-go/muse-spark-1.3-contributor"
+    },
+    "plan": {
+      "model": "opencode-go/muse-spark-1.3-contributor"
+    },
+    "reviewer": {
+      "description": "Reviews the latest milestone against its prompt and docs/ARCHITECTURE.md without editing code.",
+      "mode": "subagent",
+      "model": "opencode-go/muse-spark-1.3-contributor",
+      "prompt": "You are a strict code reviewer for the Corelight project. Read docs/ARCHITECTURE.md and the milestone prompt you are given. Check the code against every acceptance criterion and every hard rule. Report a numbered list of concrete problems with file paths and line numbers, ordered by severity. Do not edit any files.",
+      "permission": {
+        "edit": "deny",
+        "bash": {
+          "*": "deny",
+          "npm run check*": "allow",
+          "git diff*": "allow",
+          "git log*": "allow",
+          "grep *": "allow",
+          "cat *": "allow",
+          "ls*": "allow"
+        }
+      }
+    }
+  },
+  "command": {
+    "milestone": {
+      "description": "Implement a milestone, e.g. /milestone M03",
+      "agent": "build",
+      "template": "Find the file in prompts/ whose name starts with $ARGUMENTS (for example prompts/M03-gravity-player.md), read it fully, and implement it exactly. Before writing code, re-read docs/ARCHITECTURE.md and docs/PROGRESS.md. Work in small steps and run `npm run check` after each step. Do not start any other milestone. When every acceptance criterion is met and `npm run check` passes, update docs/PROGRESS.md as the prompt describes and commit with the message `$ARGUMENTS: <short summary>`."
+    },
+    "review": {
+      "description": "Review a milestone, e.g. /review M03",
+      "agent": "reviewer",
+      "subtask": true,
+      "template": "Review milestone $ARGUMENTS. Read the file in prompts/ whose name starts with $ARGUMENTS and prompts/REVIEW.md, then follow REVIEW.md exactly."
+    },
+    "fix": {
+      "description": "Fix a bug you describe, e.g. /fix player falls through terrain after digging",
+      "agent": "build",
+      "template": "Read prompts/FIX.md and follow it to fix this problem: $ARGUMENTS"
+    }
+  }
+}
