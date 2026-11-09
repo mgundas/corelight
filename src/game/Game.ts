@@ -1,5 +1,8 @@
 import { MAX_TICKS_PER_FRAME, SIM_DT } from '../core/constants.js';
 import { events } from '../core/events.js';
+import { length } from '../core/math.js';
+import { SELA } from '../planets/configs/sela.js';
+import { layerAt } from '../terrain/density.js';
 import { getOrigin, maybeShiftOrigin, toLocal } from '../render/floatingOrigin.js';
 import { Renderer } from '../render/Renderer.js';
 import { FreeFlyCamera } from '../player/freeFlyCamera.js';
@@ -103,7 +106,9 @@ export class Game {
       this.accumulator = 0;
     }
 
-    // Camera + floating origin.
+    // Camera + floating origin. Chunk meshes are positioned when added and
+    // re-synced on origin shifts only (per-frame syncAll would cost O(N)
+    // every frame against the 4 ms terrain budget).
     this.flyCamera.update(frameDt);
     const shift = maybeShiftOrigin(this.flyCamera.position);
     if (shift) {
@@ -111,9 +116,15 @@ export class Game {
     }
     const local = toLocal(this.flyCamera.position);
     this.flyCamera.applyToCamera(this.renderer.camera, local);
-    this.renderer.syncObjects();
     this.renderer.render();
 
+    // M01 debug: nearest planet, depth below its surface, layer at camera.
+    const rel = {
+      x: this.flyCamera.position.x - SELA.center.x,
+      y: this.flyCamera.position.y - SELA.center.y,
+      z: this.flyCamera.position.z - SELA.center.z,
+    };
+    const depth = SELA.radius - length(rel);
     this.overlay.update({
       fps: this.fps,
       tickMs: this.lastTickMs,
@@ -122,9 +133,13 @@ export class Game {
       drawCalls: this.renderer.renderer.info.render.calls,
       flySpeed: this.flySpeed,
       originShifts: this.originShifts,
+      planet: SELA.name,
+      depthM: depth,
+      layer: layerAt(SELA, rel.x, rel.y, rel.z).name,
       chunksLoaded: this.renderer.preview.loaded,
       chunksTotal: this.renderer.preview.total,
       chunksAdded: this.renderer.preview.added,
+      chunksEmpty: this.renderer.preview.empty,
       workerQueue: this.renderer.pool.queuedJobs,
     });
   }

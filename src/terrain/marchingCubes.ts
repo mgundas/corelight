@@ -62,6 +62,11 @@ function axisOf(a: GridPos, b: GridPos): number {
   return 2;
 }
 
+/**
+ * March `samples` (SAMPLE_GRID^3, border included) into a triangle mesh.
+ * Emitted positions are relative to `origin` (the chunk's minimum corner =
+ * sample 1,1,1); the color callback receives absolute planet-local coords.
+ */
 export function polygonize(
   samples: Float32Array,
   origin: GridPos,
@@ -133,9 +138,13 @@ export function polygonize(
             vertIndex[e] = cached;
             continue;
           }
-          const lx = (ix + pa.x + (pb.x - pa.x) * t) * cellSize + origin.x;
-          const ly = (iy + pa.y + (pb.y - pa.y) * t) * cellSize + origin.y;
-          const lz = (iz + pa.z + (pb.z - pa.z) * t) * cellSize + origin.z;
+          // Vertex position relative to the chunk origin (ARCH: the worker
+          // reports positions relative to chunk origin; render adds it back
+          // via the floating origin). Colors need absolute planet-local
+          // coordinates, so re-add the origin only for the color lookup.
+          const lx = (ix + pa.x + (pb.x - pa.x) * t) * cellSize;
+          const ly = (iy + pa.y + (pb.y - pa.y) * t) * cellSize;
+          const lz = (iz + pa.z + (pb.z - pa.z) * t) * cellSize;
           // Interpolated density gradient, negated: points out of the solid.
           let nx = -((gx[ca] as number) + ((gx[cb] as number) - (gx[ca] as number)) * t);
           let ny = -((gy[ca] as number) + ((gy[cb] as number) - (gy[ca] as number)) * t);
@@ -150,7 +159,7 @@ export function polygonize(
             ny = 1;
             nz = 0;
           }
-          const rgb = colorAt(lx, ly, lz, nx, ny, nz);
+          const rgb = colorAt(lx + origin.x, ly + origin.y, lz + origin.z, nx, ny, nz);
           const vi = positions.length / 3;
           positions.push(lx, ly, lz);
           normals.push(nx, ny, nz);
@@ -165,7 +174,10 @@ export function polygonize(
           if (e0 === -1) break;
           const e1 = TRI_TABLE[base + ti + 1] as number;
           const e2 = TRI_TABLE[base + ti + 2] as number;
-          indices.push(vertIndex[e0] as number, vertIndex[e1] as number, vertIndex[e2] as number);
+          // Reversed vs. the table order: Bourke's rows assume the set bit
+          // means "below the isolevel", but our solid is density > 0, so the
+          // listed order faces inward. Swap for outward-facing FrontSide.
+          indices.push(vertIndex[e0] as number, vertIndex[e2] as number, vertIndex[e1] as number);
         }
       }
     }

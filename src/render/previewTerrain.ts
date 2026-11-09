@@ -4,20 +4,25 @@
 
 import type { Vec3d } from '../core/math.js';
 import type { PlanetConfig } from '../planets/PlanetConfig.js';
-import { chunkOrigin, chunkSizeForLevel, type ChunkCoord } from '../terrain/chunkKey.js';
+import { chunkOrigin, chunkSizeForLevel, chunksInBox, type ChunkCoord } from '../terrain/chunkKey.js';
 import type { MeshWorkerPool } from '../terrain/workerPool.js';
 import type { ChunkMeshes } from './chunkMeshes.js';
 
 export interface PreviewProgress {
-  /** Meshes added so far. */
+  /** Jobs settled (success or failure). */
   loaded: number;
-  /** Jobs that produced a mesh (non-empty). */
+  /** Jobs that produced a mesh. */
   added: number;
+  /** Jobs the worker reported empty (cached, e.g. deep-solid chunks). */
+  empty: number;
   /** Total jobs submitted. */
   total: number;
 }
 
 function chunkTouchesShell(config: PlanetConfig, coord: ChunkCoord, level: number): boolean {
+  // Approximate: tests the 8 corners only (the true closest point of a box
+  // to the center can be a face). Good enough for the temp scene; M02 must
+  // use the face-clamped min distance for LOD decisions.
   const origin = chunkOrigin(coord, level);
   const size = chunkSizeForLevel(level);
   const margin = config.surfaceAmplitude + 15;
@@ -87,21 +92,32 @@ export async function loadPreviewTerrain(
   const shell = surfaceShellChunks(config, 3);
   const detailPoint: Vec3d = { x: 0, y: config.radius, z: 0 };
   const detail = detailCubeChunks(detailPoint, 1);
+  // Core chamber at level 1: the 8 chunks covering [-64, 64]^3 around the
+  // planet center, so the hollow chamber has visible walls (temp-only;
+  // M02 streams this).
+  const coreHalf = 32;
+  const core = chunksInBox(
+    { x: -coreHalf, y: -coreHalf, z: -coreHalf },
+    { x: coreHalf, y: coreHalf, z: coreHalf },
+    1,
+  );
   const jobs: Array<{ level: number; coord: ChunkCoord }> = shell.map((coord) => ({ level: 3, coord }));
   const seen = new Set(shell.map((c) => `3:${c.x}:${c.y}:${c.z}`));
   const all = jobs;
-  for (const coord of detail) {
+  for (const coord of [...detail, ...core]) {
     const key = `1:${coord.x}:${coord.y}:${coord.z}`;
     if (seen.has(key)) continue;
     seen.add(key);
     all.push({ level: 1, coord });
   }
-  const progress: PreviewProgress = { loaded: 0, added: 0, total: all.length };
+  const progress: PreviewProgress = { loaded: 0, added: 0, empty: 0, total: all.length };
   await Promise.all(
     all.map(async ({ level, coord }) => {
       try {
         const result = await pool.submit({ planetConfig: config, worldSeed, level, coord });
-        if (chunks.add(config, result)) progress.added += 1;
+        const status = chunks.add(config, result);
+        if (status === 'added') progress.added += 1;
+        else if (status === 'empty') progress.empty += 1;
       } catch {
         // A failed chunk leaves a hole; the overlay shows the shortfall.
       } finally {

@@ -15,6 +15,8 @@ export class ChunkMeshes {
   private readonly meshes = new Map<string, THREE.Mesh>();
   /** Chunk-origin world position per key (for origin re-sync). */
   private readonly worldPos = new Map<string, Vec3d>();
+  /** Keys the worker reported empty: cached so streaming never re-queues them. */
+  private readonly emptyKeys = new Set<string>();
   /** Insertion order for LRU eviction. */
   private readonly lru: string[] = [];
 
@@ -32,17 +34,28 @@ export class ChunkMeshes {
     return this.meshes.size;
   }
 
-  /** Add a mesh; returns false when the result was empty or a duplicate. */
-  add(config: PlanetConfig, result: MeshResult): boolean {
-    if (result.empty) return false;
-    if (this.meshes.has(result.key)) return false;
+  get emptyCount(): number {
+    return this.emptyKeys.size;
+  }
+
+  has(key: string): boolean {
+    return this.meshes.has(key) || this.emptyKeys.has(key);
+  }
+
+  /** Add a mesh: 'added', 'empty' (cached), or 'duplicate'. */
+  add(config: PlanetConfig, result: MeshResult): 'added' | 'empty' | 'duplicate' {
+    if (this.meshes.has(result.key) || this.emptyKeys.has(result.key)) return 'duplicate';
+    if (result.empty) {
+      this.emptyKeys.add(result.key);
+      return 'empty';
+    }
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.BufferAttribute(result.positions, 3));
     geometry.setAttribute('normal', new THREE.BufferAttribute(result.normals, 3));
     geometry.setAttribute('color', new THREE.BufferAttribute(result.colors, 3));
     geometry.setIndex(new THREE.BufferAttribute(result.indices, 1));
     const mesh = new THREE.Mesh(geometry, this.material);
-    // Worker origin is planet-local; world = center + local (Sela center 0).
+    // Worker origin is planet-local; world = planetCenter + chunkOrigin.
     const world: Vec3d = {
       x: config.center.x + result.origin.x,
       y: config.center.y + result.origin.y,
@@ -57,7 +70,7 @@ export class ChunkMeshes {
     this.group.add(mesh);
     this.lru.push(result.key);
     this.evictIfNeeded();
-    return true;
+    return 'added';
   }
 
   /** Reposition every mesh from world doubles (call after origin shifts). */

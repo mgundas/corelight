@@ -5,7 +5,7 @@
 
 import type { PlanetConfig } from '../../planets/PlanetConfig.js';
 import { cellSizeForLevel, chunkOrigin, type ChunkCoord } from '../chunkKey.js';
-import { colorAt, createDensityFn } from '../density.js';
+import { colorAt, createDensityField, type DensityField } from '../density.js';
 import { SAMPLE_GRID, polygonize } from '../marchingCubes.js';
 
 export interface MeshJob {
@@ -37,10 +37,26 @@ const workerScope = self as unknown as {
   onmessage: ((event: MessageEvent<MeshJob>) => void) | null;
 };
 
+// One field per planet+seed: building 3 simplex instances per chunk is
+// wasteful once M02 streams hundreds of chunks through each worker.
+const fields = new Map<string, DensityField>();
+
+function fieldFor(config: PlanetConfig, worldSeed: number): DensityField {
+  const key = `${config.id}:${worldSeed}`;
+  let field = fields.get(key);
+  if (!field) {
+    field = createDensityField(config, worldSeed);
+    fields.set(key, field);
+  }
+  return field;
+}
+
 workerScope.onmessage = (event: MessageEvent<MeshJob>): void => {
   const job = event.data;
   try {
-    const density = createDensityFn(job.planetConfig, job.worldSeed);
+    const field = fieldFor(job.planetConfig, job.worldSeed);
+    const density = field.density;
+    const colorSalt = `${job.worldSeed}:${job.planetConfig.seed}:color`;
     const cellSize = cellSizeForLevel(job.level);
     const size = SAMPLE_GRID;
     const samples = new Float32Array(size * size * size);
@@ -60,7 +76,7 @@ workerScope.onmessage = (event: MessageEvent<MeshJob>): void => {
       }
     }
     const mesh = polygonize(samples, origin, cellSize, (x, y, z, nx, ny, nz) =>
-      colorAt(job.planetConfig, x, y, z, nx, ny, nz),
+      colorAt(job.planetConfig, x, y, z, nx, ny, nz, colorSalt),
     );
     const result: MeshResult = {
       id: job.id,

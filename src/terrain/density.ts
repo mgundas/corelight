@@ -4,7 +4,7 @@
 // Positive = solid, negative = air, surface at 0. Pure + deterministic.
 
 import type { LayerConfig, PlanetConfig, Rgb } from '../planets/PlanetConfig.js';
-import { createSeededNoise3D, fbm3 } from './noise.js';
+import { createSeededNoise3D, fbm3, type NoiseFunction3D } from './noise.js';
 
 export type DensityFn = (x: number, y: number, z: number) => number;
 
@@ -22,7 +22,8 @@ function depthAt(config: PlanetConfig, r: number): number {
 /** Cave carve threshold grows with depth (thin near surface, wide deep). */
 export function caveThresholdAtDepth(config: PlanetConfig, depth: number): number {
   const deep = config.radius - config.core.chamberRadius - config.core.shellThickness;
-  const t = Math.min(1, Math.max(0, (depth - config.caves.startDepth) / Math.max(1, deep)));
+  const span = Math.max(1, deep - config.caves.startDepth);
+  const t = Math.min(1, Math.max(0, (depth - config.caves.startDepth) / span));
   return config.caves.thresholdTop + (config.caves.thresholdBottom - config.caves.thresholdTop) * t;
 }
 
@@ -113,7 +114,17 @@ export function layerAt(config: PlanetConfig, x: number, y: number, z: number): 
   return { ...(layers[0] as LayerConfig), kind: 'layer' };
 }
 
-const DETAIL_NOISE = createSeededNoise3D('corelight:color-detail');
+const detailNoises = new Map<string, NoiseFunction3D>();
+
+function detailNoise(salt: string | number): NoiseFunction3D {
+  const key = String(salt);
+  let noise = detailNoises.get(key);
+  if (!noise) {
+    noise = createSeededNoise3D(`corelight:color-detail:${key}`);
+    detailNoises.set(key, noise);
+  }
+  return noise;
+}
 
 /** Vertex color: layer color with noise variation; grass/dirt by slope at top. */
 export function colorAt(
@@ -124,6 +135,7 @@ export function colorAt(
   nx: number,
   ny: number,
   nz: number,
+  salt: string | number = 'default',
 ): Rgb {
   const r = Math.sqrt(x * x + y * y + z * z);
   const depth = depthAt(config, r);
@@ -138,7 +150,7 @@ export function colorAt(
     const t = Math.min(1, Math.max(0, (0.75 - slope) / 0.35));
     const a = config.surfaceColors.flat;
     const b = config.surfaceColors.steep;
-    const v = 1 + DETAIL_NOISE(x * 0.11, y * 0.11, z * 0.11) * 0.06;
+    const v = 1 + detailNoise(salt)(x * 0.11, y * 0.11, z * 0.11) * 0.06;
     return [
       (a[0] + (b[0] - a[0]) * t) * v,
       (a[1] + (b[1] - a[1]) * t) * v,
@@ -146,7 +158,7 @@ export function colorAt(
     ];
   }
   const layer = layerAt(config, x, y, z);
-  const v = 1 + DETAIL_NOISE(x * 0.05, y * 0.05, z * 0.05) * layer.colorVariation;
+  const v = 1 + detailNoise(salt)(x * 0.05, y * 0.05, z * 0.05) * layer.colorVariation;
   return [layer.color[0] * v, layer.color[1] * v, layer.color[2] * v];
 }
 

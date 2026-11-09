@@ -81,4 +81,52 @@ describe('marching cubes polygonize', () => {
     const air = new Float32Array(SIZE * SIZE * SIZE).fill(-1);
     expect(polygonize(air, { x: 0, y: 0, z: 0 }, 1, () => [1, 1, 1]).empty).toBe(true);
   });
+
+  it('emits positions relative to the chunk origin (colors get absolute coords)', () => {
+    const radius = 10;
+    const samples = sphereSamples(radius);
+    const origin = { x: 1000, y: -500, z: 250 };
+    const seen: Array<{ x: number; y: number; z: number }> = [];
+    const mesh = polygonize(samples, origin, 2, (x, y, z) => {
+      seen.push({ x, y, z });
+      return [1, 1, 1];
+    });
+    expect(mesh.empty).toBe(false);
+    // Relative: inside [0, 32 * cellSize] on every axis, not shifted by origin.
+    for (let i = 0; i < mesh.positions.length; i += 1) {
+      const v = mesh.positions[i] as number;
+      expect(v).toBeGreaterThanOrEqual(-1e-6);
+      expect(v).toBeLessThanOrEqual(64 + 1e-6);
+    }
+    // Absolute: the color callback saw origin-shifted coordinates.
+    expect(seen.length).toBeGreaterThan(0);
+    const first = seen[0] as { x: number; y: number; z: number };
+    expect(first.x).toBeGreaterThanOrEqual(origin.x);
+    expect(first.y).toBeGreaterThanOrEqual(origin.y - 64 - 1);
+  });
+
+  it('winds triangles outward (geometric normal agrees with vertex normals)', () => {
+    // One solid corner in the first cell: a single triangle whose front
+    // face must point away from the solid corner, i.e. (+,+,+).
+    const samples = new Float32Array(SIZE * SIZE * SIZE).fill(-1);
+    samples[1 + SIZE * (1 + SIZE * 1)] = 1;
+    const mesh = polygonize(samples, { x: 0, y: 0, z: 0 }, 1, () => [1, 1, 1]);
+    expect(mesh.indices.length).toBe(3);
+    const at = (i: number): [number, number, number] => [
+      mesh.positions[i * 3] as number,
+      mesh.positions[i * 3 + 1] as number,
+      mesh.positions[i * 3 + 2] as number,
+    ];
+    const [a, b, c] = [at(0), at(1), at(2)];
+    const ab: [number, number, number] = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+    const ac: [number, number, number] = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+    const n: [number, number, number] = [
+      ab[1] * ac[2] - ab[2] * ac[1],
+      ab[2] * ac[0] - ab[0] * ac[2],
+      ab[0] * ac[1] - ab[1] * ac[0],
+    ];
+    expect(n[0]).toBeGreaterThan(0);
+    expect(n[1]).toBeGreaterThan(0);
+    expect(n[2]).toBeGreaterThan(0);
+  });
 });

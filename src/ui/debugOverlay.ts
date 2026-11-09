@@ -10,9 +10,13 @@ export interface OverlayStats {
   drawCalls: number;
   flySpeed: number;
   originShifts: number;
+  planet?: string;
+  depthM?: number;
+  layer?: string;
   chunksLoaded?: number;
   chunksTotal?: number;
   chunksAdded?: number;
+  chunksEmpty?: number;
   workerQueue?: number;
 }
 
@@ -47,12 +51,16 @@ export class DebugOverlay {
     let terrain = '';
     if (stats.chunksTotal !== undefined) {
       terrain =
-        `\nchunks: ${stats.chunksAdded ?? 0} meshes / ${stats.chunksLoaded ?? 0} done of ${stats.chunksTotal} (queue ${stats.workerQueue ?? 0})`;
+        `\nchunks: ${stats.chunksAdded ?? 0} meshes (+${stats.chunksEmpty ?? 0} empty) / ${stats.chunksLoaded ?? 0} done of ${stats.chunksTotal} (queue ${stats.workerQueue ?? 0})`;
+    }
+    let place = '';
+    if (stats.planet !== undefined && stats.depthM !== undefined && stats.layer !== undefined) {
+      place = `\n${stats.planet}: depth ${stats.depthM.toFixed(1)} m, layer ${stats.layer}`;
     }
     this.el.textContent =
       `FPS: ${stats.fps.toFixed(0)} | tick: ${stats.tickMs.toFixed(2)} ms | draws: ${stats.drawCalls}\n` +
       `cam: ${c.x.toFixed(1)}, ${c.y.toFixed(1)}, ${c.z.toFixed(1)}\n` +
       `origin: ${o.x.toFixed(0)}, ${o.y.toFixed(0)}, ${o.z.toFixed(0)} (shifts: ${stats.originShifts})\n` +
-      `fly speed: ${stats.flySpeed.toFixed(1)} m/s${terrain}`;
+      `fly speed: ${stats.flySpeed.toFixed(1)} m/s${place}${terrain}`;
   }
 }

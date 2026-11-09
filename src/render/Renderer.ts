@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { SELA } from '../planets/configs/sela.js';
+import type { PlanetConfig } from '../planets/PlanetConfig.js';
 import { MeshWorkerPool } from '../terrain/workerPool.js';
 import { ChunkMeshes } from './chunkMeshes.js';
 import { loadPreviewTerrain, type PreviewProgress } from './previewTerrain.js';
@@ -16,13 +17,13 @@ export class Renderer {
   readonly camera: THREE.PerspectiveCamera;
   readonly chunks = new ChunkMeshes();
   readonly pool = new MeshWorkerPool();
-  preview: PreviewProgress = { loaded: 0, added: 0, total: 0 };
+  preview: PreviewProgress = { loaded: 0, added: 0, empty: 0, total: 0 };
   previewDone = false;
 
   private sun: THREE.DirectionalLight;
   private readonly handleResize: () => void;
 
-  constructor(canvas: HTMLCanvasElement, worldSeed: number) {
+  constructor(canvas: HTMLCanvasElement, worldSeed: number, planets: PlanetConfig[] = [SELA]) {
     this.renderer = new THREE.WebGLRenderer({
       canvas,
       antialias: true,
@@ -49,14 +50,31 @@ export class Renderer {
 
     // M01 fixed set: fire-and-forget; meshes pop in as workers finish.
     // M02 replaces this with LOD streaming behind the boot screen.
-    void loadPreviewTerrain(this.pool, this.chunks, SELA, worldSeed, (progress) => {
-      this.preview = progress;
-      this.syncObjects();
-    }).then((progress) => {
-      this.preview = progress;
-      this.previewDone = true;
-      this.syncObjects();
-    });
+    this.preview = { loaded: 0, added: 0, empty: 0, total: 0 };
+    const perPlanet = new Map<string, PreviewProgress>();
+    let finishedPlanets = 0;
+    for (const planet of planets) {
+      perPlanet.set(planet.id, { loaded: 0, added: 0, empty: 0, total: 0 });
+      const combine = (): void => {
+        const combined: PreviewProgress = { loaded: 0, added: 0, empty: 0, total: 0 };
+        for (const progress of perPlanet.values()) {
+          combined.loaded += progress.loaded;
+          combined.added += progress.added;
+          combined.empty += progress.empty;
+          combined.total += progress.total;
+        }
+        this.preview = combined;
+      };
+      void loadPreviewTerrain(this.pool, this.chunks, planet, worldSeed, (progress) => {
+        perPlanet.set(planet.id, progress);
+        combine();
+      }).then((progress) => {
+        perPlanet.set(planet.id, progress);
+        combine();
+        finishedPlanets += 1;
+        if (finishedPlanets >= planets.length) this.previewDone = true;
+      });
+    }
 
     this.handleResize = (): void => this.onResize();
     window.addEventListener('resize', this.handleResize);
