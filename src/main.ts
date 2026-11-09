@@ -16,7 +16,7 @@ function boot(): void {
 
   const hint = document.createElement('div');
   hint.id = 'hint';
-  hint.textContent = 'Corelight M00 — drag or click to look, WASD fly, Q/E down/up, wheel = speed, F1 overlay, F3 toggle fly';
+  hint.textContent = 'Corelight M01 — bumpy planet + caves mesh in background, drag/click to look, WASD fly, Q/E down/up, wheel = speed, F1 overlay, F3 toggle fly';
   app.appendChild(hint);
 
   const game = new Game(canvas, seed);

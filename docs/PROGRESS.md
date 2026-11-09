@@ -7,7 +7,7 @@ The coding agent updates this file at the end of every milestone. Keep it short:
 | Milestone | Status | Notes |
 |---|---|---|
 | M00 Scaffold | done | Vite + TS strict scaffold, fixed-timestep loop, debug overlay, free-fly camera |
-| M01 Density and meshing | not started | |
+| M01 Density and meshing | done | Deterministic density field + worker meshing; temp preview scene (M02 replaces it with LOD) |
 | M02 Chunk streaming and LOD | not started | |
 | M03 Gravity and player | not started | |
 | M04 Terrain tool | not started | |
@@ -38,3 +38,8 @@ The coding agent updates this file at the end of every milestone. Keep it short:
 ### M00 Scaffold (done)
 Built: Vite + TS (`strict`, `noUncheckedIndexedAccess`) project `corelight`; scripts `dev`/`build`/`check`. `src/core` (math, ids, rng, events, constants, urlParams), `src/sim` (entities, actions, world with fixed 30 Hz tick), `src/game/Game.ts` (accumulator loop, max 5 catch-up ticks), `src/render` (Renderer with logarithmic depth buffer + 400 m placeholder icosphere, floatingOrigin with >1000 m shift + `originShifted` event), `src/player/freeFlyCamera.ts` (default-on F3 fly), `src/ui/debugOverlay.ts` (F1), `src/main.ts` boot. Tests: math, rng, world dispatch/order, floating-origin shift (13 tests, `npm run check` passes). `grep three src/sim/` returns no matches.
 Run: `npm install` (once), `npm run dev`, open http://localhost:5173. Fly: click canvas (pointer lock) or drag to look, WASD + Q/E, wheel = speed 1..2000 m/s, F1 overlay, F3 toggles fly. `?seed=123` overrides seed; `?skipBoot=1` accepted for later use.
+
+### M01 Density and meshing (done)
+Built: `src/planets/PlanetConfig.ts` + `configs/sela.ts` (radius 400, gravity 6, surfaceAmp 15, caves f 0.022/top 0.07/bottom 0.24/start 6, layers surface 0-30/crust 30-140/mantle 140-354, core chamber 40/shell 6). `src/terrain/noise.ts` (seeded simplex 3D + fbm from `createRng`), `density.ts` (`createDensityField`/`createDensityFn` per ARCH: `depth + fbm(dir)*amp`, worm carve `min(d,(c-threshold)*10)` skipped above 6 m and inside core shell, `min(r-chamberRadius)` hollow core; `layerAt` incl. shell/chamber pseudo-layers; `colorAt` grass/dirt by slope near surface + noise variation). `marchingCubes.ts` (35^3 samples, inner 32^3 cells, Bourke tables in `marchingCubesTables.ts` extracted from three.js, lerp verts, negated central-difference normals, edge-cache weld) + `chunkKey.ts` + `workers/meshWorker.ts` (transferables, `empty` flag) + `workerPool.ts` (cores-1 clamped [2,6], FIFO promise API). `src/render/chunkMeshes.ts` (shared flat-shaded vertex-color material, world-pos re-sync, LRU 1500) + `previewTerrain.ts` (56 L3 shell chunks + 8 L1 chunks in 128 m cube at (0,400,0); M02 replaces with LOD). Renderer loads preview async (no boot screen yet); overlay shows chunk/queue progress. Tests: `tests/terrain/density.test.ts` (determinism, signs, layers), `marchingCubes.test.ts` (sphere radius/normals, empty grids, table consistency) — 27 tests pass.
+How the density works: same `worldSeed:planetSeed:field` seeds everywhere give identical terrain in any worker; caves are `|n1|+|n2| < threshold(depth)` worms with depth-independent width via the `*10` min-carve; the core stays hollow because `r - chamberRadius` wins the min inside r=40.
+Run: `npm run dev`, F3 fly out to see the bumpy sphere, fly to the top (detail area) for 2 m-cell terrain and cave mouths, fly to (0,0,0) for the hollow core chamber. F1 shows `chunks: meshes / done of total (queue N)`.

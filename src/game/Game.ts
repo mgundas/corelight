@@ -30,7 +30,7 @@ export class Game {
 
   constructor(canvas: HTMLCanvasElement, seed: number) {
     this.world = new World(seed);
-    this.renderer = new Renderer(canvas);
+    this.renderer = new Renderer(canvas, seed);
     this.flyCamera.speed = 60;
     this.flyCamera.attach(canvas, (speed) => {
       this.flySpeed = speed;
@@ -122,6 +122,10 @@ export class Game {
       drawCalls: this.renderer.renderer.info.render.calls,
       flySpeed: this.flySpeed,
       originShifts: this.originShifts,
+      chunksLoaded: this.renderer.preview.loaded,
+      chunksTotal: this.renderer.preview.total,
+      chunksAdded: this.renderer.preview.added,
+      workerQueue: this.renderer.pool.queuedJobs,
     });
   }
 }

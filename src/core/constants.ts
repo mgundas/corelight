@@ -18,5 +18,12 @@ export const ORIGIN_SNAP_GRID = 32;
 /** Default world seed when no ?seed= URL param is given. */
 export const DEFAULT_SEED = 1337;
 
+/** Terrain worker pool size: cores - 1, clamped (ARCHITECTURE.md). */
+export const MESH_WORKER_MIN = 2;
+export const MESH_WORKER_MAX = 6;
+
+/** Max chunk meshes kept in the render cache before LRU eviction (M01: fixed set, headroom). */
+export const CHUNK_CACHE_BUDGET = 1500;
+
 /** Low-poly detail for the M00 placeholder sphere (icosahedron subdivisions). */
 export const PLACEHOLDER_SPHERE_DETAIL = 5;

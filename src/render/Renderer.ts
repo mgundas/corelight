@@ -1,22 +1,28 @@
 import * as THREE from 'three';
-import { PLACEHOLDER_PLANET_RADIUS, PLACEHOLDER_SPHERE_DETAIL } from '../core/constants.js';
-import { toLocal } from './floatingOrigin.js';
+import { SELA } from '../planets/configs/sela.js';
+import { MeshWorkerPool } from '../terrain/workerPool.js';
+import { ChunkMeshes } from './chunkMeshes.js';
+import { loadPreviewTerrain, type PreviewProgress } from './previewTerrain.js';
 
-// M00 renderer: scene + camera + one placeholder planet sphere.
-// Later milestones add chunk meshes, atmosphere, entity views.
+// M01 renderer: scene + chunk meshes streamed from mesh workers.
+// The placeholder sphere is gone; M02 adds LOD streaming and atmosphere.
 
-/** Fixed world-space sun direction (directional light, infinite distance). */
+// Fixed world-space sun direction (directional light, infinite distance).
 const SUN_DIRECTION = new THREE.Vector3(1, 0.6, 0.4).normalize();
 
 export class Renderer {
   readonly renderer: THREE.WebGLRenderer;
   readonly scene = new THREE.Scene();
   readonly camera: THREE.PerspectiveCamera;
-  private planetMesh: THREE.Mesh;
+  readonly chunks = new ChunkMeshes();
+  readonly pool = new MeshWorkerPool();
+  preview: PreviewProgress = { loaded: 0, added: 0, total: 0 };
+  previewDone = false;
+
   private sun: THREE.DirectionalLight;
   private readonly handleResize: () => void;
 
-  constructor(canvas: HTMLCanvasElement) {
+  constructor(canvas: HTMLCanvasElement, worldSeed: number) {
     this.renderer = new THREE.WebGLRenderer({
       canvas,
       antialias: true,
@@ -25,7 +31,12 @@ export class Renderer {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
 
-    this.camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 200000);
+    this.camera = new THREE.PerspectiveCamera(
+      70,
+      window.innerWidth / window.innerHeight,
+      0.1,
+      200000,
+    );
     this.camera.position.set(0, 0, 600);
 
     this.scene.background = new THREE.Color(0x05070f);
@@ -34,16 +45,18 @@ export class Renderer {
     this.sun.position.copy(SUN_DIRECTION).multiplyScalar(1000);
     this.scene.add(this.sun);
     this.scene.add(new THREE.AmbientLight(0x8899bb, 0.5));
+    this.scene.add(this.chunks.group);
 
-    const geometry = new THREE.IcosahedronGeometry(PLACEHOLDER_PLANET_RADIUS, PLACEHOLDER_SPHERE_DETAIL);
-    const material = new THREE.MeshStandardMaterial({
-      color: 0x4d7c5f,
-      flatShading: true,
-      roughness: 1,
-      metalness: 0,
+    // M01 fixed set: fire-and-forget; meshes pop in as workers finish.
+    // M02 replaces this with LOD streaming behind the boot screen.
+    void loadPreviewTerrain(this.pool, this.chunks, SELA, worldSeed, (progress) => {
+      this.preview = progress;
+      this.syncObjects();
+    }).then((progress) => {
+      this.preview = progress;
+      this.previewDone = true;
+      this.syncObjects();
     });
-    this.planetMesh = new THREE.Mesh(geometry, material);
-    this.scene.add(this.planetMesh);
 
     this.handleResize = (): void => this.onResize();
     window.addEventListener('resize', this.handleResize);
@@ -51,8 +64,8 @@ export class Renderer {
 
   dispose(): void {
     window.removeEventListener('resize', this.handleResize);
-    this.planetMesh.geometry.dispose();
-    (this.planetMesh.material as THREE.Material).dispose();
+    this.pool.dispose();
+    this.chunks.dispose();
     this.renderer.dispose();
   }
 
@@ -64,9 +77,7 @@ export class Renderer {
 
   /** Reposition three.js objects from world-space doubles. */
   syncObjects(): void {
-    // Planet center is at world (0,0,0).
-    const local = toLocal({ x: 0, y: 0, z: 0 });
-    this.planetMesh.position.set(local.x, local.y, local.z);
+    this.chunks.syncAll();
   }
 
   /** Shift all scene children by -delta after an origin shift. */
