@@ -145,17 +145,13 @@ describe('classifyNode', () => {
 
   it('air verdicts agree with dense sampling on every level-1 node', () => {
     // Safety property for the only skip the streamer trusts: whenever the
-    // node reads 'air', a 5x5x5 sub-grid must confirm the sign. (The
-    // 'solid' branch is deliberately NOT asserted: tunnel-wall cliffs can
-    // hide a worm between the 9 samples. Those nodes queue normally and
-    // the worker decides exactly.)
+    // node reads 'air', a 5x5x5 sub-grid must confirm the sign. 'solid'
+    // verdicts are not asserted here (and none occur on Sela: carved rock
+    // reads at most ~(2-threshold)*10, far below any L1+ margin, so
+    // worm-adjacent nodes honestly report null and queue for exact meshing).
     let air = 0;
-    let solid = 0;
     for (const node of nodesAtLevel(SELA, 1)) {
-      if (classifyNode(field.density, node) !== 'air') {
-        if (classifyNode(field.density, node) === 'solid') solid += 1;
-        continue;
-      }
+      if (classifyNode(field.density, node) !== 'air') continue;
       let max = -Infinity;
       for (let ix = 0; ix <= 4; ix += 1) {
         for (let iy = 0; iy <= 4; iy += 1) {
@@ -172,21 +168,21 @@ describe('classifyNode', () => {
       expect(max).toBeLessThan(0);
       air += 1;
     }
-    // Both outcomes occur (deep solid nodes, high air columns).
+    // High air columns above the planet still skip.
     expect(air).toBeGreaterThan(0);
-    expect(solid).toBeGreaterThan(0);
   });
 
-  it('regression: a worm-threaded node reads solid but is never air-skipped', () => {
-    // Seed 1337 probe: all 9 samples of this L1 node read strongly solid
-    // (center d ~= 171) while dense sampling finds d ~= -1.3 inside: a thin
-    // cave worm threads it. classifyNode reports the ARCH verdict, but the
-    // streamer must not treat it as empty.
+  it('regression: a worm-threaded node reads null, never solid or air-skipped', () => {
+    // Seed 1337 probe: dense sampling finds d ~= -1.3 inside this L1 node
+    // (a thin cave worm threads it), so the honest verdict is null: the
+    // node queues for exact meshing and is never treated as empty. (Before
+    // the unconditional-carve fix, all 9 samples read strongly solid and
+    // the node falsely reported 'solid'.)
     const nodes = nodesAtLevel(SELA, 1);
     const worm = nodes.find((node) => node.min.x === -256 && node.min.y === -64 && node.min.z === -64);
     expect(worm).toBeDefined();
     if (worm) {
-      expect(classifyNode(field.density, worm)).toBe('solid');
+      expect(classifyNode(field.density, worm)).toBeNull();
       expect(isDefinitelyAir(field.density, worm)).toBe(false);
     }
   });

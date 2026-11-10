@@ -59,6 +59,7 @@ export function applyAction(world: World, action: Action): void {
             pitch: 0,
             input: null,
             embeddedTime: 0,
+            escaping: false,
           },
         },
       });
@@ -89,6 +90,7 @@ export function applyAction(world: World, action: Action): void {
       player.grounded = false;
       player.input = null;
       player.embeddedTime = 0;
+      player.escaping = false;
       events.emit('actionApplied', { type: action.type });
       return;
     }

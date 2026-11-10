@@ -52,15 +52,19 @@ export function createDensityField(config: PlanetConfig, worldSeed: number): Den
     let d = depth + relief;
     // Cave worms: carve where both fields are near zero. min() keeps the
     // carve independent of depth so tunnels stay open in the deep mantle.
+    // The carve applies UNCONDITIONALLY (plain min, exactly as documented):
+    // near a worm wall both sides follow the carved branch, so the zero
+    // crossing sits mid-cell and marching cubes emits clean quads with
+    // smooth central-difference normals. A conditional carve (depth branch
+    // outside, carved branch inside) pits +depth against ~0 and pins every
+    // wall vertex onto a grid point, shredding walls into slivers. The zero
+    // set is identical either way: min() is zero exactly at the surface or
+    // at a worm wall.
     const shellOuter = config.core.chamberRadius + config.core.shellThickness;
     if (depth >= config.caves.startDepth && r >= shellOuter) {
       const cf = config.caves.frequency;
       const c = Math.abs(caveA(x * cf, y * cf, z * cf)) + Math.abs(caveB(x * cf, y * cf, z * cf));
-      const threshold = caveThresholdAt(depth);
-      if (c < threshold) {
-        const carved = (c - threshold) * 10;
-        if (carved < d) d = carved;
-      }
+      d = Math.min(d, (c - caveThresholdAt(depth)) * 10);
     }
     // Hollow core chamber (no caves inside the shell by the guard above).
     const chamber = r - config.core.chamberRadius;

@@ -4,14 +4,20 @@
 // push-out. Bodies are owned here (one PlayerBody per player entity).
 
 import type * as RAPIER from '@dimforge/rapier3d-compat';
-import { EMBED_DENSITY_THRESHOLD, EMBED_GRACE_S, EMBED_PUSH_SPEED } from '../../core/constants.js';
+import {
+  EMBED_DENSITY_THRESHOLD,
+  EMBED_ESCAPE_S,
+  EMBED_ESCAPE_SPEED,
+  EMBED_GRACE_S,
+  EMBED_PUSH_SPEED,
+} from '../../core/constants.js';
 import { length, normalize, scale, type Vec3d } from '../../core/math.js';
 import type { PlanetConfig } from '../../planets/PlanetConfig.js';
 import { createDensityField, type DensityField } from '../../terrain/density.js';
 import type { Entity, EntityId } from '../entities.js';
 import type { System } from '../world.js';
 import { PlayerBody } from './characterController.js';
-import { toLocalFrame } from './frames.js';
+import { toLocalFrame, upAt } from './frames.js';
 import { gravityAt } from './gravity.js';
 import { physicsWorldFor } from './rapierWorld.js';
 import { TerrainColliders } from './terrainColliders.js';
@@ -44,13 +50,23 @@ export function safetyStep(entity: Entity, fields: Map<string, DensityField>, pl
   const sample = gravityAt(planets, entity.position);
   if (!sample.planet) {
     player.embeddedTime = 0;
+    player.escaping = false;
     return false;
   }
   const field = fields.get(sample.planet.id);
   if (!field) return false;
   const local = toLocalFrame(sample.planet, entity.position);
   const d = field.density(local.x, local.y, local.z);
-  if (d <= EMBED_DENSITY_THRESHOLD) {
+  if (player.escaping) {
+    // Sticky escape: thin dips must not hand control back to the
+    // controller (it would drop the player and restart the timer).
+    // Stand down only in open air.
+    if (d < 0) {
+      player.embeddedTime = 0;
+      player.escaping = false;
+      return false;
+    }
+  } else if (d <= EMBED_DENSITY_THRESHOLD) {
     player.embeddedTime = 0;
     return false;
   }
@@ -61,13 +77,21 @@ export function safetyStep(entity: Entity, fields: Map<string, DensityField>, pl
   player.velocity = { x: 0, y: 0, z: 0 };
   player.grounded = false;
   if (player.embeddedTime < EMBED_GRACE_S) return true;
+  // Latch escape mode once gradient descent proves fruitless: it survives
+  // thin dips and guarantees termination at the surface.
+  if (player.embeddedTime >= EMBED_GRACE_S + EMBED_ESCAPE_S) player.escaping = true;
   const grad = densityGradient(field, local);
-  if (length(grad) < 1e-6) return true;
-  const out = normalize(scale(grad, -1));
-  // Scale with depth so deep burials (bad teleports) exit in seconds while
-  // shallow grazes ease out gently. Capped per tick to avoid overshooting
-  // across thin walls.
-  const step = Math.min(2, EMBED_PUSH_SPEED * dt * (1 + Math.min(d, 24)));
+  // Gradient descent toward the nearest wall. In flat spots (local minima
+  // of the noise field, where the gradient vanishes above the threshold)
+  // descent stalls, so fall back to pushing toward the surface: any steady
+  // direction walks out of a point minimum, and the gradient takes over
+  // again outside it. Escape plows steadily surface-ward at full speed:
+  // the surface is always air, so this terminates.
+  const descending = !player.escaping && length(grad) >= 0.05;
+  const out = descending ? normalize(scale(grad, -1)) : upAt(sample.planet, entity.position);
+  const step = player.escaping
+    ? Math.min(2, EMBED_ESCAPE_SPEED * dt)
+    : Math.min(2, EMBED_PUSH_SPEED * dt * (1 + Math.min(d, 24)));
   entity.position = {
     x: entity.position.x + out.x * step,
     y: entity.position.y + out.y * step,

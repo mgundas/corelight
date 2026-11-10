@@ -66,6 +66,9 @@ export interface PlayerComponent {
   input: PlayerInputState | null;
   /** Seconds the capsule center has spent inside solid terrain. */
   embeddedTime: number;
+  /** Sticky escape mode: once gradient descent proves fruitless, the safety
+   * keeps plowing surface-ward through thin dips until clearly free. */
+  escaping: boolean;
 }
 
 export interface Entity {

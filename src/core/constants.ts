@@ -84,3 +84,9 @@ export const EMBED_DENSITY_THRESHOLD = 0.5;
 export const EMBED_GRACE_S = 1;
 /** Push-out speed along the inverse density gradient. */
 export const EMBED_PUSH_SPEED = 2;
+/** Embedded seconds before giving up on gradient descent and plowing steadily
+ * toward the surface (escapes flat valley floors that sit above threshold). */
+export const EMBED_ESCAPE_S = 4;
+/** Surface-ward escape plow speed in m/s (safety net only; overshoot into a
+ * cave just frees the player sooner). */
+export const EMBED_ESCAPE_SPEED = 50;
