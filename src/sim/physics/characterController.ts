@@ -2,9 +2,8 @@
 // Rapier KinematicCharacterController with a capsule; "up" follows the
 // direction away from the planet center). No three.js here: positions are
 // doubles, Rapier runs in the planet-local frame (frames.ts), and entity
-// position stays the source of truth. No world.step() is needed yet: with
-// only a kinematic character and static trimeshes there is nothing dynamic
-// to integrate (items/machines arrive in later milestones).
+// position stays the source of truth. step() calls world.step() to refresh
+// Rapier queries after collider moves; there are no dynamic bodies in M03.
 
 import RAPIER from '@dimforge/rapier3d-compat';
 import {
@@ -21,49 +20,20 @@ import {
 } from '../../core/constants.js';
 import {
   add,
-  cross,
   dot,
   normalize,
-  quatFromAxisAngle,
-  quatFromTo,
-  quatMultiply,
   scale,
   sub,
-  type Quat,
   type Vec3d,
 } from '../../core/math.js';
 import type { PlanetConfig } from '../../planets/PlanetConfig.js';
 import type { Entity } from '../entities.js';
 import type { PlayerInputState } from '../entities.js';
-import { toLocalFrame, toWorldFrame, upAt } from './frames.js';
+import { moveBasis, orientationForUpYaw, toLocalFrame, toWorldFrame, upAt } from './frames.js';
 import { gravityAt } from './gravity.js';
 import { physicsWorldFor } from './rapierWorld.js';
 
 const DEG = Math.PI / 180;
-
-/**
- * Camera/movement basis at a look orientation. `forward` includes pitch
- * (aim direction); ground movement uses its projection onto the tangent
- * plane. Shared with the render-side camera rig so both agree on facing.
- */
-export function moveBasis(up: Vec3d, yaw: number, pitch: number): { forward: Vec3d; right: Vec3d } {
-  const ref = Math.abs(up.y) < 0.99 ? { x: 0, y: 1, z: 0 } : { x: 1, y: 0, z: 0 };
-  const east = normalize(cross(up, ref));
-  const north = cross(east, up);
-  // Yaw rotates around up; yaw = 0 faces north, positive yaw turns right.
-  const cosY = Math.cos(yaw);
-  const sinY = Math.sin(yaw);
-  const flatFwd = add(scale(north, cosY), scale(east, sinY));
-  const right = normalize(cross(flatFwd, up));
-  const forward = normalize(add(scale(flatFwd, Math.cos(pitch)), scale(up, Math.sin(pitch))));
-  return { forward, right };
-}
-
-/** Orientation quaternion: local +Y maps to `up`, then yawed around up. */
-export function orientationForUpYaw(up: Vec3d, yaw: number): Quat {
-  const align = quatFromTo({ x: 0, y: 1, z: 0 }, normalize(up));
-  return quatMultiply(quatFromAxisAngle(normalize(up), yaw), align);
-}
 
 /** Owns the Rapier controller + capsule collider for one player entity. */
 export class PlayerBody {

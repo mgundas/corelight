@@ -1,0 +1,73 @@
+import { describe, expect, it } from 'vitest';
+import { dot, length, normalize, rotateVector, vec3 } from '../../src/core/math.js';
+import { SELA } from '../../src/planets/configs/sela.js';
+import {
+  moveBasis,
+  orientationForUpYaw,
+  toLocalFrame,
+  toWorldFrame,
+  upAt,
+} from '../../src/sim/physics/frames.js';
+
+describe('moveBasis', () => {
+  it('produces an orthonormal aim frame with pitch', () => {
+    const up = vec3(0, 1, 0);
+    const { forward, right } = moveBasis(up, 0.7, 0.3);
+    expect(length(forward)).toBeCloseTo(1, 6);
+    expect(length(right)).toBeCloseTo(1, 6);
+    expect(dot(forward, right)).toBeCloseTo(0, 6);
+    // Positive pitch looks up.
+    expect(dot(forward, up)).toBeCloseTo(Math.sin(0.3), 6);
+  });
+
+  it('yaw = 0 faces north, yaw turns right', () => {
+    const up = vec3(0, 1, 0);
+    const f0 = moveBasis(up, 0, 0).forward;
+    const f90 = moveBasis(up, Math.PI / 2, 0).forward;
+    // Facing differs by 90 degrees around up.
+    expect(dot(f0, f90)).toBeCloseTo(0, 5);
+    // Right-hand rule: right = forward x up stays tangent.
+    const { right } = moveBasis(up, 0, 0);
+    expect(dot(right, up)).toBeCloseTo(0, 6);
+  });
+
+  it('stays tangent on the side of the planet', () => {
+    const up = normalize(vec3(1, 0.2, 0));
+    const { forward, right } = moveBasis(up, 1.1, -0.2);
+    expect(dot(forward, forward)).toBeCloseTo(1, 6);
+    expect(dot(right, up)).toBeCloseTo(0, 6);
+  });
+});
+
+describe('orientationForUpYaw', () => {
+  it('maps local +Y onto up', () => {
+    const up = normalize(vec3(0.3, 1, -0.2));
+    const q = orientationForUpYaw(up, 0.9);
+    const mapped = rotateVector(vec3(0, 1, 0), q);
+    expect(mapped.x).toBeCloseTo(up.x, 5);
+    expect(mapped.y).toBeCloseTo(up.y, 5);
+    expect(mapped.z).toBeCloseTo(up.z, 5);
+  });
+});
+
+describe('planet frames', () => {
+  it('round-trips world and local coordinates', () => {
+    const moved = { ...SELA, center: { x: 12000, y: 1500, z: 4000 } };
+    const local = toLocalFrame(moved, { x: 12001, y: 1500, z: 4000 });
+    expect(local).toEqual({ x: 1, y: 0, z: 0 });
+    expect(toWorldFrame(moved, local)).toEqual({ x: 12001, y: 1500, z: 4000 });
+  });
+
+  it('points up away from the center at poles, equator, and antipode', () => {
+    expect(upAt(SELA, { x: 0, y: SELA.radius, z: 0 })).toEqual({ x: 0, y: 1, z: 0 });
+    expect(upAt(SELA, { x: 0, y: -SELA.radius, z: 0 })).toEqual({ x: 0, y: -1, z: 0 });
+    const equator = upAt(SELA, { x: SELA.radius, y: 0, z: 0 });
+    expect(equator.x).toBeCloseTo(1, 6);
+    expect(equator.y).toBeCloseTo(0, 6);
+    expect(equator.z).toBeCloseTo(0, 6);
+  });
+
+  it('has a defined fallback at the exact center', () => {
+    expect(length(upAt(SELA, { x: 0, y: 0, z: 0 }))).toBeCloseTo(1, 6);
+  });
+});

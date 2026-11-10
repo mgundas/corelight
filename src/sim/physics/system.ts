@@ -3,7 +3,7 @@
 // still loading, otherwise integrate movement, then run the embedded-safety
 // push-out. Bodies are owned here (one PlayerBody per player entity).
 
-import RAPIER from '@dimforge/rapier3d-compat';
+import type * as RAPIER from '@dimforge/rapier3d-compat';
 import { EMBED_DENSITY_THRESHOLD, EMBED_GRACE_S, EMBED_PUSH_SPEED } from '../../core/constants.js';
 import { length, normalize, scale, type Vec3d } from '../../core/math.js';
 import type { PlanetConfig } from '../../planets/PlanetConfig.js';

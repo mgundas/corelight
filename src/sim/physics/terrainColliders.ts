@@ -5,7 +5,7 @@
 
 import RAPIER from '@dimforge/rapier3d-compat';
 import { COLLIDER_RANGE_M } from '../../core/constants.js';
-import { type Vec3d } from '../../core/math.js';
+import { normalize, type Vec3d } from '../../core/math.js';
 import type { PlanetConfig } from '../../planets/PlanetConfig.js';
 import { chunkSizeForLevel, type ChunkCoord } from '../../terrain/chunkKey.js';
 import { colliderKey } from '../../terrain/colliders.js';
@@ -199,14 +199,39 @@ export class TerrainColliders {
   }
 
   /**
+   * World-space distance to terrain along a ray, using the same Rapier LOD0
+   * colliders as the character controller. Direct per-collider queries stay in
+   * the small nearby collider set instead of traversing every loaded render
+   * mesh, and they do not need a broadphase refresh. Only terrain colliders
+   * are tested, so the player's own capsule can never pull the camera in.
+   * Returns null when clear or outside every SOI.
+   */
+  castTerrainRay(originWorld: Vec3d, dirWorld: Vec3d, planets: PlanetConfig[], maxDist: number): number | null {
+    const sample = gravityAt(planets, originWorld);
+    if (!sample.planet) return null;
+    const dir = normalize(dirWorld);
+    if (dir.x === 0 && dir.y === 0 && dir.z === 0) return null;
+    const ray = new RAPIER.Ray(toLocalFrame(sample.planet, originWorld), dir);
+    let best: number | null = null;
+    for (const entry of this.colliders.values()) {
+      if (entry.planetId !== sample.planet.id) continue;
+      const toi = entry.collider.castRay(ray, maxDist, true);
+      if (toi >= 0 && (best === null || toi < best)) best = toi;
+    }
+    return best;
+  }
+
+  /**
    * Whether the player's chunk is simulated. 'pending' means freeze the
    * player (no gravity, no movement) rather than let them fall through
    * unloaded terrain. Chunks known empty (all air) are 'ready': truly
-   * nothing to stand on, so gravity applies.
+   * nothing to stand on, so gravity applies. Deep space is also 'ready':
+   * there is no terrain chunk to wait for, and directed space motion is a
+   * later milestone.
    */
   groundState(playerWorld: Vec3d, planets: PlanetConfig[]): GroundState {
     const sample = gravityAt(planets, playerWorld);
-    if (!sample.planet) return 'pending';
+    if (!sample.planet) return 'ready';
     const key = colliderKey(sample.planet.id, containingCoord(toLocalFrame(sample.planet, playerWorld), sample.planet));
     if (this.colliders.has(key) || this.empty.has(key)) return 'ready';
     return 'pending';

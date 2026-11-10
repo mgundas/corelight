@@ -3,7 +3,7 @@
 // never clips through cave walls. F3 toggles back to the free-fly camera.
 
 import type { Vec3d } from '../core/math.js';
-import { moveBasis } from '../sim/physics/characterController.js';
+import { moveBasis } from '../sim/physics/frames.js';
 
 export const CAM_DISTANCE_DEFAULT = 4;
 export const CAM_DISTANCE_MIN = 2;

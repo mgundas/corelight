@@ -6,6 +6,7 @@ import type { ChunkCoord } from '../../src/terrain/chunkKey.js';
 import { initPhysics } from '../../src/sim/physics/rapierWorld.js';
 import { TerrainColliders, type ColliderSource } from '../../src/sim/physics/terrainColliders.js';
 import { findSpawnPosition } from '../../src/sim/physics/spawn.js';
+import { upAt } from '../../src/sim/physics/frames.js';
 
 beforeAll(async () => {
   await initPhysics();
@@ -73,6 +74,47 @@ describe('TerrainColliders', () => {
     rapierWorld.free();
   });
 
+  it('casts camera rays against terrain colliders, ignoring other bodies', async () => {
+    const rapierWorld = new RAPIER.World({ x: 0, y: 0, z: 0 });
+    const calls = { count: 0 };
+    const colliders = new TerrainColliders(directSource(calls), () => rapierWorld);
+    const spawn = findSpawnPosition(SELA, 1337);
+    const up = upAt(SELA, spawn);
+    const origin = { x: spawn.x + up.x * 3, y: spawn.y + up.y * 3, z: spawn.z + up.z * 3 };
+    const down = { x: -up.x, y: -up.y, z: -up.z };
+    // A non-terrain capsule directly in the ray must not pull the camera in.
+    rapierWorld.createCollider(
+      RAPIER.ColliderDesc.capsule(0.55, 0.35).setTranslation(
+        spawn.x + up.x * 1.5,
+        spawn.y + up.y * 1.5,
+        spawn.z + up.z * 1.5,
+      ),
+    );
+    colliders.update(spawn, [SELA], 1337);
+    await Promise.resolve();
+    await Promise.resolve();
+    const hit = colliders.castTerrainRay(origin, down, [SELA], 10);
+    expect(hit).not.toBeNull();
+    expect(hit as number).toBeGreaterThan(3);
+    expect(hit as number).toBeLessThan(6);
+    expect(colliders.castTerrainRay(origin, down, [SELA], 1)).toBeNull();
+    colliders.dispose();
+    rapierWorld.free();
+  });
+
+  it('reports deep space as ready with no ray hit', () => {
+    const rapierWorld = new RAPIER.World({ x: 0, y: 0, z: 0 });
+    const calls = { count: 0 };
+    const colliders = new TerrainColliders(directSource(calls), () => rapierWorld);
+    const deep = { x: 0, y: SELA.radius * 10, z: 0 };
+    colliders.update(deep, [SELA], 1337);
+    expect(colliders.pendingCount).toBe(0);
+    expect(colliders.groundState(deep, [SELA])).toBe('ready');
+    expect(colliders.castTerrainRay(deep, { x: 0, y: -1, z: 0 }, [SELA], 100)).toBeNull();
+    colliders.dispose();
+    rapierWorld.free();
+  });
+
   it('treats known-empty chunks as ready without colliders', async () => {
     const rapierWorld = new RAPIER.World({ x: 0, y: 0, z: 0 });
     const emptySource: ColliderSource = {
@@ -93,6 +135,7 @@ describe('TerrainColliders', () => {
     await Promise.resolve();
     expect(colliders.loadedCount).toBe(0);
     expect(colliders.groundState(high, [SELA])).toBe('ready');
+    expect(colliders.castTerrainRay(high, { x: 0, y: -1, z: 0 }, [SELA], 100)).toBeNull();
     colliders.dispose();
     rapierWorld.free();
   });

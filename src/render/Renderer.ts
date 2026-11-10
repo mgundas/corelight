@@ -145,20 +145,6 @@ export class Renderer {
     this.sun.position.copy(SUN_DIRECTION).multiplyScalar(1000);
   }
 
-  /** World-space ray against loaded chunk meshes; nearest hit or null. */
-  raycastTerrain(originWorld: Vec3d, dirWorld: Vec3d, maxDist: number): number | null {
-    const origin = toLocal(originWorld);
-    const ray = new THREE.Raycaster(
-      new THREE.Vector3(origin.x, origin.y, origin.z),
-      new THREE.Vector3(dirWorld.x, dirWorld.y, dirWorld.z),
-      0,
-      maxDist,
-    );
-    const hits = ray.intersectObjects(this.chunks.group.children, false);
-    const first = hits[0];
-    return first ? first.distance : null;
-  }
-
   /** Record the player state after a sim tick (call once per tick). */
   pushPlayerSample(pos: Vec3d, quat: Quat): void {
     this.playerView.pushSample(pos, quat);

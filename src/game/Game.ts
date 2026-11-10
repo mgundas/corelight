@@ -236,7 +236,7 @@ export class Game {
       if (followed) {
         const up = upAt(followed.planet, followed.position);
         this.rig.update(followed.position, up, (origin, dir, maxDist) =>
-          this.renderer.raycastTerrain(origin, dir, maxDist),
+          this.colliders.castTerrainRay(origin, dir, this.planets, maxDist),
         );
         this.renderer.applyRigCamera(followed.position, this.rig.position, up);
       }

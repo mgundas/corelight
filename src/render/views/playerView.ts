@@ -24,6 +24,24 @@ export class PlayerView {
     metalness: 0.1,
     flatShading: true,
   });
+  private readonly helmetMat = new THREE.MeshStandardMaterial({
+    color: 0xe8ecef,
+    roughness: 0.4,
+    metalness: 0.2,
+    flatShading: true,
+  });
+  private readonly visorMat = new THREE.MeshStandardMaterial({
+    color: 0x0a1626,
+    roughness: 0.15,
+    metalness: 0.6,
+    flatShading: true,
+  });
+  private readonly packMat = new THREE.MeshStandardMaterial({
+    color: 0x8a8f96,
+    roughness: 0.9,
+    metalness: 0.05,
+    flatShading: true,
+  });
   private prev: Sample | null = null;
   private curr: Sample | null = null;
   private visible = false;
@@ -38,38 +56,20 @@ export class PlayerView {
     body.updateMatrix();
     this.group.add(body);
 
-    const helmetMat = new THREE.MeshStandardMaterial({
-      color: 0xe8ecef,
-      roughness: 0.4,
-      metalness: 0.2,
-      flatShading: true,
-    });
-    const helmet = new THREE.Mesh(new THREE.SphereGeometry(0.27, 12, 10), helmetMat);
+    const helmet = new THREE.Mesh(new THREE.SphereGeometry(0.27, 12, 10), this.helmetMat);
     helmet.position.set(0, 0.62, 0.02);
     helmet.matrixAutoUpdate = false;
     helmet.updateMatrix();
     this.group.add(helmet);
 
-    const visorMat = new THREE.MeshStandardMaterial({
-      color: 0x0a1626,
-      roughness: 0.15,
-      metalness: 0.6,
-      flatShading: true,
-    });
-    const visor = new THREE.Mesh(new THREE.SphereGeometry(0.2, 12, 10), visorMat);
+    const visor = new THREE.Mesh(new THREE.SphereGeometry(0.2, 12, 10), this.visorMat);
     visor.scale.set(1, 0.7, 0.6);
     visor.position.set(0, 0.62, 0.16);
     visor.matrixAutoUpdate = false;
     visor.updateMatrix();
     this.group.add(visor);
 
-    const packMat = new THREE.MeshStandardMaterial({
-      color: 0x8a8f96,
-      roughness: 0.9,
-      metalness: 0.05,
-      flatShading: true,
-    });
-    const pack = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.52, 0.26), packMat);
+    const pack = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.52, 0.26), this.packMat);
     pack.position.set(0, 0.08, -0.34);
     pack.matrixAutoUpdate = false;
     pack.updateMatrix();
@@ -122,5 +122,8 @@ export class PlayerView {
       this.group.remove(child);
     }
     this.bodyMat.dispose();
+    this.helmetMat.dispose();
+    this.visorMat.dispose();
+    this.packMat.dispose();
   }
 }

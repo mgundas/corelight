@@ -4,7 +4,18 @@
 // 12 km from the origin on Vorn. In space the shuttle later gets its own
 // frame centered on itself (M13/M14); M03 only needs the planet frames.
 
-import { normalize, sub, type Vec3d } from '../../core/math.js';
+import {
+  add,
+  cross,
+  normalize,
+  quatFromAxisAngle,
+  quatFromTo,
+  quatMultiply,
+  scale,
+  sub,
+  type Quat,
+  type Vec3d,
+} from '../../core/math.js';
 import type { PlanetConfig } from '../../planets/PlanetConfig.js';
 
 /** World-space doubles -> planet-local doubles. */
@@ -24,4 +35,28 @@ export function upAt(planet: PlanetConfig, worldPos: Vec3d): Vec3d {
   // Exactly at the center: pick an arbitrary axis (gravity is minimal there).
   if (n.x === 0 && n.y === 0 && n.z === 0) return { x: 0, y: 1, z: 0 };
   return n;
+}
+
+/**
+ * Camera/movement basis at a look orientation. `forward` includes pitch
+ * (aim direction); ground movement uses its projection onto the tangent
+ * plane. Pure math: safe to share between sim and render-side camera code.
+ */
+export function moveBasis(up: Vec3d, yaw: number, pitch: number): { forward: Vec3d; right: Vec3d } {
+  const ref = Math.abs(up.y) < 0.99 ? { x: 0, y: 1, z: 0 } : { x: 1, y: 0, z: 0 };
+  const east = normalize(cross(up, ref));
+  const north = cross(east, up);
+  // Yaw rotates around up; yaw = 0 faces north, positive yaw turns right.
+  const cosY = Math.cos(yaw);
+  const sinY = Math.sin(yaw);
+  const flatFwd = add(scale(north, cosY), scale(east, sinY));
+  const right = normalize(cross(flatFwd, up));
+  const forward = normalize(add(scale(flatFwd, Math.cos(pitch)), scale(up, Math.sin(pitch))));
+  return { forward, right };
+}
+
+/** Orientation quaternion: local +Y maps to `up`, then yawed around up. */
+export function orientationForUpYaw(up: Vec3d, yaw: number): Quat {
+  const align = quatFromTo({ x: 0, y: 1, z: 0 }, normalize(up));
+  return quatMultiply(quatFromAxisAngle(normalize(up), yaw), align);
 }
