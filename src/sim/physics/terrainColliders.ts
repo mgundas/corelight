@@ -169,6 +169,10 @@ export class TerrainColliders {
             return;
           }
           this.dirty.delete(key);
+          // Nothing else is outstanding for this key (update never
+          // double-submits), so the version lineage ends here; a later
+          // edit starts fresh. Eviction prunes as a backstop.
+          this.editVersions.delete(key);
           if (result.empty || result.positions.length === 0 || result.indices.length === 0) {
             this.removeCollider(key);
             this.empty.add(key);
@@ -248,6 +252,10 @@ export class TerrainColliders {
           // World already disposed; nothing to do.
         }
         this.colliders.delete(key);
+        // The ghost is gone: drop its rebuild state too. Fresh deltas live
+        // in TerrainEdits and re-attach if the chunk streams back.
+        this.dirty.delete(key);
+        this.editVersions.delete(key);
       }
     }
   }

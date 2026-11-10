@@ -54,6 +54,28 @@ describe('TerrainTool', () => {
     expect(second.flattenPlane?.point).toEqual({ x: 1, y: 2, z: 3 });
   });
 
+  it('captures the plane when aim appears mid-press and resets on release', () => {
+    const tool = new TerrainTool();
+    const buttons = { dig: false, add: false, flatten: true };
+    const noHit: ToolAim = { hit: null, normal: null, planet: SELA };
+    // Press F while looking at the sky: no plane, no action.
+    expect(tool.update(0, 'player_x', buttons, noHit)).toBeNull();
+    // Still holding, swing onto terrain: the stroke starts here.
+    const first = tool.update(0, 'player_x', buttons, AIM);
+    if (first?.type !== 'terrainEdit') throw new Error('expected a flatten action');
+    expect(first.flattenPlane?.point).toEqual({ x: 1, y: 2, z: 3 });
+    // Release clears the plane: the next stroke captures fresh.
+    tool.update(100, 'player_x', { dig: false, add: false, flatten: false }, AIM);
+    const moved: ToolAim = {
+      hit: { x: 9, y: 9, z: 9 },
+      normal: { x: 1, y: 0, z: 0 },
+      planet: SELA,
+    };
+    const second = tool.update(200, 'player_x', buttons, moved);
+    if (second?.type !== 'terrainEdit') throw new Error('expected a flatten action');
+    expect(second.flattenPlane?.point).toEqual({ x: 9, y: 9, z: 9 });
+  });
+
   it('returns null without a hit or without buttons', () => {
     const tool = new TerrainTool();
     const noHit: ToolAim = { hit: null, normal: null, planet: SELA };

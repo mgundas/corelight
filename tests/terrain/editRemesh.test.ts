@@ -9,10 +9,8 @@ import type { PlanetConfig } from '../../src/planets/PlanetConfig.js';
 import type { Vec3d } from '../../src/core/math.js';
 import { nodeKey, nodeOrigin, type OctreeNode } from '../../src/terrain/octree.js';
 import { parseChunkKey } from '../../src/terrain/chunkKey.js';
-import {
-  ChunkManager,
-  type MeshSink,
-} from '../../src/terrain/chunkManager.js';
+import { ChunkManager } from '../../src/terrain/chunkManager.js';
+import type { MeshSink } from '../../src/terrain/streaming.js';
 import type { EditAttachment } from '../../src/terrain/edits.js';
 import type { MeshResult, MeshWorkerPool } from '../../src/terrain/workerPool.js';
 
@@ -261,5 +259,39 @@ describe('ChunkManager.notifyEdited', () => {
       y: Math.floor(parsed.coord.y / 2),
       z: Math.floor(parsed.coord.z / 2),
     });
+  });
+
+  it('prunes edit versions once the rebuild is applied', async () => {
+    const fakes = fakePool();
+    const sink = new FakeSink();
+    const { manager } = makeManager(fakes.pool, sink);
+    const camera = { x: 10, y: 402, z: 5 };
+    manager.update(camera, null, 100000);
+    for (const job of fakes.pending.splice(0)) {
+      job.resolve(meshResult(SELA, job.level, job.coord, false));
+    }
+    await Promise.resolve();
+    manager.update(camera, null, 100000);
+    const key = fakes.submitted.find((k) => parseChunkKey(k).level === 0);
+    if (!key) throw new Error('no LOD0 job submitted');
+    // Edit, apply, then force a plain streaming rebuild: with the version
+    // pruned it submits as an ordinary (version-0) job again.
+    manager.notifyEdited([key]);
+    const editJob = fakes.pending.find((job) => job.level === 0);
+    if (!editJob) throw new Error('no LOD0 edit job');
+    expect(editJob.editVersion).toBe(1);
+    fakes.pending.splice(0).forEach((job) => {
+      if (job.level === 0) job.resolve(meshResult(SELA, 0, job.coord, false));
+    });
+    await Promise.resolve();
+    manager.update(camera, null, 100000);
+    expect(sink.has(key)).toBe(true);
+    sink.remove(key);
+    manager.update(camera, null, 100000);
+    const resubmits = fakes.pending.filter(
+      (job) => job.level === 0 && nodeKey(SELA.id, 0, job.coord) === key,
+    );
+    expect(resubmits.length).toBeGreaterThan(0);
+    for (const job of resubmits) expect(job.editVersion).toBe(0);
   });
 });

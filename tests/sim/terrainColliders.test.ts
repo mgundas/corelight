@@ -315,4 +315,50 @@ describe('TerrainColliders', () => {
     colliders.dispose();
     rapierWorld.free();
   });
+
+  it('prunes rebuild state for chunks evicted from the ring', async () => {
+    const rapierWorld = new RAPIER.World({ x: 0, y: 0, z: 0 });
+    const seen: Array<{ key: string; version: number }> = [];
+    const source: ColliderSource = {
+      request: (planet, worldSeed, coord, editVersion) => {
+        const data = buildColliderData(planet, worldSeed, coord);
+        seen.push({ key: data.key, version: editVersion ?? -1 });
+        return Promise.resolve({
+          id: 0,
+          key: data.key,
+          origin: { x: data.origin.x, y: data.origin.y, z: data.origin.z },
+          positions: data.positions,
+          indices: data.indices,
+          empty: data.empty,
+          editVersion,
+        });
+      },
+    };
+    const colliders = new TerrainColliders(source, () => rapierWorld);
+    const spawn = findSpawnPosition(SELA, 1337);
+    colliders.update(spawn, [SELA], 1337);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(colliders.loadedCount).toBeGreaterThan(0);
+    const key = seen[0]?.key;
+    if (!key) throw new Error('no collider requested');
+    // Edit + rebuild, then walk away so the ring evicts the ghost.
+    colliders.notifyEdited([key]);
+    colliders.update(spawn, [SELA], 1337);
+    await Promise.resolve();
+    await Promise.resolve();
+    const far = { x: -spawn.x, y: -spawn.y, z: -spawn.z };
+    colliders.update(far, [SELA], 1337);
+    await Promise.resolve();
+    await Promise.resolve();
+    // Walk back: the chunk re-requests with a pruned (0) version.
+    seen.length = 0;
+    colliders.update(spawn, [SELA], 1337);
+    await Promise.resolve();
+    await Promise.resolve();
+    const retry = seen.find((s) => s.key === key);
+    expect(retry?.version).toBe(0);
+    colliders.dispose();
+    rapierWorld.free();
+  });
 });

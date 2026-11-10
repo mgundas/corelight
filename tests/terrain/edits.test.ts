@@ -44,6 +44,16 @@ describe('TerrainEdits.applySphere', () => {
     expect(edits.deltaAt(SELA, SELA.id, center.x, center.y, center.z)).toBe(-4);
   });
 
+  it('lists only the owner chunk for a brush in the chunk middle', () => {
+    const edits = new TerrainEdits();
+    const min = rootMin(SELA);
+    // Chunk (1,16,16) middle: radius 0.5 touches a single lattice point.
+    const g = { x: 1 * 32 + 16, y: 16 * 32 + 16, z: 16 * 32 + 16 };
+    const center = { x: min.x + g.x, y: min.y + g.y, z: min.z + g.z };
+    const out = edits.applySphere(SELA, solid2, center, 0.5, 1, 'dig');
+    expect(out.keys).toEqual(['sela:0:1:16:16']);
+  });
+
   it('returns affected keys including border neighbors', () => {
     const edits = new TerrainEdits();
     const min = rootMin(SELA);
@@ -88,6 +98,23 @@ describe('TerrainEdits.applySphere', () => {
     expect(dug.spent).toBe(0);
     const filled = new TerrainEdits().applySphere(SELA, air2, center, 1.5, 3, 'add');
     expect(filled.spent).toBeGreaterThan(0);
+  });
+
+  it('soilBudget caps air->solid flips without touching anything else', () => {
+    const min = rootMin(SELA);
+    const center = { x: min.x + 200, y: min.y + 200, z: min.z + 200 };
+    const budgeted = new TerrainEdits().applySphere(SELA, air2, center, 3, 5, 'add', {
+      soilBudget: 2,
+    });
+    expect(budgeted.spent).toBeLessThanOrEqual(2);
+    expect(budgeted.spent).toBeGreaterThan(0);
+    const unbudgeted = new TerrainEdits().applySphere(SELA, air2, center, 3, 5, 'add');
+    expect(unbudgeted.spent).toBeGreaterThan(budgeted.spent);
+    // Digging ignores the budget (it earns soil, never spends it).
+    const dug = new TerrainEdits().applySphere(SELA, solid2, center, 1.5, 3, 'dig', {
+      soilBudget: 0,
+    });
+    expect(dug.gained).toBeGreaterThan(0);
   });
 
   it('flatten pulls final density toward the stroke plane', () => {

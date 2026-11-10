@@ -5,7 +5,7 @@
 // world-frame chunk boxes.
 
 import * as THREE from 'three';
-import type { FrustumPlane } from '../terrain/chunkManager.js';
+import type { FrustumPlane } from '../terrain/streaming.js';
 
 export function frustumPlanes(camera: THREE.PerspectiveCamera): FrustumPlane[] {
   camera.updateMatrixWorld();

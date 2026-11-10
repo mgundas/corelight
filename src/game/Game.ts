@@ -1,17 +1,18 @@
-import { MAX_TICKS_PER_FRAME, SIM_DT, TOOL_RANGE_M, TOO_HARD_INDICATOR_S } from '../core/constants.js';
+import { MAX_TICKS_PER_FRAME, SIM_DT, TOO_HARD_INDICATOR_S } from '../core/constants.js';
 import { events } from '../core/events.js';
-import { distance, length, normalize, scale, sub, type Vec3d } from '../core/math.js';
+import { distance, length, normalize, sub, type Vec3d } from '../core/math.js';
 import type { PlanetConfig } from '../planets/PlanetConfig.js';
 import { PLANETS } from '../planets/solarSystem.js';
-import { createDensityField, layerAt, type DensityField } from '../terrain/density.js';
-import { parseChunkKey } from '../terrain/chunkKey.js';
+import { layerAt, type DensityField } from '../terrain/density.js';
 import { ColliderPool } from '../terrain/colliderPool.js';
 import { getOrigin, maybeShiftOrigin, toLocal } from '../render/floatingOrigin.js';
 import { Renderer, type PrebuiltTerrain } from '../render/Renderer.js';
 import { CameraRig, HEAD_HEIGHT } from '../player/cameraRig.js';
+import { wireTerrainEdits } from './editWiring.js';
 import { FreeFlyCamera } from '../player/freeFlyCamera.js';
 import { PlayerInput } from '../player/input.js';
 import { TerrainTool, type ToolAim } from '../player/terrainTool.js';
+import { computeAim } from '../player/toolAim.js';
 import { World } from '../sim/world.js';
 import type { EntityId } from '../sim/entities.js';
 import { upAt } from '../sim/physics/frames.js';
@@ -67,14 +68,6 @@ export class Game {
     this.planets = planets;
     this.world = new World(seed);
     this.world.planets = planets;
-    for (const planet of planets) {
-      this.toolFields.set(
-        planet.id,
-        createDensityField(planet, seed, (x, y, z) =>
-          this.world.terrainEdits.deltaAt(planet, planet.id, x, y, z),
-        ),
-      );
-    }
 
     // Physics first: collider ring (worker-backed, edit-aware) + movement
     // system, then the spawn so the very first tick already
@@ -110,18 +103,9 @@ export class Game {
     }
 
     this.renderer = new Renderer(canvas, seed, planets, prebuilt);
-    // Edited chunks carry their deltas into every mesh job (streaming and
-    // priority remesh alike); the streamer diffs by job version.
-    this.renderer.streamer.setEditSource((key) => {
-      try {
-        const parsed = parseChunkKey(key);
-        const planet = this.planets.find((p) => p.id === parsed.planetId);
-        if (!planet || parsed.level > 1) return null;
-        return this.world.terrainEdits.deltasForJob(planet, parsed.level, parsed.coord);
-      } catch {
-        return null;
-      }
-    });
+    const wiring = wireTerrainEdits(this.world, planets, this.colliders, this.renderer.streamer);
+    this.toolFields = wiring.toolFields;
+    this.unsubscribeTerrainEdited = wiring.dispose;
     this.flyCamera.speed = 60;
     this.flyCamera.enabled = false;
     this.flyCamera.attach(canvas, (speed) => {
@@ -134,13 +118,6 @@ export class Game {
     window.addEventListener('keydown', this.handleGlobalKey);
     this.unsubscribeOriginShifted = events.on('originShifted', () => {
       this.originShifts += 1;
-    });
-    // Fan-out for remeshing: the same tick's edits rebuild render meshes
-    // and physics colliders (old meshes/colliders stay until fresh data
-    // lands, so the player never falls through a half-updated hole).
-    this.unsubscribeTerrainEdited = events.on('terrainEdited', ({ keys }) => {
-      this.colliders.notifyEdited(keys);
-      this.renderer.streamer.notifyEdited(keys);
     });
   }
 
@@ -162,12 +139,12 @@ export class Game {
   };
 
   /**
-   * Aim the terrain tool from the orbit camera through the crosshair: a
-   * Rapier collider ray first (exact collision surface), falling back to a
-   * density march (works while edited colliders are still rebuilding).
-   * Computed once per frame from render state; strokes bake it into Actions.
+   * Aim the terrain tool from the orbit camera through the crosshair.
+   * Computed once per frame from render state; strokes bake it into
+   * Actions. Detailed (march + normal) only while a brush button is held;
+   * idle frames keep the cheap collider ray for the preview.
    */
-  private computeToolAim(alpha: number): void {
+  private computeToolAim(alpha: number, detailed: boolean): void {
     this.toolAim = { hit: null, normal: null, planet: null };
     if (this.flyCamera.enabled) return;
     const followed = this.playerEntity();
@@ -181,60 +158,16 @@ export class Game {
       y: renderPos.y + up.y * HEAD_HEIGHT,
       z: renderPos.z + up.z * HEAD_HEIGHT,
     };
-    const toHead = sub(head, this.rig.position);
-    const dir = normalize(toHead);
-    if (dir.x === 0 && dir.y === 0 && dir.z === 0) return;
-    const toi = this.colliders.castTerrainRay(this.rig.position, dir, this.planets, TOOL_RANGE_M);
-    if (toi !== null) {
-      const hit: Vec3d = {
-        x: this.rig.position.x + dir.x * toi,
-        y: this.rig.position.y + dir.y * toi,
-        z: this.rig.position.z + dir.z * toi,
-      };
-      this.toolAim = { hit, normal: this.surfaceNormal(field, followed.planet, hit), planet: followed.planet };
-      return;
-    }
-    // Fallback march along the ray (up to range, quarter-meter steps).
-    const at = (t: number): Vec3d => ({
-      x: this.rig.position.x + dir.x * t - followed.planet.center.x,
-      y: this.rig.position.y + dir.y * t - followed.planet.center.y,
-      z: this.rig.position.z + dir.z * t - followed.planet.center.z,
+    const dir = normalize(sub(head, this.rig.position));
+    this.toolAim = computeAim({
+      cameraPos: this.rig.position,
+      viewDir: dir,
+      planet: followed.planet,
+      field,
+      castRay: (origin, rayDir, maxDist) =>
+        this.colliders.castTerrainRay(origin, rayDir, this.planets, maxDist),
+      detailed,
     });
-    const start = at(0);
-    let prevT = 0;
-    let prevD = field.density(start.x, start.y, start.z);
-    if (prevD >= 0) return;
-    for (let t = 0.25; t <= TOOL_RANGE_M; t += 0.25) {
-      const p = at(t);
-      const d = field.density(p.x, p.y, p.z);
-      if (d >= 0) {
-        const f = prevD / (prevD - d);
-        const ht = prevT + f * (t - prevT);
-        const hit: Vec3d = {
-          x: this.rig.position.x + dir.x * ht,
-          y: this.rig.position.y + dir.y * ht,
-          z: this.rig.position.z + dir.z * ht,
-        };
-        this.toolAim = { hit, normal: this.surfaceNormal(field, followed.planet, hit), planet: followed.planet };
-        return;
-      }
-      prevT = t;
-      prevD = d;
-    }
-  }
-
-  /** Outward surface normal at a world-space hit (air side of the density). */
-  private surfaceNormal(field: DensityField, planet: PlanetConfig, hit: Vec3d): Vec3d {
-    const local = sub(hit, planet.center);
-    const eps = 0.5;
-    const grad: Vec3d = {
-      x: field.density(local.x + eps, local.y, local.z) - field.density(local.x - eps, local.y, local.z),
-      y: field.density(local.x, local.y + eps, local.z) - field.density(local.x, local.y - eps, local.z),
-      z: field.density(local.x, local.y, local.z + eps) - field.density(local.x, local.y, local.z - eps),
-    };
-    const n = normalize(scale(grad, -1));
-    if (n.x === 0 && n.y === 0 && n.z === 0) return upAt(planet, hit);
-    return n;
   }
 
   /** F3: free-fly debug camera. Leaving it drops the player at the camera. */
@@ -316,7 +249,11 @@ export class Game {
     // Fixed-timestep sim (cap catch-up so a hitch can't spiral).
     // Movement input is sampled per tick so replays stay deterministic.
     // The tool aim is frame-rate (render state); strokes bake it into Actions.
-    this.computeToolAim(Math.min(1, Math.max(0, this.accumulator / SIM_DT)));
+    // Buttons are sampled once per frame: detailed aim (march + normal)
+    // only runs while a brush button is actually held.
+    const toolButtons = this.input.toolButtons();
+    const toolActive = toolButtons.dig || toolButtons.add || toolButtons.flatten;
+    this.computeToolAim(Math.min(1, Math.max(0, this.accumulator / SIM_DT)), toolActive);
     this.accumulator += frameDt;
     let ticks = 0;
     const flying = this.flyCamera.enabled;
@@ -332,9 +269,8 @@ export class Game {
           lookYaw: this.rig.yaw,
           lookPitch: this.rig.pitch,
         });
-        const buttons = this.input.toolButtons();
-        if (buttons.dig || buttons.add || buttons.flatten) {
-          const edit = this.tool.update(performance.now(), this.playerId, buttons, this.toolAim);
+        if (toolActive) {
+          const edit = this.tool.update(performance.now(), this.playerId, toolButtons, this.toolAim);
           if (edit) this.world.dispatch(edit);
         }
       }

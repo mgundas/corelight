@@ -9,12 +9,12 @@ import type { PlanetConfig } from '../../src/planets/PlanetConfig.js';
 import { nodeOrigin } from '../../src/terrain/octree.js';
 import { createDensityField } from '../../src/terrain/density.js';
 import { parseChunkKey } from '../../src/terrain/chunkKey.js';
+import { ChunkManager } from '../../src/terrain/chunkManager.js';
 import {
   boxInFrustum,
-  ChunkManager,
   toWorldPlanes,
-  type MeshSink,
-} from '../../src/terrain/chunkManager.js';
+} from '../../src/terrain/streaming.js';
+import type { MeshSink } from '../../src/terrain/streaming.js';
 import type { MeshResult } from '../../src/terrain/workerPool.js';
 import { nodeKey, updateOctree, isDefinitelyAir, type OctreeNode } from '../../src/terrain/octree.js';
 

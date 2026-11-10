@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Mesh, MeshStandardMaterial } from 'three';
 import { SELA } from '../../src/planets/configs/sela.js';
-import type { MeshSink } from '../../src/terrain/chunkManager.js';
+import type { MeshSink } from '../../src/terrain/streaming.js';
 import { nodeKey, nodeOrigin } from '../../src/terrain/octree.js';
 import type { MeshResult } from '../../src/terrain/workerPool.js';
 import { resetOrigin } from '../../src/render/floatingOrigin.js';

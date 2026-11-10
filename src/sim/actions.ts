@@ -1,6 +1,6 @@
 import type { Vec3d } from '../core/math.js';
-import { IDENTITY_QUAT } from '../core/math.js';
-import { SOIL_MAX } from '../core/constants.js';
+import { distance, IDENTITY_QUAT } from '../core/math.js';
+import { SOIL_MAX, TOOL_RANGE_M } from '../core/constants.js';
 import { events } from '../core/events.js';
 import { createDensityField, layerAt, type DensityField } from '../terrain/density.js';
 import type { EditMode, FlattenPlane } from '../terrain/edits.js';
@@ -116,9 +116,22 @@ export function applyAction(world: World, action: Action): void {
       const entity = world.entities.get(action.playerId);
       const player = entity?.components.player;
       if (!entity || entity.kind !== 'player' || !player) return;
-      if (action.radius <= 0 || action.strength <= 0) return;
       const planet = world.planets.find((p) => p.id === action.planetId);
       if (!planet) return;
+      // Terminal validation always emits: an action reaching a known player
+      // and planet was processed, even when rejected (debug/UI counting
+      // depends on it). Unknown players/planets stay silent (unprocessable).
+      // The sim trusts no crafted action: the stroke must belong to the
+      // player's planet and start within tool range of the player.
+      if (
+        entity.planetId !== planet.id ||
+        action.radius <= 0 ||
+        action.strength <= 0 ||
+        distance(entity.position, action.center) > TOOL_RANGE_M + action.radius
+      ) {
+        events.emit('actionApplied', { type: action.type });
+        return;
+      }
       // Add mode consumes soil; an empty counter fails the whole stroke bit.
       if (action.mode === 'add' && player.soil <= 0) {
         events.emit('actionApplied', { type: action.type });
@@ -151,6 +164,9 @@ export function applyAction(world: World, action: Action): void {
           maxHardness: player.toolHardness,
           hardnessAt: (x, y, z) => layerAt(planet, x, y, z).hardness,
           flattenPlane: plane,
+          // Digging earns soil; adding/flattening may only flip what the
+          // counter covers (never spend what the player does not have).
+          soilBudget: action.mode === 'dig' ? undefined : player.soil,
         },
       );
       player.soil = Math.min(SOIL_MAX, Math.max(0, player.soil + outcome.gained - outcome.spent));

@@ -100,6 +100,8 @@ describe('terrainEdit action', () => {
     const { world, playerId } = makeWorld();
     const player = world.entities.get(playerId);
     if (!player || !player.components.player) throw new Error('missing player');
+    // Teleport near the mantle first: the sim rejects out-of-range strokes.
+    world.dispatch({ type: 'playerTeleport', playerId, position: { x: 0, y: 205, z: 0 } });
     // Depth 200 m: mantle (hardness 3) > Mk1 tool hardness (2).
     const center = { x: SELA.center.x, y: SELA.center.y + 200, z: SELA.center.z };
     world.dispatch({ type: 'terrainEdit', playerId, planetId: SELA.id, mode: 'dig', center, radius: 2, strength: 5 });
@@ -118,5 +120,65 @@ describe('terrainEdit action', () => {
     world.dispatch({ type: 'terrainEdit', playerId, planetId: SELA.id, mode: 'dig', center: { ...player.position }, radius: 2, strength: 0 });
     world.tick();
     expect(world.terrainEdits.sampleCount).toBe(0);
+  });
+
+  it('add spends at most the soil it has (partial stroke on a budget)', () => {
+    const { world, playerId } = makeWorld();
+    const player = world.entities.get(playerId);
+    if (!player || !player.components.player) throw new Error('missing player');
+    const up = upAt(SELA, player.position);
+    const center = {
+      x: player.position.x - up.x * 3,
+      y: player.position.y - up.y * 3,
+      z: player.position.z - up.z * 3,
+    };
+    // Dig a real hole first (earns soil), then cap the counter low.
+    world.dispatch({ type: 'terrainEdit', playerId, planetId: SELA.id, mode: 'dig', center, radius: 3, strength: 8 });
+    world.tick();
+    expect(player.components.player.soil).toBeGreaterThan(0);
+    player.components.player.soil = 2;
+    // Filling the same hole has many flippable samples but only 2 soil:
+    // the stroke partially applies and the counter stops at zero.
+    world.dispatch({ type: 'terrainEdit', playerId, planetId: SELA.id, mode: 'add', center, radius: 3, strength: 8 });
+    world.tick();
+    expect(player.components.player.soil).toBe(0);
+    expect(world.terrainEdits.sampleCount).toBeGreaterThan(0);
+  });
+
+  it('rejects out-of-range and foreign-planet strokes but still emits', () => {
+    const { world, playerId } = makeWorld();
+    const player = world.entities.get(playerId);
+    if (!player) throw new Error('missing player');
+    const applied: string[] = [];
+    const off = events.on('actionApplied', (payload) => {
+      applied.push(payload.type);
+    });
+    // Far outside the 6 m tool range: rejected, nothing stored.
+    world.dispatch({
+      type: 'terrainEdit',
+      playerId,
+      planetId: SELA.id,
+      mode: 'dig',
+      center: { x: player.position.x, y: player.position.y + 100, z: player.position.z },
+      radius: 2,
+      strength: 5,
+    });
+    world.tick();
+    expect(world.terrainEdits.sampleCount).toBe(0);
+    // A planet the player is not on: rejected even at close range.
+    world.planets = [SELA, { ...SELA, id: 'other' }];
+    world.dispatch({
+      type: 'terrainEdit',
+      playerId,
+      planetId: 'other',
+      mode: 'dig',
+      center: { ...player.position },
+      radius: 2,
+      strength: 5,
+    });
+    world.tick();
+    expect(world.terrainEdits.sampleCount).toBe(0);
+    expect(applied).toEqual(['terrainEdit', 'terrainEdit']);
+    off();
   });
 });

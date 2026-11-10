@@ -137,15 +137,27 @@ export class MeshWorkerPool {
       const worker = this.idle.pop() as Worker;
       const entry = this.queue.shift() as { id: number; request: MeshRequest };
       this.inFlight.get(worker)?.add(entry.id);
-      worker.postMessage({
-        id: entry.id,
-        planetConfig: entry.request.planetConfig,
-        worldSeed: entry.request.worldSeed,
-        level: entry.request.level,
-        coord: entry.request.coord,
-        edits: entry.request.edits,
-        editVersion: entry.request.editVersion,
-      });
+      // Edit deltas transfer (zero-copy); the sender builds a fresh
+      // attachment per submit, so neutering is safe.
+      const transfer: Transferable[] = [];
+      if (entry.request.edits) {
+        transfer.push(
+          entry.request.edits.indices.buffer as Transferable,
+          entry.request.edits.values.buffer as Transferable,
+        );
+      }
+      worker.postMessage(
+        {
+          id: entry.id,
+          planetConfig: entry.request.planetConfig,
+          worldSeed: entry.request.worldSeed,
+          level: entry.request.level,
+          coord: entry.request.coord,
+          edits: entry.request.edits,
+          editVersion: entry.request.editVersion,
+        },
+        transfer,
+      );
     }
   }
 

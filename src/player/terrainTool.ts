@@ -29,7 +29,6 @@ export interface ToolAim {
 export class TerrainTool {
   radius = TOOL_DEFAULT_RADIUS;
   private flattenPlane: { point: Vec3d; normal: Vec3d } | null = null;
-  private flattenHeld = false;
   private lastEditAt = -Infinity;
 
   /** Ctrl+wheel brush sizing (1 to 4 m in half-meter steps). */
@@ -41,13 +40,17 @@ export class TerrainTool {
   /**
    * Build a terrainEdit action when a stroke bit is due, else null. Mode
    * priority: dig, then add, then flatten. The flatten plane is captured
-   * from the aim normal when the stroke starts and frozen while held.
+   * from the aim normal on the first held frame with valid aim (so
+   * pressing F while looking at the sky still starts a stroke once the
+   * aim lands) and frozen for the rest of the stroke; releasing F clears
+   * it for the next stroke.
    */
   update(nowMs: number, playerId: string, buttons: ToolButtons, aim: ToolAim): Action | null {
-    if (buttons.flatten && !this.flattenHeld && aim.hit && aim.normal) {
+    if (!buttons.flatten) {
+      this.flattenPlane = null;
+    } else if (!this.flattenPlane && aim.hit && aim.normal) {
       this.flattenPlane = { point: { ...aim.hit }, normal: { ...aim.normal } };
     }
-    this.flattenHeld = buttons.flatten;
     const mode = buttons.dig ? 'dig' : buttons.add ? 'add' : buttons.flatten ? 'flatten' : null;
     if (!mode || !aim.hit || !aim.planet) return null;
     if (mode === 'flatten' && !this.flattenPlane) return null;
