@@ -225,6 +225,10 @@ export class Game {
 
     // Active camera: fly cam in F3 mode, orbit rig otherwise (streaming and
     // the origin shift follow whichever the player sees through).
+    // The orbit camera and the avatar share one interpolated render
+    // transform: driving the camera from raw post-tick sim state while the
+    // mesh renders lagged prev/curr samples made them disagree every frame.
+    const alpha = this.accumulator / SIM_DT;
     let activePos: Vec3d;
     if (flying) {
       this.flyCamera.update(frameDt);
@@ -234,11 +238,13 @@ export class Game {
     } else {
       const followed = this.playerEntity();
       if (followed) {
-        const up = upAt(followed.planet, followed.position);
-        this.rig.update(followed.position, up, (origin, dir, maxDist) =>
+        const renderPos =
+          this.renderer.playerView.interpolatedWorld(alpha) ?? followed.position;
+        const up = upAt(followed.planet, renderPos);
+        this.rig.update(renderPos, up, (origin, dir, maxDist) =>
           this.colliders.castTerrainRay(origin, dir, this.planets, maxDist),
         );
-        this.renderer.applyRigCamera(followed.position, this.rig.position, up);
+        this.renderer.applyRigCamera(renderPos, this.rig.position, up);
       }
       activePos = this.rig.position;
     }
@@ -251,7 +257,7 @@ export class Game {
     // budget). Chunk meshes are positioned when added and re-synced on
     // origin shifts only.
     this.renderer.updateStreaming(activePos);
-    this.renderer.renderPlayer(this.accumulator / SIM_DT);
+    this.renderer.renderPlayer(alpha);
     this.renderer.render();
 
     // Debug overlay content. The overlay no-ops while hidden, so skip the

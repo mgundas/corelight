@@ -41,6 +41,7 @@ The coding agent updates this file at the end of every milestone. Keep it short:
 - M03 ring always requests the containing L0 chunk even past the 48 m filter: `groundState` depends on it, and a player dropped from high above learns "all air, keep falling" (empty -> ready) instead of freezing on an unrequested chunk. Ring range clamps into the octree root.
 - M03 boots into third-person (fly default-off; F3 still toggles, exiting fly teleports the player to the camera). PlayerInput handlers are gated by mode so fly keys never leak into the rig.
 - M03 review fixes: camera collision queries nearby Rapier LOD0 terrain colliders directly (`TerrainColliders.castTerrainRay`) instead of traversing render meshes; pure orientation/basis helpers live in `frames.ts`; deep space reports `ready` because there is no terrain chunk to wait for (directed space motion stays out of scope); all astronaut materials are disposed.
+- FIX walk jitter + terrain seams: the orbit camera and the astronaut now share one interpolated render transform (`PlayerView.interpolatedWorld`), instead of the camera following raw post-tick sim state while the mesh rendered a lagged interpolation; terrain material uses smooth vertex normals (`flatShading: false`) so facets and LOD-boundary shading steps soften. This narrows the old "flat-shaded everything" look to props/character only (docs updated).
 
 ## Per-milestone notes
 
@@ -70,3 +71,6 @@ Manual acceptance still to verify in-browser: full walk around the planet, 5-min
 
 ### M03 review fixes (done)
 Review found one major performance concern and six smaller issues; all fixed. Major: camera terrain collision now uses direct queries against nearby Rapier LOD0 colliders (`castTerrainRay`) instead of per-frame traversal of all loaded render meshes. Minor: all astronaut materials dispose; stale `world.step()` comment corrected; pure orientation helpers moved to `frames.ts`; deep space reports `ready` instead of freezing on an unloadable chunk; focused `frames`/`spawn` tests added; Rapier import in `system.ts` is type-only. 92 tests pass.
+
+### FIX walk jitter + terrain seams (done)
+Camera and avatar shared one interpolated render transform (`PlayerView.interpolatedWorld`), fixing the per-frame disagreement that made walking judder; terrain switched to smooth vertex normals. 96 tests pass.

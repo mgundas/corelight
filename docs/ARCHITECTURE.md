@@ -147,7 +147,7 @@ interface Entity {
 ## Rendering
 
 - `Renderer` subscribes to world state each frame and keeps a `Map<EntityId, Object3D>` of views.
-- Materials: `MeshStandardMaterial` with `vertexColors: true`, `flatShading: true`. Fog color matches the sky.
+- Materials: `MeshStandardMaterial` with `vertexColors: true`. Terrain uses smooth shading (`flatShading: false`) so the worker-computed vertex normals soften facets and LOD-boundary steps; entity views keep their own flat-shaded low-poly materials. Fog color matches the sky.
 - Lighting underground: ambient intensity scales with depth below the surface (1.0 at surface, 0.08 below 25 m). Headlamp = SpotLight attached to the camera. Light sticks and lumen crystals = PointLights, at most 12 active, nearest first.
 - Atmosphere: back-side sphere shell at `1.25 * radius` with a simple scattering-style gradient shader. Sky color fades to black as altitude rises, stars appear in space.
 - Logarithmic depth buffer on (needed for space to ground scale).

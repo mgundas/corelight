@@ -9,7 +9,7 @@ This file describes WHAT the game is. `docs/ARCHITECTURE.md` describes HOW it is
 1. **The ground is the game.** Everything is diggable. Smooth terrain (not blocks), natural caves, and a reachable core.
 2. **Exploration has tension.** Oxygen runs out away from your base. Tethers are your lifeline.
 3. **Seamless worlds.** Walk, dig, fly to space and land on another planet without ever seeing a loading screen (except one at game start).
-4. **Readable, stylized look.** Low-poly, flat-shaded, vertex colors, strong silhouettes, soft fog. No texture-heavy art.
+4. **Readable, stylized look.** Low-poly, vertex colors, smooth-shaded terrain with flat-shaded props, strong silhouettes, soft fog. No texture-heavy art.
 
 ## Player experience loop
 

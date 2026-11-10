@@ -2,6 +2,7 @@
 // eviction. Headless (no WebGL needed for BufferGeometry bookkeeping).
 
 import { describe, expect, it } from 'vitest';
+import type { Mesh, MeshStandardMaterial } from 'three';
 import { SELA } from '../../src/planets/configs/sela.js';
 import type { MeshSink } from '../../src/terrain/chunkManager.js';
 import { nodeKey, nodeOrigin } from '../../src/terrain/octree.js';
@@ -47,6 +48,16 @@ describe('ChunkMeshes', () => {
     expect(sink.meshCounts()).toEqual({ perLevel: [0], total: 0 });
     expect(sink.has('sela:0:1:2:3')).toBe(false);
     expect(sink.remove('sela:0:1:2:3')).toBe(false);
+    meshes.dispose();
+  });
+
+  it('uses smooth vertex normals so facets and LOD borders shade softly', () => {
+    resetOrigin();
+    const meshes = new ChunkMeshes();
+    expect(meshes.add(SELA, result(0, { x: 1, y: 2, z: 3 }, false))).toBe('added');
+    const mesh = meshes.group.children[0] as Mesh;
+    const material = mesh.material as MeshStandardMaterial;
+    expect(material.flatShading).toBe(false);
     meshes.dispose();
   });
 

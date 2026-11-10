@@ -96,23 +96,30 @@ export class PlayerView {
     this.curr = null;
   }
 
+  /** Interpolated world position between the last two tick samples. */
+  interpolatedWorld(alpha: number): Vec3d | null {
+    if (!this.visible || !this.prev || !this.curr) return null;
+    const a = this.prev.pos;
+    const b = this.curr.pos;
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const dz = b.z - a.z;
+    let t = Math.min(1, Math.max(0, alpha));
+    if (dx * dx + dy * dy + dz * dz > SNAP_DISTANCE_SQ) t = 1;
+    return { x: a.x + dx * t, y: a.y + dy * t, z: a.z + dz * t };
+  }
+
   /** Place the group from the two samples and the tick alpha. */
   render(alpha: number): void {
     this.group.visible = this.visible;
-    if (!this.visible || !this.prev || !this.curr) return;
-    const a = this.prev;
-    const b = this.curr;
-    const dx = b.pos.x - a.pos.x;
-    const dy = b.pos.y - a.pos.y;
-    const dz = b.pos.z - a.pos.z;
-    let t = Math.min(1, Math.max(0, alpha));
-    if (dx * dx + dy * dy + dz * dz > SNAP_DISTANCE_SQ) t = 1;
-    const world: Vec3d = { x: a.pos.x + dx * t, y: a.pos.y + dy * t, z: a.pos.z + dz * t };
+    const world = this.interpolatedWorld(alpha);
+    if (!world) return;
     const local = toLocal(world);
     this.group.position.set(local.x, local.y, local.z);
     // Nearest-sample orientation (quaternion slerp across one tick adds
     // nothing visible at 30 Hz; position is what the eye tracks).
-    this.group.quaternion.set(b.quat.x, b.quat.y, b.quat.z, b.quat.w);
+    const curr = this.curr as { quat: Quat };
+    this.group.quaternion.set(curr.quat.x, curr.quat.y, curr.quat.z, curr.quat.w);
   }
 
   dispose(): void {
