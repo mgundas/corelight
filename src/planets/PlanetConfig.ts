@@ -66,6 +66,14 @@ export interface CavernConfig {
   minSlabLeftover: number;
   /** Worm widening inside slabs (threshold multiplier bonus, e.g. 0.8). */
   openingBoost: number;
+  /** Fraction of each floor level that is open room (0..1, rest stays rock). */
+  roomCoverage: number;
+  /** Room blotch spatial frequency (per meter, ~room diameter scale). */
+  roomFrequency: number;
+  /** Lateral distance of the guaranteed anchor pocket from the pole axis. */
+  roomAnchorRadius: number;
+  /** Anchor pocket radius: fully open inside half, pinched shut outside. */
+  roomAnchorSize: number;
 }
 
 export interface PlanetConfig {

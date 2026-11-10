@@ -51,13 +51,13 @@ describe('ChunkMeshes', () => {
     meshes.dispose();
   });
 
-  it('uses smooth vertex normals so facets and LOD borders shade softly', () => {
+  it('uses flat shading for the stylized low-poly look', () => {
     resetOrigin();
     const meshes = new ChunkMeshes();
     expect(meshes.add(SELA, result(0, { x: 1, y: 2, z: 3 }, false))).toBe('added');
     const mesh = meshes.group.children[0] as Mesh;
     const material = mesh.material as MeshStandardMaterial;
-    expect(material.flatShading).toBe(false);
+    expect(material.flatShading).toBe(true);
     meshes.dispose();
   });
 

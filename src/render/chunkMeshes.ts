@@ -1,5 +1,5 @@
 // Render-side chunk meshes: one THREE.Mesh per worker MeshResult, all
-// sharing a smooth-shaded vertex-color material. Positions are stored in
+// sharing a flat-shaded vertex-color material. Positions are stored in
 // world-space doubles; every mesh is placed via the floating origin.
 
 import * as THREE from 'three';
@@ -32,12 +32,12 @@ export class ChunkMeshes {
   private readonly levelCounts: number[] = [];
 
   constructor() {
-    // Smooth (non-flat) shading: the worker-computed vertex normals take
-    // effect, softening facets and LOD-boundary shading steps. Entity views
-    // keep their own flat-shaded low-poly materials.
+    // Flat-shaded low-poly look: facets stay crisp. The marching-cubes
+    // tessellation is clean quads (mid-cell crossings), so flat shading
+    // reads as stylized facets, not noise. Entity views share the style.
     this.material = new THREE.MeshStandardMaterial({
       vertexColors: true,
-      flatShading: false,
+      flatShading: true,
       roughness: 1,
       metalness: 0,
     });

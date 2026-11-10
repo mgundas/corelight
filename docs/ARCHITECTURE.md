@@ -93,7 +93,7 @@ d += editDelta(localPos)                                        // player edits
 ```
 
 - Caves: two 3D simplex "worm" fields, `c = abs(n1(p*f)) + abs(n2(p*f))`; carve where `c < caveThreshold(depth)` (unconditional `min`, so wall crossings sit mid-cell). No caves in the top 6 m (keeps the surface solid), threshold grows with depth, no caves inside the core shell.
-- Cavern floors: room/slab bands on a depth cycle derived from planet size (`cavernStack`: Sela gets 6 floors of ~30 m rooms separated by ~24 m slabs). Rooms are hollowed with walkable noise-relief floors and capped pit bowls (pits can never breach a slab); slabs stay solid except where worms pierce them (widened inside slabs, so floors get irregular diggable openings). Same deterministic density field: same seed = identical floors.
+- Cavern floors: room/slab bands on a depth cycle derived from planet size (`cavernStack`: Sela gets 7 floors of ~14 m rooms separated by ~32 m slabs). Rooms are local pockets, not global shells: a smooth blotch mask plus one guaranteed pocket per floor (golden-angle anchor) opens rooms while the rest stays solid rock, so floors feel like mostly-ground with discoverable caverns. Rooms are hollowed with walkable noise-relief floors and capped pit bowls (pits can never breach a slab); worms pierce slabs (slightly widened there) so floors connect through rare diggable openings. Same deterministic density field: same seed = identical floors.
 - Layer at a point = from `depth` using `planet.layers`. Layer gives hardness and color.
 - Vertex color = layer color blended with a small noise variation. Surface top uses `planet.surfaceColors` (grass/dirt by slope).
 - The density function must be pure and deterministic (seeded noise). It runs in workers.
@@ -149,7 +149,7 @@ interface Entity {
 ## Rendering
 
 - `Renderer` subscribes to world state each frame and keeps a `Map<EntityId, Object3D>` of views.
-- Materials: `MeshStandardMaterial` with `vertexColors: true`. Terrain uses smooth shading (`flatShading: false`) so the worker-computed vertex normals soften facets and LOD-boundary steps; entity views keep their own flat-shaded low-poly materials. Fog color matches the sky.
+- Materials: `MeshStandardMaterial` with `vertexColors: true`, `flatShading: true`. Fog color matches the sky.
 - Lighting underground: ambient intensity scales with depth below the surface (1.0 at surface, 0.08 below 25 m). Headlamp = SpotLight attached to the camera. Light sticks and lumen crystals = PointLights, at most 12 active, nearest first.
 - Atmosphere: back-side sphere shell at `1.25 * radius` with a simple scattering-style gradient shader. Sky color fades to black as altitude rises, stars appear in space.
 - Logarithmic depth buffer on (needed for space to ground scale).

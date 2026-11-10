@@ -53,8 +53,8 @@ export const SELA: PlanetConfig = {
   caverns: {
     enabled: true,
     surfaceCapDepth: 30,
-    cavernHeight: 30,
-    slabThickness: 24,
+    cavernHeight: 14,
+    slabThickness: 32,
     minFloors: 4,
     maxFloors: 8,
     floorRoughness: 1.5,
@@ -63,7 +63,11 @@ export const SELA: PlanetConfig = {
     pitDepth: 3.5,
     pitFrequency: 0.05,
     minSlabLeftover: 8,
-    openingBoost: 0.8,
+    openingBoost: 0.25,
+    roomCoverage: 0.2,
+    roomFrequency: 0.022,
+    roomAnchorRadius: 55,
+    roomAnchorSize: 45,
   },
   surfaceColors: {
     flat: [0.36, 0.58, 0.28],

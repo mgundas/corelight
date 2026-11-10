@@ -31,7 +31,7 @@ Both planets use the same generator with different config files (`src/planets/co
 |---|---|---|
 | Theme | Temperate, green and brown surface, ochre caves | Cold, pale blue ice and grey rock, violet glow deep down |
 | Radius | 400 m | 320 m |
-| Caves | 6 cavern floors (~30 m rooms, ~24 m slabs) linked by wide worm tunnels | Cavern floors TBD (Vorn config arrives with M13), dense narrow worms |
+| Caves | 7 pocketed floors (~14 m rooms in 32 m slabs, rare worm-pierced openings) | Cavern floors TBD (Vorn config arrives with M13), dense narrow worms |
 | Unique resource | Heartglass (core chamber only) | Voidstone (mantle only) |
 | Hazard | None on surface, heat in mantle | Cold on surface (oxygen drains 1.5x), heat in mantle |
 | Core | Hollow chamber, radius 40 m, ancient engine | Hollow chamber, radius 32 m, ancient engine |
