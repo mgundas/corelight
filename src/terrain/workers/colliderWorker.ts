@@ -12,6 +12,10 @@ export interface ColliderJob {
   planetConfig: PlanetConfig;
   worldSeed: number;
   coord: ChunkCoord;
+  /** Sparse player-edit deltas resolved into this job's 35^3 sample grid. */
+  edits?: { indices: Uint32Array; values: Float32Array };
+  /** Edit version at submit time: lets the ring drop stale results. */
+  editVersion?: number;
 }
 
 export interface ColliderResult {
@@ -21,6 +25,8 @@ export interface ColliderResult {
   positions: Float32Array;
   indices: Uint32Array;
   empty: boolean;
+  /** Echoed from the job (undefined for pre-edit jobs). */
+  editVersion?: number;
 }
 
 export interface ColliderError {
@@ -36,7 +42,7 @@ const workerScope = self as unknown as {
 workerScope.onmessage = (event: MessageEvent<ColliderJob>): void => {
   const job = event.data;
   try {
-    const data = buildColliderData(job.planetConfig, job.worldSeed, job.coord);
+    const data = buildColliderData(job.planetConfig, job.worldSeed, job.coord, job.edits);
     const result: ColliderResult = {
       id: job.id,
       key: data.key,
@@ -44,6 +50,7 @@ workerScope.onmessage = (event: MessageEvent<ColliderJob>): void => {
       positions: data.positions,
       indices: data.indices,
       empty: data.empty,
+      editVersion: job.editVersion,
     };
     workerScope.postMessage(result, [
       result.positions.buffer as Transferable,

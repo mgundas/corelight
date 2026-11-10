@@ -9,7 +9,7 @@ export const CAM_DISTANCE_DEFAULT = 4;
 export const CAM_DISTANCE_MIN = 2;
 export const CAM_DISTANCE_MAX = 8;
 /** Head height above the capsule center. */
-const HEAD_HEIGHT = 1.5;
+export const HEAD_HEIGHT = 1.5;
 /** Keep this far from the hit surface. */
 const WALL_MARGIN = 0.3;
 /** Closest the camera gets to the head when walled in. */

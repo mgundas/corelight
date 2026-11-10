@@ -5,6 +5,7 @@ export type EventMap = {
   originShifted: { origin: { x: number; y: number; z: number } };
   actionApplied: { type: string };
   tick: { time: number };
+  terrainEdited: { planetId: string; keys: string[] };
 };
 
 export type EventName = keyof EventMap;

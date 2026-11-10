@@ -7,7 +7,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { COLLIDER_RANGE_M } from '../../core/constants.js';
 import { normalize, type Vec3d } from '../../core/math.js';
 import type { PlanetConfig } from '../../planets/PlanetConfig.js';
-import { chunkSizeForLevel, type ChunkCoord } from '../../terrain/chunkKey.js';
+import { chunkSizeForLevel, parseChunkKey, type ChunkCoord } from '../../terrain/chunkKey.js';
 import { colliderKey } from '../../terrain/colliders.js';
 import type { ColliderResult } from '../../terrain/colliderPool.js';
 import { nodeOrigin, rootMin } from '../../terrain/octree.js';
@@ -16,7 +16,12 @@ import { gravityAt } from './gravity.js';
 
 /** Worker-backed (or test-stubbed) source of LOD0 collision meshes. */
 export interface ColliderSource {
-  request(planet: PlanetConfig, worldSeed: number, coord: ChunkCoord): Promise<ColliderResult>;
+  request(
+    planet: PlanetConfig,
+    worldSeed: number,
+    coord: ChunkCoord,
+    editVersion?: number,
+  ): Promise<ColliderResult>;
 }
 
 export type GroundState = 'ready' | 'pending';
@@ -46,6 +51,10 @@ export class TerrainColliders {
   private readonly colliders = new Map<string, { collider: RAPIER.Collider; planetId: string; coord: ChunkCoord }>();
   private readonly inflight = new Set<string>();
   private readonly empty = new Set<string>();
+  /** Edit counter per key (notifyEdited): stale results are dropped. */
+  private readonly editVersions = new Map<string, number>();
+  /** Edited keys with a fresh rebuild outstanding. */
+  private readonly dirty = new Set<string>();
 
   constructor(
     source: ColliderSource,
@@ -57,6 +66,27 @@ export class TerrainColliders {
 
   get loadedCount(): number {
     return this.colliders.size;
+  }
+
+  /**
+   * Rebuild colliders for edited LOD0 chunk keys. LOD1+ keys (parents for
+   * the render streamer) are ignored: colliders are LOD0 only. Existing
+   * colliders stay in place as ghost support (the player never falls on
+   * stale ground) and are atomically swapped when fresh data arrives with
+   * a matching edit version; keys with no collider yet read as pending so
+   * the controller freezes instead of falling through.
+   */
+  notifyEdited(keys: string[]): void {
+    for (const key of keys) {
+      try {
+        if (parseChunkKey(key).level !== 0) continue;
+      } catch {
+        continue;
+      }
+      this.editVersions.set(key, (this.editVersions.get(key) ?? 0) + 1);
+      this.dirty.add(key);
+      this.empty.delete(key);
+    }
   }
 
   get pendingCount(): number {
@@ -122,14 +152,25 @@ export class TerrainColliders {
 
     for (const coord of coords) {
       const key = colliderKey(planet.id, coord);
-      if (this.colliders.has(key) || this.inflight.has(key) || this.empty.has(key)) continue;
+      // Edited keys rebuild even with a collider in place (ghost support
+      // swaps atomically on completion); otherwise loaded keys are done.
+      if (this.inflight.has(key) || this.empty.has(key)) continue;
+      if (this.colliders.has(key) && !this.dirty.has(key)) continue;
       this.inflight.add(key);
       const requestCoord = { ...coord };
+      const wantVersion = this.editVersions.get(key) ?? 0;
       this.source
-        .request(planet, worldSeed, requestCoord)
+        .request(planet, worldSeed, requestCoord, wantVersion)
         .then((result) => {
           this.inflight.delete(key);
+          if (wantVersion !== (this.editVersions.get(key) ?? 0)) {
+            // A newer edit landed while this job ran: drop the stale
+            // mesh, stay dirty, the next update re-requests fresh data.
+            return;
+          }
+          this.dirty.delete(key);
           if (result.empty || result.positions.length === 0 || result.indices.length === 0) {
+            this.removeCollider(key);
             this.empty.add(key);
             return;
           }
@@ -142,7 +183,9 @@ export class TerrainColliders {
             z: planet.center.z + origin.z,
           };
           if (pointBoxDistance(this.lastPlayer, worldMin, size) > COLLIDER_RANGE_M + size) return;
-          if (this.colliders.has(key)) return;
+          // Atomic swap: the old collider (ghost support) leaves the same
+          // tick the fresh data lands, so the controller never sees a gap.
+          this.removeCollider(key);
           const world = this.worldFor(planet.id);
           const collider = world.createCollider(
             RAPIER.ColliderDesc.trimesh(result.positions, result.indices).setTranslation(
@@ -171,6 +214,17 @@ export class TerrainColliders {
   }
 
   private lastPlayer: Vec3d = { x: 0, y: 0, z: 0 };
+
+  private removeCollider(key: string): void {
+    const entry = this.colliders.get(key);
+    if (!entry) return;
+    try {
+      this.worldFor(entry.planetId).removeCollider(entry.collider, false);
+    } catch {
+      // World already disposed; nothing to do.
+    }
+    this.colliders.delete(key);
+  }
 
   private collectGarbage(needed: Set<string>, planets: PlanetConfig[]): void {
     const size = chunkSizeForLevel(0);
@@ -248,5 +302,7 @@ export class TerrainColliders {
     this.colliders.clear();
     this.inflight.clear();
     this.empty.clear();
+    this.dirty.clear();
+    this.editVersions.clear();
   }
 }

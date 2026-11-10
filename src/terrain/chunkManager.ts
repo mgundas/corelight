@@ -13,12 +13,14 @@ import {
 } from '../core/constants.js';
 import { distance, type Vec3d } from '../core/math.js';
 import type { PlanetConfig } from '../planets/PlanetConfig.js';
-import { parseChunkKey } from './chunkKey.js';
+import { chunkKey, chunkSizeForLevel, parseChunkKey } from './chunkKey.js';
 import { createDensityField, type DensityField } from './density.js';
+import type { EditAttachment } from './edits.js';
 import {
   boxesOverlap,
   isDefinitelyAir,
   nodeKey,
+  nodeOrigin,
   updateOctree,
   type OctreeNode,
 } from './octree.js';
@@ -32,6 +34,8 @@ export interface MeshSink {
   remove(key: string): boolean;
   /** Remember a key the worker (or boot) reported empty: never re-queue. */
   markEmpty(key: string): void;
+  /** Drop a remembered empty key so the next update re-meshes it (edits). */
+  forgetEmpty(key: string): void;
   /** Drop empty keys the predicate rejects (bounds the empty-key cache). */
   pruneEmpty(keep: (key: string) => boolean): void;
   /** Keys known empty (worker-reported + pre-skipped). */
@@ -111,11 +115,19 @@ export class ChunkManager {
   private readonly maxInflight: number;
   private readonly queued = new Map<string, DesiredNode & { score: number }>();
   private readonly inflight = new Map<string, DesiredNode>();
-  private completed: Array<DesiredNode & { result: MeshResult }> = [];
+  private completed: Array<DesiredNode & { result: MeshResult; submitVersion?: number }> = [];
   private readonly failures = new Map<string, number>();
   private desiredKeys = new Set<string>();
   private desiredCount = 0;
   private lastTick = -Infinity;
+  /** Player-edit delta provider (set by Game; null until the first edit). */
+  private editSource: ((key: string) => EditAttachment | null) | null = null;
+  /** Edit counter per LOD0 key, bumped by notifyEdited. */
+  private readonly editVersions = new Map<string, number>();
+  /** Edited keys with a fresh rebuild outstanding. */
+  private readonly dirty = new Set<string>();
+  /** Edit-job refcount per key (they bypass the streaming inflight cap). */
+  private readonly editInflight = new Map<string, number>();
 
   constructor(
     pool: MeshWorkerPool,
@@ -140,6 +152,105 @@ export class ChunkManager {
   adopt(config: PlanetConfig, results: MeshResult[], emptyKeys: string[]): void {
     for (const result of results) this.sink.add(config, result);
     for (const key of emptyKeys) this.sink.markEmpty(key);
+  }
+
+  /** Provide player-edit deltas for mesh jobs (called with LOD0 keys). */
+  setEditSource(source: ((key: string) => EditAttachment | null) | null): void {
+    this.editSource = source;
+  }
+
+  /**
+   * Rebuild chunks touched by player edits, ahead of the streaming queue.
+   * Takes the LOD0 keys from TerrainEdits and adds their LOD1 parents
+   * (coarse meshes ignore edits past LOD1, so parents are the widest level
+   * that must refresh). Submits immediately (bypassing the 100 ms
+   * recompute throttle) so the visual update lands within a couple of
+   * frames; the old mesh stays visible until the fresh result is applied.
+   * Stale in-flight jobs are detected by version at completion and
+   * refreshed, never shown.
+   */
+  notifyEdited(lod0Keys: string[]): void {
+    const keys = new Set<string>();
+    for (const key of lod0Keys) {
+      try {
+        const parsed = parseChunkKey(key);
+        if (parsed.level !== 0) continue;
+        keys.add(key);
+        // The LOD1 parent covering this chunk (and its edited neighbors).
+        const parent = {
+          x: Math.floor(parsed.coord.x / 2),
+          y: Math.floor(parsed.coord.y / 2),
+          z: Math.floor(parsed.coord.z / 2),
+        };
+        keys.add(chunkKey(parsed.planetId, 1, parent));
+      } catch {
+        continue;
+      }
+    }
+    for (const key of keys) {
+      this.editVersions.set(key, (this.editVersions.get(key) ?? 0) + 1);
+      this.dirty.add(key);
+      this.sink.forgetEmpty(key);
+      this.queued.delete(key);
+      if ((this.editInflight.get(key) ?? 0) === 0 && !this.inflight.has(key)) {
+        this.submitEditJob(key);
+      }
+    }
+  }
+
+  /** Submit one priority edit job for an LOD0/LOD1 key (fresh deltas). */
+  private submitEditJob(key: string): void {
+    let parsed;
+    try {
+      parsed = parseChunkKey(key);
+    } catch {
+      this.dirty.delete(key);
+      return;
+    }
+    const planet = this.planets.find((p) => p.config.id === parsed.planetId)?.config;
+    if (!planet || parsed.level > 1) {
+      this.dirty.delete(key);
+      return;
+    }
+    const level = parsed.level;
+    const version = this.editVersions.get(key) ?? 0;
+    const coord = { ...parsed.coord };
+    const min = nodeOrigin(planet, level, coord);
+    const size = chunkSizeForLevel(level);
+    const node: OctreeNode = {
+      level,
+      coord,
+      min,
+      size,
+      center: { x: min.x + size / 2, y: min.y + size / 2, z: min.z + size / 2 },
+    };
+    const edits = this.editSource?.(key) ?? null;
+    this.editInflight.set(key, (this.editInflight.get(key) ?? 0) + 1);
+    void this.pool
+      .submit({
+        planetConfig: planet,
+        worldSeed: this.worldSeed,
+        level,
+        coord: { ...coord },
+        edits: edits ?? undefined,
+        editVersion: version,
+      })
+      .then(
+        (result) => {
+          this.decEditInflight(key);
+          this.completed.push({ planet, node, key, result, submitVersion: version });
+        },
+        () => {
+          this.decEditInflight(key);
+          // Stay dirty: the recompute fallback retries within 100 ms.
+        },
+      );
+  }
+
+  private decEditInflight(key: string): void {
+    const left = (this.editInflight.get(key) ?? 1) - 1;
+    if (left <= 0) this.editInflight.delete(key);
+    else this.editInflight.set(key, left);
   }
 
   /**
@@ -241,23 +352,42 @@ export class ChunkManager {
       this.queued.delete(job.key);
       this.inflight.set(job.key, job);
       const attempt: DesiredNode = { planet: job.planet, node: job.node, key: job.key };
+      // Fresh edit deltas ride along so a chunk edited while queued still
+      // meshes correctly; the version lets drainCompleted drop stale jobs.
+      const version = this.editVersions.get(job.key) ?? 0;
+      const edits = job.node.level <= 1 ? (this.editSource?.(job.key) ?? null) : null;
       void this.pool
         .submit({
           planetConfig: job.planet,
           worldSeed: this.worldSeed,
           level: job.node.level,
           coord: { ...job.node.coord },
+          edits: edits ?? undefined,
+          editVersion: version,
         })
         .then(
           (result) => {
             this.inflight.delete(job.key);
-            this.completed.push({ ...attempt, result });
+            this.completed.push({ ...attempt, result, submitVersion: version });
           },
           () => {
             this.inflight.delete(job.key);
             this.failures.set(job.key, performance.now());
           },
         );
+    }
+    // Edited keys with no job outstanding (a submit failed, or the stream
+    // never picked them up): retry promptly while still desired. Stale
+    // keys the camera left behind are forgotten (edits persist in the store
+    // and re-attach if the chunk streams back).
+    for (const key of [...this.dirty]) {
+      if (!wanted.has(key)) {
+        this.dirty.delete(key);
+        continue;
+      }
+      if (!this.inflight.has(key) && (this.editInflight.get(key) ?? 0) === 0) {
+        this.submitEditJob(key);
+      }
     }
     this.collectGarbage(desired);
   }
@@ -304,13 +434,33 @@ export class ChunkManager {
       y: item.planet.center.y + item.node.min.y + item.node.size / 2,
       z: item.planet.center.z + item.node.min.z + item.node.size / 2,
     });
-    // Nearest first: detail pops in where the camera is.
-    this.completed.sort((a, b) => distance(cameraWorld, centerOf(a)) - distance(cameraWorld, centerOf(b)));
+    // Edited chunks first: the remesh the player is waiting for jumps the
+    // 4 ms apply budget. Nearest first within each group.
+    this.completed.sort((a, b) => {
+      const ae = this.editVersions.has(a.key) ? 0 : 1;
+      const be = this.editVersions.has(b.key) ? 0 : 1;
+      if (ae !== be) return ae - be;
+      return distance(cameraWorld, centerOf(a)) - distance(cameraWorld, centerOf(b));
+    });
     const start = performance.now();
     while (this.completed.length > 0 && performance.now() - start < budgetMs) {
-      const item = this.completed.shift() as DesiredNode & { result: MeshResult };
+      const item = this.completed.shift() as DesiredNode & { result: MeshResult; submitVersion?: number };
+      const current = this.editVersions.get(item.key) ?? 0;
+      const submitted = item.submitVersion ?? 0;
+      if (submitted !== current) {
+        // A newer edit landed while this job ran: refresh with fresh
+        // deltas instead of flashing a stale mesh for a frame.
+        this.submitEditJob(item.key);
+        continue;
+      }
+      this.dirty.delete(item.key);
       if (item.result.empty) {
         this.sink.markEmpty(item.key);
+      } else if (this.editVersions.has(item.key)) {
+        // Edit rebuild: keep the old mesh visible until the new one is
+        // ready, then swap atomically.
+        this.sink.remove(item.key);
+        this.sink.add(item.planet, item.result);
       } else {
         this.sink.add(item.planet, item.result);
       }

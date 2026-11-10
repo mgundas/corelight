@@ -29,10 +29,17 @@ export function buildColliderData(
   config: PlanetConfig,
   worldSeed: number,
   coord: ChunkCoord,
+  edits?: { indices: Uint32Array; values: Float32Array },
 ): ColliderData {
   const field = createDensityField(config, worldSeed);
   const cellSize = cellSizeForLevel(0);
   const { samples, origin } = sampleGrid(field, config, 0, coord, cellSize);
+  if (edits) {
+    for (let k = 0; k < edits.indices.length; k += 1) {
+      const at = edits.indices[k] as number;
+      samples[at] = (samples[at] as number) + (edits.values[k] as number);
+    }
+  }
   // No colors needed for collision; normals are still computed (cheap).
   const mesh = polygonize(samples, origin, cellSize, () => [0, 0, 0]);
   return {

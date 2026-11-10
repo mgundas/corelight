@@ -23,7 +23,7 @@ async function boot(): Promise<void> {
   const hint = document.createElement('div');
   hint.id = 'hint';
   hint.textContent =
-    'Corelight M03 — walk with WASD, mouse look (click), Space jump, Shift sprint, wheel zoom, F1 overlay, F3 fly, F4 wireframe, F5 chunk bounds';
+    'Corelight M04 — walk with WASD, mouse look (click), Space jump, Shift sprint, wheel zoom, LMB dig, RMB add, F flatten, Ctrl+wheel brush size, F1 overlay, F3 fly, F4 wireframe, F5 chunk bounds';
   app.appendChild(hint);
 
   const { prebuilt } = await runBootSafe(seed, params.skipBoot);

@@ -64,6 +64,11 @@ export class ChunkMeshes {
     if (!this.meshes.has(key)) this.emptyKeys.add(key);
   }
 
+  /** Drop a remembered empty key so the chunk remeshes (player edits). */
+  forgetEmpty(key: string): void {
+    this.emptyKeys.delete(key);
+  }
+
   /** Drop empty keys the predicate rejects (bounds the empty-key cache). */
   pruneEmpty(keep: (key: string) => boolean): void {
     for (const key of [...this.emptyKeys]) {

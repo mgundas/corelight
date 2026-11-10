@@ -69,6 +69,12 @@ export interface PlayerComponent {
   /** Sticky escape mode: once gradient descent proves fruitless, the safety
    * keeps plowing surface-ward through thin dips until clearly free. */
   escaping: boolean;
+  /** Loose soil carried for the terrain tool's add mode (max SOIL_MAX). */
+  soil: number;
+  /** Drill tier: edits only affect samples with layer hardness <= this. */
+  toolHardness: number;
+  /** World time of the last hardness-blocked edit (drives the indicator). */
+  lastTooHard: number;
 }
 
 export interface Entity {

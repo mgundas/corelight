@@ -1,5 +1,7 @@
 import { SIM_DT } from '../core/constants.js';
 import { events } from '../core/events.js';
+import type { PlanetConfig } from '../planets/PlanetConfig.js';
+import { TerrainEdits } from '../terrain/edits.js';
 import { applyAction, type Action } from './actions.js';
 import type { Entity, EntityId } from './entities.js';
 
@@ -10,6 +12,10 @@ export class World {
   /** Seconds of simulated time. */
   time = 0;
   seed: number;
+  /** Sparse player terrain edits (sim state; serialized by M06 saves). */
+  readonly terrainEdits = new TerrainEdits();
+  /** Runtime planet configs (NOT serialized: static game data). */
+  planets: PlanetConfig[] = [];
   private queue: Action[] = [];
   private systems: System[] = [];
   private idCounter = 0;

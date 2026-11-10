@@ -1,6 +1,9 @@
 import type { Vec3d } from '../core/math.js';
 import { IDENTITY_QUAT } from '../core/math.js';
+import { SOIL_MAX } from '../core/constants.js';
 import { events } from '../core/events.js';
+import { createDensityField, layerAt, type DensityField } from '../terrain/density.js';
+import type { EditMode, FlattenPlane } from '../terrain/edits.js';
 import type { EntityId } from './entities.js';
 import type { World } from './world.js';
 
@@ -20,7 +23,19 @@ export type Action =
       lookYaw: number;
       lookPitch: number;
     }
-  | { type: 'playerTeleport'; playerId: EntityId; position: Vec3d };
+  | { type: 'playerTeleport'; playerId: EntityId; position: Vec3d }
+  | {
+      type: 'terrainEdit';
+      playerId: EntityId;
+      planetId: string;
+      mode: EditMode;
+      /** Brush center in world-space doubles. */
+      center: Vec3d;
+      radius: number;
+      strength: number;
+      /** Flatten plane in world coords (captured at stroke start). */
+      flattenPlane?: { point: Vec3d; normal: Vec3d };
+    };
 
 function clampAxis(v: number): number {
   return Math.min(1, Math.max(-1, v));
@@ -60,6 +75,9 @@ export function applyAction(world: World, action: Action): void {
             input: null,
             embeddedTime: 0,
             escaping: false,
+            soil: 0,
+            toolHardness: 2,
+            lastTooHard: -Infinity,
           },
         },
       });
@@ -94,5 +112,78 @@ export function applyAction(world: World, action: Action): void {
       events.emit('actionApplied', { type: action.type });
       return;
     }
+    case 'terrainEdit': {
+      const entity = world.entities.get(action.playerId);
+      const player = entity?.components.player;
+      if (!entity || entity.kind !== 'player' || !player) return;
+      if (action.radius <= 0 || action.strength <= 0) return;
+      const planet = world.planets.find((p) => p.id === action.planetId);
+      if (!planet) return;
+      // Add mode consumes soil; an empty counter fails the whole stroke bit.
+      if (action.mode === 'add' && player.soil <= 0) {
+        events.emit('actionApplied', { type: action.type });
+        return;
+      }
+      const field = baseFieldFor(world, planet.id);
+      const local = {
+        x: action.center.x - planet.center.x,
+        y: action.center.y - planet.center.y,
+        z: action.center.z - planet.center.z,
+      };
+      const plane: FlattenPlane | undefined = action.flattenPlane
+        ? {
+            point: {
+              x: action.flattenPlane.point.x - planet.center.x,
+              y: action.flattenPlane.point.y - planet.center.y,
+              z: action.flattenPlane.point.z - planet.center.z,
+            },
+            normal: { ...action.flattenPlane.normal },
+          }
+        : undefined;
+      const outcome = world.terrainEdits.applySphere(
+        planet,
+        field.density,
+        local,
+        action.radius,
+        action.strength,
+        action.mode,
+        {
+          maxHardness: player.toolHardness,
+          hardnessAt: (x, y, z) => layerAt(planet, x, y, z).hardness,
+          flattenPlane: plane,
+        },
+      );
+      player.soil = Math.min(SOIL_MAX, Math.max(0, player.soil + outcome.gained - outcome.spent));
+      if (outcome.blocked) player.lastTooHard = world.time;
+      if (outcome.keys.length > 0) {
+        events.emit('terrainEdited', { planetId: planet.id, keys: outcome.keys });
+      }
+      events.emit('actionApplied', { type: action.type });
+      return;
+    }
   }
+}
+
+/**
+ * Base (unedited) density fields per world, cached so every stroke bit does
+ * not rebuild seeded noise. Crossings are measured against base + stored
+ * deltas inside TerrainEdits; the live (edited) fields used by physics are
+ * built separately in the physics system.
+ */
+const baseFieldCache = new WeakMap<World, Map<string, DensityField>>();
+
+function baseFieldFor(world: World, planetId: string): DensityField {
+  let perWorld = baseFieldCache.get(world);
+  if (!perWorld) {
+    perWorld = new Map();
+    baseFieldCache.set(world, perWorld);
+  }
+  let field = perWorld.get(planetId);
+  if (!field) {
+    const planet = world.planets.find((p) => p.id === planetId);
+    if (!planet) throw new Error(`terrainEdit: unknown planet ${planetId}`);
+    field = createDensityField(planet, world.seed);
+    perWorld.set(planetId, field);
+  }
+  return field;
 }

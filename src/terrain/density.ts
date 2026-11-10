@@ -87,7 +87,11 @@ export function cavernAnchorPoints(config: PlanetConfig): Vec3d[] {
   return out;
 }
 
-export function createDensityField(config: PlanetConfig, worldSeed: number): DensityField {
+export function createDensityField(
+  config: PlanetConfig,
+  worldSeed: number,
+  editDelta?: (x: number, y: number, z: number) => number,
+): DensityField {
   const base = `${worldSeed}:${config.seed}`;
   const surfaceNoise = createSeededNoise3D(`${base}:surface`);
   const caveA = createSeededNoise3D(`${base}:caveA`);
@@ -202,6 +206,8 @@ export function createDensityField(config: PlanetConfig, worldSeed: number): Den
     // Hollow core chamber (no caves inside the shell by the guard above).
     const chamber = r - config.core.chamberRadius;
     if (chamber < d) d = chamber;
+    // Player edits (sparse diffs; zero where untouched).
+    if (editDelta) d += editDelta(x, y, z);
     return d;
   };
 

@@ -1,8 +1,10 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { SELA } from '../../src/planets/configs/sela.js';
-import { buildColliderData } from '../../src/terrain/colliders.js';
-import type { ChunkCoord } from '../../src/terrain/chunkKey.js';
+import { buildColliderData, colliderKey } from '../../src/terrain/colliders.js';
+import { chunkSizeForLevel, type ChunkCoord } from '../../src/terrain/chunkKey.js';
+import { rootMin } from '../../src/terrain/octree.js';
+import type { ColliderResult } from '../../src/terrain/colliderPool.js';
 import { initPhysics } from '../../src/sim/physics/rapierWorld.js';
 import { TerrainColliders, type ColliderSource } from '../../src/sim/physics/terrainColliders.js';
 import { findSpawnPosition } from '../../src/sim/physics/spawn.js';
@@ -184,6 +186,132 @@ describe('TerrainColliders', () => {
     // 48 m ring over 32 m chunks: a handful of chunks, not the whole planet.
     expect(colliders.loadedCount).toBeGreaterThan(0);
     expect(colliders.loadedCount).toBeLessThan(64);
+    colliders.dispose();
+    rapierWorld.free();
+  });
+
+  it('rebuilds edited chunks without ever losing ground (ghost support)', async () => {
+    const rapierWorld = new RAPIER.World({ x: 0, y: 0, z: 0 });
+    const seenVersions: number[] = [];
+    const requested: string[] = [];
+    const source: ColliderSource = {
+      request: (planet, worldSeed, coord, editVersion) => {
+        seenVersions.push(editVersion ?? -1);
+        const data = buildColliderData(planet, worldSeed, coord);
+        requested.push(data.key);
+        return Promise.resolve({
+          id: 0,
+          key: data.key,
+          origin: { x: data.origin.x, y: data.origin.y, z: data.origin.z },
+          positions: data.positions,
+          indices: data.indices,
+          empty: data.empty,
+          editVersion,
+        });
+      },
+    };
+    const colliders = new TerrainColliders(source, () => rapierWorld);
+    const spawn = findSpawnPosition(SELA, 1337);
+    colliders.update(spawn, [SELA], 1337);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(colliders.groundState(spawn, [SELA])).toBe('ready');
+    const loaded = colliders.loadedCount;
+    expect(loaded).toBeGreaterThan(0);
+    const callsBefore = requested.length;
+
+    // Edit one loaded chunk: a rebuild is requested even though a collider
+    // already exists, and the ground stays 'ready' on ghost support.
+    const key = requested[0] as string;
+    colliders.notifyEdited([key]);
+    expect(colliders.groundState(spawn, [SELA])).toBe('ready');
+    colliders.update(spawn, [SELA], 1337);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(requested.length).toBeGreaterThan(callsBefore);
+    expect(seenVersions[seenVersions.length - 1]).toBe(1);
+    expect(colliders.loadedCount).toBe(loaded);
+    expect(colliders.groundState(spawn, [SELA])).toBe('ready');
+    // Settled: no further requests.
+    colliders.update(spawn, [SELA], 1337);
+    await Promise.resolve();
+    expect(requested.length).toBeGreaterThan(callsBefore);
+    const settled = requested.length;
+    colliders.update(spawn, [SELA], 1337);
+    await Promise.resolve();
+    expect(requested.length).toBe(settled);
+    colliders.dispose();
+    rapierWorld.free();
+  });
+
+  it('drops stale collider results and retries with the current version', async () => {
+    const rapierWorld = new RAPIER.World({ x: 0, y: 0, z: 0 });
+    const gate: Array<{
+      coord: ChunkCoord;
+      version: number | undefined;
+      resolve: (result: ColliderResult) => void;
+    }> = [];
+    const source: ColliderSource = {
+      request: (planet, worldSeed, coord, editVersion) => {
+        void planet;
+        void worldSeed;
+        return new Promise<ColliderResult>((resolve) => {
+          gate.push({ coord: { ...coord }, version: editVersion, resolve });
+        });
+      },
+    };
+    const colliders = new TerrainColliders(source, () => rapierWorld);
+    const spawn = findSpawnPosition(SELA, 1337);
+    colliders.update(spawn, [SELA], 1337);
+    // Race the edit against the player's own (containing) chunk job.
+    const size = chunkSizeForLevel(0);
+    const min = rootMin(SELA);
+    const perAxis = 2 ** SELA.lodMaxLevel;
+    const clampAxis = (v: number): number =>
+      Math.min(perAxis - 1, Math.max(0, Math.floor(v / size)));
+    const here = {
+      x: clampAxis(spawn.x - min.x),
+      y: clampAxis(spawn.y - min.y),
+      z: clampAxis(spawn.z - min.z),
+    };
+    const first = gate.find(
+      (g) => g.coord.x === here.x && g.coord.y === here.y && g.coord.z === here.z,
+    );
+    if (!first) throw new Error('containing chunk was not requested');
+    const key = colliderKey(SELA.id, first.coord);
+    colliders.notifyEdited([key]);
+    // The pre-edit job (v0) resolves stale: dropped, never installed.
+    const staleData = buildColliderData(SELA, 1337, first.coord);
+    first.resolve({
+      id: 0,
+      key: staleData.key,
+      origin: { x: staleData.origin.x, y: staleData.origin.y, z: staleData.origin.z },
+      positions: staleData.positions,
+      indices: staleData.indices,
+      empty: staleData.empty,
+      editVersion: 0,
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    // Retry carries the current version; resolving installs the collider.
+    colliders.update(spawn, [SELA], 1337);
+    const retries = gate.filter((g) => colliderKey(SELA.id, g.coord) === key);
+    const retry = retries[retries.length - 1];
+    if (!retry) throw new Error('no retry submitted');
+    expect(retry.version).toBe(1);
+    const fresh = buildColliderData(SELA, 1337, retry.coord);
+    retry.resolve({
+      id: 0,
+      key: fresh.key,
+      origin: { x: fresh.origin.x, y: fresh.origin.y, z: fresh.origin.z },
+      positions: fresh.positions,
+      indices: fresh.indices,
+      empty: fresh.empty,
+      editVersion: 1,
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(colliders.groundState(spawn, [SELA])).toBe('ready');
     colliders.dispose();
     rapierWorld.free();
   });

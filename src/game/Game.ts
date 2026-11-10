@@ -1,15 +1,17 @@
-import { MAX_TICKS_PER_FRAME, SIM_DT } from '../core/constants.js';
+import { MAX_TICKS_PER_FRAME, SIM_DT, TOOL_RANGE_M, TOO_HARD_INDICATOR_S } from '../core/constants.js';
 import { events } from '../core/events.js';
-import { distance, length, type Vec3d } from '../core/math.js';
+import { distance, length, normalize, scale, sub, type Vec3d } from '../core/math.js';
 import type { PlanetConfig } from '../planets/PlanetConfig.js';
 import { PLANETS } from '../planets/solarSystem.js';
-import { layerAt } from '../terrain/density.js';
+import { createDensityField, layerAt, type DensityField } from '../terrain/density.js';
+import { parseChunkKey } from '../terrain/chunkKey.js';
 import { ColliderPool } from '../terrain/colliderPool.js';
 import { getOrigin, maybeShiftOrigin, toLocal } from '../render/floatingOrigin.js';
 import { Renderer, type PrebuiltTerrain } from '../render/Renderer.js';
-import { CameraRig } from '../player/cameraRig.js';
+import { CameraRig, HEAD_HEIGHT } from '../player/cameraRig.js';
 import { FreeFlyCamera } from '../player/freeFlyCamera.js';
 import { PlayerInput } from '../player/input.js';
+import { TerrainTool, type ToolAim } from '../player/terrainTool.js';
 import { World } from '../sim/world.js';
 import type { EntityId } from '../sim/entities.js';
 import { upAt } from '../sim/physics/frames.js';
@@ -30,11 +32,16 @@ export class Game {
   readonly flyCamera = new FreeFlyCamera();
   readonly rig = new CameraRig();
   readonly input = new PlayerInput();
+  readonly tool = new TerrainTool();
   readonly overlay = new DebugOverlay();
 
   private playerId: EntityId | null = null;
   private readonly colliders: TerrainColliders;
   private readonly colliderPool = new ColliderPool();
+  /** Edited-density fields for the tool fallback raymarch + surface normals. */
+  private readonly toolFields = new Map<string, DensityField>();
+  /** Aim from the last computeToolAim (drives stroke dispatch + preview). */
+  private toolAim: ToolAim = { hit: null, normal: null, planet: null };
 
   private accumulator = 0;
   private lastTime = 0;
@@ -49,6 +56,7 @@ export class Game {
   private wireframe = false;
   private readonly planets: PlanetConfig[];
   private readonly unsubscribeOriginShifted: () => void;
+  private readonly unsubscribeTerrainEdited: () => void;
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -58,18 +66,34 @@ export class Game {
   ) {
     this.planets = planets;
     this.world = new World(seed);
+    this.world.planets = planets;
+    for (const planet of planets) {
+      this.toolFields.set(
+        planet.id,
+        createDensityField(planet, seed, (x, y, z) =>
+          this.world.terrainEdits.deltaAt(planet, planet.id, x, y, z),
+        ),
+      );
+    }
 
-    // Physics first: collider ring (worker-backed) + movement system, then
-    // the spawn so the very first tick already freezes/requests correctly.
+    // Physics first: collider ring (worker-backed, edit-aware) + movement
+    // system, then the spawn so the very first tick already
+    // freezes/requests correctly.
     this.colliders = new TerrainColliders(
       {
-        request: (planet, worldSeed, coord) =>
-          this.colliderPool.request({ planetConfig: planet, worldSeed, coord }),
+        request: (planet, worldSeed, coord, editVersion) =>
+          this.colliderPool.request({
+            planetConfig: planet,
+            worldSeed,
+            coord,
+            edits: this.world.terrainEdits.deltasForJob(planet, 0, coord) ?? undefined,
+            editVersion,
+          }),
       },
       physicsWorldFor,
     );
     this.world.addSystem(
-      makePhysicsSystem({ planets, worldSeed: seed, colliders: this.colliders }),
+      makePhysicsSystem({ planets, worldSeed: seed, colliders: this.colliders, edits: this.world.terrainEdits }),
     );
     const home = planets[0] as PlanetConfig;
     this.world.dispatch({
@@ -86,18 +110,37 @@ export class Game {
     }
 
     this.renderer = new Renderer(canvas, seed, planets, prebuilt);
+    // Edited chunks carry their deltas into every mesh job (streaming and
+    // priority remesh alike); the streamer diffs by job version.
+    this.renderer.streamer.setEditSource((key) => {
+      try {
+        const parsed = parseChunkKey(key);
+        const planet = this.planets.find((p) => p.id === parsed.planetId);
+        if (!planet || parsed.level > 1) return null;
+        return this.world.terrainEdits.deltasForJob(planet, parsed.level, parsed.coord);
+      } catch {
+        return null;
+      }
+    });
     this.flyCamera.speed = 60;
     this.flyCamera.enabled = false;
     this.flyCamera.attach(canvas, (speed) => {
       this.flySpeed = speed;
     });
     this.flySpeed = this.flyCamera.speed;
-    this.input.attach(canvas, this.rig, this.rig);
+    this.input.attach(canvas, this.rig, this.rig, this.tool);
     this.input.setEnabled(true);
 
     window.addEventListener('keydown', this.handleGlobalKey);
     this.unsubscribeOriginShifted = events.on('originShifted', () => {
       this.originShifts += 1;
+    });
+    // Fan-out for remeshing: the same tick's edits rebuild render meshes
+    // and physics colliders (old meshes/colliders stay until fresh data
+    // lands, so the player never falls through a half-updated hole).
+    this.unsubscribeTerrainEdited = events.on('terrainEdited', ({ keys }) => {
+      this.colliders.notifyEdited(keys);
+      this.renderer.streamer.notifyEdited(keys);
     });
   }
 
@@ -117,6 +160,82 @@ export class Game {
       this.renderer.setBoundsVisible(!this.renderer.bounds.isVisible());
     }
   };
+
+  /**
+   * Aim the terrain tool from the orbit camera through the crosshair: a
+   * Rapier collider ray first (exact collision surface), falling back to a
+   * density march (works while edited colliders are still rebuilding).
+   * Computed once per frame from render state; strokes bake it into Actions.
+   */
+  private computeToolAim(alpha: number): void {
+    this.toolAim = { hit: null, normal: null, planet: null };
+    if (this.flyCamera.enabled) return;
+    const followed = this.playerEntity();
+    if (!followed) return;
+    const field = this.toolFields.get(followed.planet.id);
+    if (!field) return;
+    const renderPos = this.renderer.playerView.interpolatedWorld(alpha) ?? followed.position;
+    const up = upAt(followed.planet, renderPos);
+    const head: Vec3d = {
+      x: renderPos.x + up.x * HEAD_HEIGHT,
+      y: renderPos.y + up.y * HEAD_HEIGHT,
+      z: renderPos.z + up.z * HEAD_HEIGHT,
+    };
+    const toHead = sub(head, this.rig.position);
+    const dir = normalize(toHead);
+    if (dir.x === 0 && dir.y === 0 && dir.z === 0) return;
+    const toi = this.colliders.castTerrainRay(this.rig.position, dir, this.planets, TOOL_RANGE_M);
+    if (toi !== null) {
+      const hit: Vec3d = {
+        x: this.rig.position.x + dir.x * toi,
+        y: this.rig.position.y + dir.y * toi,
+        z: this.rig.position.z + dir.z * toi,
+      };
+      this.toolAim = { hit, normal: this.surfaceNormal(field, followed.planet, hit), planet: followed.planet };
+      return;
+    }
+    // Fallback march along the ray (up to range, quarter-meter steps).
+    const at = (t: number): Vec3d => ({
+      x: this.rig.position.x + dir.x * t - followed.planet.center.x,
+      y: this.rig.position.y + dir.y * t - followed.planet.center.y,
+      z: this.rig.position.z + dir.z * t - followed.planet.center.z,
+    });
+    const start = at(0);
+    let prevT = 0;
+    let prevD = field.density(start.x, start.y, start.z);
+    if (prevD >= 0) return;
+    for (let t = 0.25; t <= TOOL_RANGE_M; t += 0.25) {
+      const p = at(t);
+      const d = field.density(p.x, p.y, p.z);
+      if (d >= 0) {
+        const f = prevD / (prevD - d);
+        const ht = prevT + f * (t - prevT);
+        const hit: Vec3d = {
+          x: this.rig.position.x + dir.x * ht,
+          y: this.rig.position.y + dir.y * ht,
+          z: this.rig.position.z + dir.z * ht,
+        };
+        this.toolAim = { hit, normal: this.surfaceNormal(field, followed.planet, hit), planet: followed.planet };
+        return;
+      }
+      prevT = t;
+      prevD = d;
+    }
+  }
+
+  /** Outward surface normal at a world-space hit (air side of the density). */
+  private surfaceNormal(field: DensityField, planet: PlanetConfig, hit: Vec3d): Vec3d {
+    const local = sub(hit, planet.center);
+    const eps = 0.5;
+    const grad: Vec3d = {
+      x: field.density(local.x + eps, local.y, local.z) - field.density(local.x - eps, local.y, local.z),
+      y: field.density(local.x, local.y + eps, local.z) - field.density(local.x, local.y - eps, local.z),
+      z: field.density(local.x, local.y, local.z + eps) - field.density(local.x, local.y, local.z - eps),
+    };
+    const n = normalize(scale(grad, -1));
+    if (n.x === 0 && n.y === 0 && n.z === 0) return upAt(planet, hit);
+    return n;
+  }
 
   /** F3: free-fly debug camera. Leaving it drops the player at the camera. */
   private toggleFly(): void {
@@ -150,6 +269,7 @@ export class Game {
     cancelAnimationFrame(this.rafId);
     window.removeEventListener('keydown', this.handleGlobalKey);
     this.unsubscribeOriginShifted();
+    this.unsubscribeTerrainEdited();
     this.flyCamera.detach();
     this.input.detach();
     this.colliderPool.dispose();
@@ -195,6 +315,8 @@ export class Game {
 
     // Fixed-timestep sim (cap catch-up so a hitch can't spiral).
     // Movement input is sampled per tick so replays stay deterministic.
+    // The tool aim is frame-rate (render state); strokes bake it into Actions.
+    this.computeToolAim(Math.min(1, Math.max(0, this.accumulator / SIM_DT)));
     this.accumulator += frameDt;
     let ticks = 0;
     const flying = this.flyCamera.enabled;
@@ -210,6 +332,11 @@ export class Game {
           lookYaw: this.rig.yaw,
           lookPitch: this.rig.pitch,
         });
+        const buttons = this.input.toolButtons();
+        if (buttons.dig || buttons.add || buttons.flatten) {
+          const edit = this.tool.update(performance.now(), this.playerId, buttons, this.toolAim);
+          if (edit) this.world.dispatch(edit);
+        }
       }
       const t0 = performance.now();
       this.world.tick(SIM_DT);
@@ -258,6 +385,13 @@ export class Game {
     // origin shifts only.
     this.renderer.updateStreaming(activePos);
     this.renderer.renderPlayer(alpha);
+    // Terrain brush preview: translucent sphere at the aim point (hidden in
+    // fly mode or when nothing is in range). Re-set every frame from world
+    // doubles, so origin shifts can never desync it.
+    this.renderer.setToolPreview(
+      flying || !this.toolAim.hit ? null : this.toolAim.hit,
+      this.tool.radius,
+    );
     this.renderer.render();
 
     // Debug overlay content. The overlay no-ops while hidden, so skip the
@@ -278,6 +412,15 @@ export class Game {
         .filter((part) => part !== null)
         .join(' ');
       const player = this.playerId ? this.world.entities.get(this.playerId) : undefined;
+      const playerComp = player?.components.player;
+      // Tool readout: layer + hardness under the brush cursor, soil counter,
+      // and the too-hard indicator (freshly blocked dig, <1.5 s ago).
+      let toolInfo: string | undefined;
+      if (this.toolAim.hit && this.toolAim.planet) {
+        const hitLocal = sub(this.toolAim.hit, this.toolAim.planet.center);
+        const toolLayer = layerAt(this.toolAim.planet, hitLocal.x, hitLocal.y, hitLocal.z);
+        toolInfo = `${toolLayer.name} h${toolLayer.hardness}`;
+      }
       this.overlay.update({
         fps: this.fps,
         tickMs: this.lastTickMs,
@@ -298,6 +441,12 @@ export class Game {
         grounded: player?.components.player?.grounded,
         pendingColliders: this.colliders.pendingCount,
         loadedColliders: this.colliders.loadedCount,
+        soil: playerComp?.soil,
+        toolRadius: this.tool.radius,
+        toolInfo,
+        tooHard:
+          playerComp !== undefined &&
+          this.world.time - playerComp.lastTooHard < TOO_HARD_INDICATOR_S,
       });
     }
   }

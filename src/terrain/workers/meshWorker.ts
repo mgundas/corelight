@@ -15,6 +15,10 @@ export interface MeshJob {
   worldSeed: number;
   level: number;
   coord: ChunkCoord;
+  /** Sparse player-edit deltas resolved into this job's 35^3 sample grid. */
+  edits?: { indices: Uint32Array; values: Float32Array };
+  /** Edit version at submit time: lets the manager drop stale results. */
+  editVersion?: number;
 }
 
 export interface MeshResult {
@@ -26,6 +30,8 @@ export interface MeshResult {
   colors: Float32Array;
   indices: Uint32Array;
   empty: boolean;
+  /** Echoed from the job (undefined for pre-edit jobs). */
+  editVersion?: number;
 }
 
 export interface MeshError {
@@ -61,6 +67,13 @@ workerScope.onmessage = (event: MessageEvent<MeshJob>): void => {
     // Full 35^3 grid: inner 33^3 cells marched, outer ring is the border
     // for central-difference normals. Index 1,1,1 == chunk origin.
     const { samples, origin } = sampleGrid(field, job.planetConfig, job.level, job.coord, cellSize);
+    if (job.edits) {
+      const { indices, values } = job.edits;
+      for (let k = 0; k < indices.length; k += 1) {
+        const at = indices[k] as number;
+        samples[at] = (samples[at] as number) + (values[k] as number);
+      }
+    }
     const mesh = polygonize(
       samples,
       origin,
@@ -77,6 +90,7 @@ workerScope.onmessage = (event: MessageEvent<MeshJob>): void => {
       colors: mesh.colors,
       indices: mesh.indices,
       empty: mesh.empty,
+      editVersion: job.editVersion,
     };
     workerScope.postMessage(result, [
       result.positions.buffer as Transferable,

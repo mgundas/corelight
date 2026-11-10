@@ -14,6 +14,7 @@ import {
 import { length, normalize, scale, type Vec3d } from '../../core/math.js';
 import type { PlanetConfig } from '../../planets/PlanetConfig.js';
 import { createDensityField, type DensityField } from '../../terrain/density.js';
+import type { TerrainEdits } from '../../terrain/edits.js';
 import type { Entity, EntityId } from '../entities.js';
 import type { System } from '../world.js';
 import { PlayerBody } from './characterController.js';
@@ -27,6 +28,8 @@ export interface PhysicsOptions {
   worldSeed: number;
   colliders: TerrainColliders;
   worldFor?: (planetId: string) => RAPIER.World;
+  /** Player edits: the safety net must see the same ground as the player. */
+  edits?: TerrainEdits;
 }
 
 function densityGradient(field: DensityField, local: Vec3d): Vec3d {
@@ -102,7 +105,12 @@ export function safetyStep(entity: Entity, fields: Map<string, DensityField>, pl
 
 export function makePhysicsSystem(opts: PhysicsOptions): System {
   const fields = new Map<string, DensityField>(
-    opts.planets.map((planet) => [planet.id, createDensityField(planet, opts.worldSeed)]),
+    opts.planets.map((planet) => [
+      planet.id,
+      createDensityField(planet, opts.worldSeed, (x, y, z) =>
+        opts.edits ? opts.edits.deltaAt(planet, planet.id, x, y, z) : 0,
+      ),
+    ]),
   );
   const bodies = new Map<EntityId, PlayerBody>();
   const worldFor = opts.worldFor ?? physicsWorldFor;

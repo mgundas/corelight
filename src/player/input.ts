@@ -4,11 +4,13 @@
 
 export class PlayerInput {
   private keys = new Set<string>();
+  private mouseButtons = new Set<number>();
   private jumpQueued = false;
   private enabled = true;
   private canvas: HTMLCanvasElement | null = null;
   private lookTarget: { addLook: (dx: number, dy: number) => void } | null = null;
   private zoomTarget: { zoom: (delta: number) => void } | null = null;
+  private radiusTarget: { adjustRadius: (deltaY: number) => void } | null = null;
   private dragging = false;
   private lastX = 0;
   private lastY = 0;
@@ -17,13 +19,16 @@ export class PlayerInput {
     canvas: HTMLCanvasElement,
     lookTarget: { addLook: (dx: number, dy: number) => void },
     zoomTarget: { zoom: (delta: number) => void },
+    radiusTarget?: { adjustRadius: (deltaY: number) => void },
   ): void {
     this.canvas = canvas;
     this.lookTarget = lookTarget;
     this.zoomTarget = zoomTarget;
+    this.radiusTarget = radiusTarget ?? null;
     window.addEventListener('keydown', this.handleKeyDown);
     window.addEventListener('keyup', this.handleKeyUp);
     canvas.addEventListener('mousedown', this.handleMouseDown);
+    canvas.addEventListener('contextmenu', this.handleContextMenu);
     window.addEventListener('mousemove', this.handleMouseMove);
     window.addEventListener('mouseup', this.handleMouseUp);
     window.addEventListener('blur', this.handleBlur);
@@ -34,11 +39,13 @@ export class PlayerInput {
     window.removeEventListener('keydown', this.handleKeyDown);
     window.removeEventListener('keyup', this.handleKeyUp);
     this.canvas?.removeEventListener('mousedown', this.handleMouseDown);
+    this.canvas?.removeEventListener('contextmenu', this.handleContextMenu);
     window.removeEventListener('mousemove', this.handleMouseMove);
     window.removeEventListener('mouseup', this.handleMouseUp);
     window.removeEventListener('blur', this.handleBlur);
     this.canvas?.removeEventListener('wheel', this.handleWheel);
     this.keys.clear();
+    this.mouseButtons.clear();
     this.canvas = null;
   }
 
@@ -46,6 +53,7 @@ export class PlayerInput {
   setEnabled(enabled: boolean): void {
     this.enabled = enabled;
     this.keys.clear();
+    this.mouseButtons.clear();
     this.jumpQueued = false;
     this.dragging = false;
   }
@@ -72,8 +80,18 @@ export class PlayerInput {
     return jump;
   }
 
+  /** Terrain tool buttons: left = dig, right = add, F or middle = flatten. */
+  toolButtons(): { dig: boolean; add: boolean; flatten: boolean } {
+    return {
+      dig: this.mouseButtons.has(0),
+      add: this.mouseButtons.has(2),
+      flatten: this.keys.has('KeyF') || this.mouseButtons.has(1),
+    };
+  }
+
   private handleBlur = (): void => {
     this.keys.clear();
+    this.mouseButtons.clear();
     this.dragging = false;
   };
 
@@ -103,9 +121,17 @@ export class PlayerInput {
         // Pointer lock unavailable — drag fallback still works.
       }
     }
+    this.mouseButtons.add(e.button);
+    // Middle click would autoscroll the page: suppress it (it is flatten).
+    if (e.button === 1) e.preventDefault();
     this.dragging = true;
     this.lastX = e.clientX;
     this.lastY = e.clientY;
+  };
+
+  private handleContextMenu = (e: MouseEvent): void => {
+    // Right mouse is the add brush, not a menu.
+    e.preventDefault();
   };
 
   private handleMouseMove = (e: MouseEvent): void => {
@@ -126,13 +152,19 @@ export class PlayerInput {
     this.lookTarget?.addLook(dx, dy);
   };
 
-  private handleMouseUp = (): void => {
+  private handleMouseUp = (e: MouseEvent): void => {
+    this.mouseButtons.delete(e.button);
     this.dragging = false;
   };
 
   private handleWheel = (e: WheelEvent): void => {
     if (!this.enabled) return;
     e.preventDefault();
+    // Ctrl+wheel resizes the terrain brush instead of zooming the camera.
+    if (e.ctrlKey) {
+      this.radiusTarget?.adjustRadius(e.deltaY);
+      return;
+    }
     this.zoomTarget?.zoom(e.deltaY);
   };
 }

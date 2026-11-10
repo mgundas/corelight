@@ -25,6 +25,9 @@ function makeEntity(x: number, y: number, z: number): Entity {
         input: null,
         embeddedTime: 0,
         escaping: false,
+        soil: 0,
+        toolHardness: 2,
+        lastTooHard: -Infinity,
       },
     },
   };

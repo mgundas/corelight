@@ -90,3 +90,18 @@ export const EMBED_ESCAPE_S = 4;
 /** Surface-ward escape plow speed in m/s (safety net only; overshoot into a
  * cave just frees the player sooner). */
 export const EMBED_ESCAPE_SPEED = 50;
+
+/** Soil counter cap (PROJECT.md: max 200; add mode consumes it). */
+export const SOIL_MAX = 200;
+/** Terrain tool range in meters (tool hit must be this close to work). */
+export const TOOL_RANGE_M = 6;
+/** Tool brush radius limits in meters (Ctrl+wheel adjusts). */
+export const TOOL_MIN_RADIUS = 1;
+export const TOOL_MAX_RADIUS = 4;
+export const TOOL_DEFAULT_RADIUS = 2;
+/** Held-button edit rate: one terrainEdit action per this many seconds. */
+export const TOOL_EDITS_PER_SECOND = 10;
+/** Density delta applied at the brush center per edit (quadratic falloff). */
+export const TOOL_DIG_STRENGTH = 0.3;
+/** How long the "Too hard" indicator stays visible after a blocked dig. */
+export const TOO_HARD_INDICATOR_S = 1.5;

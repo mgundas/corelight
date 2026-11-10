@@ -102,6 +102,10 @@ class FakeSink implements MeshSink {
     if (!this.meshes.has(key)) this.empty.add(key);
   }
 
+  forgetEmpty(key: string): void {
+    this.empty.delete(key);
+  }
+
   pruneEmpty(keep: (key: string) => boolean): void {
     for (const key of [...this.empty]) {
       if (!keep(key)) this.empty.delete(key);

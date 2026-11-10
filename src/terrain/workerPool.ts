@@ -14,6 +14,10 @@ export interface MeshRequest {
   worldSeed: number;
   level: number;
   coord: ChunkCoord;
+  /** Sparse player-edit deltas for this job's 35^3 grid (optional). */
+  edits?: { indices: Uint32Array; values: Float32Array };
+  /** Edit version at submit time (lets callers drop stale results). */
+  editVersion?: number;
 }
 
 export function poolSize(): number {
@@ -139,6 +143,8 @@ export class MeshWorkerPool {
         worldSeed: entry.request.worldSeed,
         level: entry.request.level,
         coord: entry.request.coord,
+        edits: entry.request.edits,
+        editVersion: entry.request.editVersion,
       });
     }
   }

@@ -32,6 +32,8 @@ export class Renderer {
   readonly streamer: ChunkManager;
   readonly bounds = new ChunkBounds();
   readonly playerView = new PlayerView();
+  private readonly toolPreview: THREE.Mesh;
+  private readonly toolPreviewMat: THREE.MeshBasicMaterial;
 
   private sun: THREE.DirectionalLight;
   private readonly handleResize: () => void;
@@ -67,6 +69,19 @@ export class Renderer {
     this.scene.add(this.chunks.group);
     this.scene.add(this.bounds.group);
     this.scene.add(this.playerView.group);
+    // Translucent brush sphere for the terrain tool (M04). Positioned
+    // absolutely from world doubles every frame, so it owns its origin
+    // shifts (like the chunk and player groups).
+    this.toolPreviewMat = new THREE.MeshBasicMaterial({
+      color: 0x66ffcc,
+      transparent: true,
+      opacity: 0.3,
+      depthWrite: false,
+    });
+    this.toolPreview = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 14), this.toolPreviewMat);
+    this.toolPreview.visible = false;
+    this.toolPreview.userData['originManaged'] = true;
+    this.scene.add(this.toolPreview);
 
     this.streamer = new ChunkManager(this.pool, this.chunks, planets, worldSeed);
     for (const pre of prebuilt) this.streamer.adopt(pre.planet, pre.results, pre.emptyKeys);
@@ -80,6 +95,8 @@ export class Renderer {
     this.pool.dispose();
     this.chunks.dispose();
     this.playerView.dispose();
+    this.toolPreview.geometry.dispose();
+    this.toolPreviewMat.dispose();
     this.renderer.dispose();
   }
 
@@ -148,6 +165,22 @@ export class Renderer {
   /** Record the player state after a sim tick (call once per tick). */
   pushPlayerSample(pos: Vec3d, quat: Quat): void {
     this.playerView.pushSample(pos, quat);
+  }
+
+  /**
+   * Show the terrain brush sphere at a world-space hit (null hides it).
+   * Call every frame: the position re-syncs from doubles, so origin shifts
+   * can never desync it.
+   */
+  setToolPreview(centerWorld: Vec3d | null, radius: number): void {
+    if (!centerWorld) {
+      this.toolPreview.visible = false;
+      return;
+    }
+    this.toolPreview.visible = true;
+    const local = toLocal(centerWorld);
+    this.toolPreview.position.set(local.x, local.y, local.z);
+    this.toolPreview.scale.setScalar(Math.max(0.01, radius));
   }
 
   /** Place the astronaut view between the last two tick samples. */

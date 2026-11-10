@@ -22,6 +22,11 @@ export interface OverlayStats {
   grounded?: boolean;
   pendingColliders?: number;
   loadedColliders?: number;
+  soil?: number;
+  toolRadius?: number;
+  /** Layer + hardness under the tool cursor, e.g. "crust h2". */
+  toolInfo?: string;
+  tooHard?: boolean;
 }
 
 export class DebugOverlay {
@@ -69,10 +74,19 @@ export class DebugOverlay {
         (stats.grounded !== undefined ? ` grounded: ${stats.grounded ? 'yes' : 'no'}` : '') +
         (stats.pendingColliders !== undefined ? ` colliders: ${stats.loadedColliders ?? 0} +${stats.pendingColliders} pending` : '');
     }
+    let tool = '';
+    if (stats.soil !== undefined || stats.toolRadius !== undefined || stats.toolInfo !== undefined) {
+      const parts = [
+        stats.soil !== undefined ? `soil ${stats.soil}` : null,
+        stats.toolRadius !== undefined ? `r ${stats.toolRadius.toFixed(1)}` : null,
+        stats.toolInfo !== undefined ? stats.toolInfo : null,
+      ].filter((part) => part !== null);
+      tool = `\ntool: ${parts.join(' | ')}${stats.tooHard ? '  TOO HARD!' : ''}`;
+    }
     this.el.textContent =
       `FPS: ${stats.fps.toFixed(0)} | tick: ${stats.tickMs.toFixed(2)} ms | draws: ${stats.drawCalls}\n` +
       `cam: ${c.x.toFixed(1)}, ${c.y.toFixed(1)}, ${c.z.toFixed(1)}\n` +
       `origin: ${o.x.toFixed(0)}, ${o.y.toFixed(0)}, ${o.z.toFixed(0)} (shifts: ${stats.originShifts})\n` +
-      `fly speed: ${stats.flySpeed.toFixed(1)} m/s${place}${player}${terrain}`;
+      `fly speed: ${stats.flySpeed.toFixed(1)} m/s${place}${player}${tool}${terrain}`;
   }
 }
