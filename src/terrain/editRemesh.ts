@@ -29,6 +29,13 @@ export interface EditRemeshHooks {
   pushCompletion(item: EditCompletion): void;
 }
 
+export interface EditRemesherOptions {
+  /** Minimum ms between edit submits for one key (default 250). Zero disables. */
+  minSubmitIntervalMs?: number;
+  /** Clock (injectable for tests; defaults to performance.now). */
+  now?: () => number;
+}
+
 export class EditRemesher {
   private editSource: ((key: string) => EditAttachment | null) | null = null;
   /** Edit counter per LOD0/LOD1 key, bumped by notifyEdited. */
@@ -37,12 +44,20 @@ export class EditRemesher {
   private readonly dirty = new Set<string>();
   /** Edit-job refcount per key (they bypass the streaming inflight cap). */
   private readonly inflight = new Map<string, number>();
+  /** Last submit time per key (rate control; pruned with versions). */
+  private readonly lastSubmit = new Map<string, number>();
+  private readonly minInterval: number;
+  private readonly now: () => number;
 
   constructor(
     private readonly pool: MeshWorkerPool,
     private readonly planets: PlanetConfig[],
     private readonly worldSeed: number,
-  ) {}
+    opts: EditRemesherOptions = {},
+  ) {
+    this.minInterval = opts.minSubmitIntervalMs ?? 250;
+    this.now = opts.now ?? (() => performance.now());
+  }
 
   /** Player-edit delta provider (called with LOD0/LOD1 keys). */
   setEditSource(source: ((key: string) => EditAttachment | null) | null): void {
@@ -66,6 +81,11 @@ export class EditRemesher {
   /** A submitted job is stale when a newer edit landed while it ran. */
   isStale(key: string, submitted: number): boolean {
     return submitted !== (this.versions.get(key) ?? 0);
+  }
+
+  /** Whether an edit job for the key is currently running. */
+  hasOutstanding(key: string): boolean {
+    return (this.inflight.get(key) ?? 0) > 0;
   }
 
   /**
@@ -121,6 +141,14 @@ export class EditRemesher {
       this.dirty.delete(key);
       return;
     }
+    // Rate control: at most one submit per key per interval. Continuous
+    // digging would otherwise resubmit every stale completion (strokes
+    // land faster than worker latency, so all of them are outdated on
+    // arrival). Skipped keys stay dirty; retryDirty picks them up with
+    // the latest deltas once the interval elapses.
+    const nowMs = this.now();
+    if (nowMs - (this.lastSubmit.get(key) ?? -Infinity) < this.minInterval) return;
+    this.lastSubmit.set(key, nowMs);
     const level = parsed.level;
     const version = this.versions.get(key) ?? 0;
     const coord = { ...parsed.coord };
@@ -165,6 +193,9 @@ export class EditRemesher {
     this.dirty.delete(key);
     if (!streamingInflight && (this.inflight.get(key) ?? 0) === 0) {
       this.versions.delete(key);
+      // A settled key starts its next burst immediately (first stroke
+      // after a pause must show within a couple of frames).
+      this.lastSubmit.delete(key);
     }
   }
 
@@ -182,6 +213,7 @@ export class EditRemesher {
     for (const key of [...this.dirty]) {
       if (!desired.has(key)) {
         this.dirty.delete(key);
+        this.lastSubmit.delete(key);
         continue;
       }
       if (!isStreamingInflight(key) && (this.inflight.get(key) ?? 0) === 0) {

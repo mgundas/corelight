@@ -1,6 +1,6 @@
 import type { Vec3d } from '../core/math.js';
 import { distance, IDENTITY_QUAT } from '../core/math.js';
-import { SOIL_MAX, TOOL_RANGE_M } from '../core/constants.js';
+import { SOIL_MAX, TOOL_RANGE_M, TOOL_RANGE_SLACK_M } from '../core/constants.js';
 import { events } from '../core/events.js';
 import { createDensityField, layerAt, type DensityField } from '../terrain/density.js';
 import type { EditMode, FlattenPlane } from '../terrain/edits.js';
@@ -127,7 +127,7 @@ export function applyAction(world: World, action: Action): void {
         entity.planetId !== planet.id ||
         action.radius <= 0 ||
         action.strength <= 0 ||
-        distance(entity.position, action.center) > TOOL_RANGE_M + action.radius
+        distance(entity.position, action.center) > TOOL_RANGE_M + TOOL_RANGE_SLACK_M + action.radius
       ) {
         events.emit('actionApplied', { type: action.type });
         return;

@@ -10,6 +10,7 @@ import type { Vec3d } from '../../src/core/math.js';
 import { nodeKey, nodeOrigin, type OctreeNode } from '../../src/terrain/octree.js';
 import { parseChunkKey } from '../../src/terrain/chunkKey.js';
 import { ChunkManager } from '../../src/terrain/chunkManager.js';
+import { EditRemesher, type EditCompletion } from '../../src/terrain/editRemesh.js';
 import type { MeshSink } from '../../src/terrain/streaming.js';
 import type { EditAttachment } from '../../src/terrain/edits.js';
 import type { MeshResult, MeshWorkerPool } from '../../src/terrain/workerPool.js';
@@ -125,9 +126,11 @@ function makeManager(
   sink: FakeSink,
 ): { manager: ChunkManager; pending: PendingJob[]; submitted: string[] } {
   // updateIntervalMs 0: every update recomputes (no throttle in tests).
+  // minEditSubmitIntervalMs 0: no rate control (covered separately below).
   const manager = new ChunkManager(pool, sink, [SELA], 1337, {
     updateIntervalMs: 0,
     maxInflight: 1000,
+    minEditSubmitIntervalMs: 0,
   });
   manager.setEditSource(() => ATTACHMENT);
   return { manager, pending: [], submitted: [] };
@@ -293,5 +296,59 @@ describe('ChunkManager.notifyEdited', () => {
     );
     expect(resubmits.length).toBeGreaterThan(0);
     for (const job of resubmits) expect(job.editVersion).toBe(0);
+  });
+});
+
+describe('EditRemesher rate control', () => {
+  it('submits at most one job per key per interval, with latest deltas', async () => {
+    let now = 1000;
+    const submitted: Array<{ key: string; version: number }> = [];
+    const completions: EditCompletion[] = [];
+    const pool = {
+      submit(req: { planetConfig: PlanetConfig; level: number; coord: OctreeNode['coord']; editVersion?: number }) {
+        submitted.push({ key: nodeKey(req.planetConfig.id, req.level, req.coord), version: req.editVersion ?? -1 });
+        return Promise.resolve({} as MeshResult);
+      },
+      dispose(): void {},
+    };
+    const remesher = new EditRemesher(pool as unknown as MeshWorkerPool, [SELA], 1337, {
+      minSubmitIntervalMs: 250,
+      now: () => now,
+    });
+    remesher.setEditSource(() => ATTACHMENT);
+    const hooks = {
+      forgetEmpty: (): void => {},
+      unqueue: (): void => {},
+      isStreamingInflight: (): boolean => false,
+      pushCompletion: (item: EditCompletion): void => {
+        completions.push(item);
+      },
+    };
+    const key = 'sela:0:16:16:16';
+    remesher.notifyEdited([key], hooks);
+    // LOD0 chunk plus its LOD1 parent (first stroke always goes through).
+    expect(submitted.length).toBe(2);
+    expect(submitted.find((s) => s.key === key)?.version).toBe(1);
+    // 100 ms later: throttled (version still bumps for staleness tracking).
+    now += 100;
+    remesher.notifyEdited([key], hooks);
+    expect(submitted.length).toBe(2);
+    expect(remesher.currentVersion(key)).toBe(2);
+    // Interval elapsed: the retry picks both up with the current versions.
+    now += 200;
+    await Promise.resolve();
+    await Promise.resolve();
+    remesher.retryDirty(
+      new Set([key, 'sela:1:8:8:8']),
+      () => false,
+      (k) => remesher.submitEditJob(k, hooks.pushCompletion),
+    );
+    expect(submitted.length).toBe(4);
+    expect(submitted.filter((s) => s.key === key).map((s) => s.version)).toEqual([1, 2]);
+    await Promise.resolve();
+    expect(completions.length).toBe(4);
+    const l0 = completions.filter((c) => c.key === key);
+    expect(l0[1]?.submitVersion).toBe(2);
+    expect(l0[1]?.isEdit).toBe(true);
   });
 });

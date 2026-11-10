@@ -62,7 +62,7 @@ export class ChunkManager {
     sink: MeshSink,
     planets: PlanetConfig[],
     worldSeed: number,
-    opts?: { updateIntervalMs?: number; maxInflight?: number },
+    opts?: { updateIntervalMs?: number; maxInflight?: number; minEditSubmitIntervalMs?: number },
   ) {
     this.pool = pool;
     this.sink = sink;
@@ -74,6 +74,7 @@ export class ChunkManager {
       pool,
       planets.map((config) => config),
       worldSeed,
+      { minSubmitIntervalMs: opts?.minEditSubmitIntervalMs },
     );
   }
 
@@ -306,11 +307,18 @@ export class ChunkManager {
       };
       const submitted = item.submitVersion ?? 0;
       if (this.remesher.isStale(item.key, submitted)) {
-        // A newer edit landed while this job ran: refresh with fresh
-        // deltas instead of flashing a stale mesh for a frame.
-        this.remesher.submitEditJob(item.key, (completion) => {
-          this.completed.push(completion);
-        });
+        // Coalesce instead of refreshing: under continuous editing every
+        // result is outdated on arrival (strokes land faster than worker
+        // latency), and resubmitting each one saturates the pool with
+        // redundant remeshes of the same chunks — starving streaming jobs
+        // and making meshes swap constantly. A newer job already covers
+        // the key, or dirty + retryDirty will pick it up; resubmit only
+        // when nothing outstanding remains.
+        if (!this.remesher.hasOutstanding(item.key) && !this.inflight.has(item.key)) {
+          this.remesher.submitEditJob(item.key, (completion) => {
+            this.completed.push(completion);
+          });
+        }
         continue;
       }
       this.remesher.applied(item.key, this.inflight.has(item.key));
