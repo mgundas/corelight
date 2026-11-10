@@ -1,9 +1,11 @@
 import { DEFAULT_SEED } from './core/constants.js';
 import { getUrlParams } from './core/urlParams.js';
+import { PLANETS } from './planets/solarSystem.js';
+import { runBoot } from './game/boot.js';
 import { Game } from './game/Game.js';
 import './main.css';
 
-function boot(): void {
+async function boot(): Promise<void> {
   const params = getUrlParams();
   const seed = params.seed ?? DEFAULT_SEED;
 
@@ -16,13 +18,13 @@ function boot(): void {
 
   const hint = document.createElement('div');
   hint.id = 'hint';
-  hint.textContent = 'Corelight M01 — bumpy planet + caves mesh in background, drag/click to look, WASD fly, Q/E down/up, wheel = speed, F1 overlay, F3 toggle fly';
+  hint.textContent =
+    'Corelight M02 — streaming octree LOD, drag/click to look, WASD fly, Q/E down/up, wheel = speed, F1 overlay, F3 toggle fly, F4 wireframe, F5 chunk bounds';
   app.appendChild(hint);
 
-  const game = new Game(canvas, seed);
-  // skipBoot exists for later milestones (pre-generation); accepted here.
-  void params.skipBoot;
+  const { prebuilt } = await runBoot(seed, PLANETS, params.skipBoot);
+  const game = new Game(canvas, seed, PLANETS, prebuilt);
   game.start();
 }
 
-boot();
+void boot();

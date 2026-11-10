@@ -130,3 +130,52 @@ describe('marching cubes polygonize', () => {
     expect(n[2]).toBeGreaterThan(0);
   });
 });
+
+describe('skirts', () => {
+  // Half-space solid for x < 16 cells: the surface plane crosses the four
+  // side boundary faces, so skirts must appear; the min/max-x faces are
+  // fully solid/air and contribute none.
+  function halfSpaceSamples(): Float32Array {
+    const samples = new Float32Array(SIZE * SIZE * SIZE);
+    for (let iz = 0; iz < SIZE; iz += 1) {
+      for (let iy = 0; iy < SIZE; iy += 1) {
+        for (let ix = 0; ix < SIZE; ix += 1) {
+          samples[ix + SIZE * (iy + SIZE * iz)] = 16 - (ix - 1);
+        }
+      }
+    }
+    return samples;
+  }
+
+  it('adds boundary ribbons without breaking the base mesh', () => {
+    const samples = halfSpaceSamples();
+    const plain = polygonize(samples, { x: 0, y: 0, z: 0 }, 1, () => [1, 1, 1]);
+    const skirted = polygonize(samples, { x: 0, y: 0, z: 0 }, 1, () => [1, 1, 1], {
+      skirts: true,
+    });
+    expect(plain.empty).toBe(false);
+    expect(skirted.empty).toBe(false);
+    expect(skirted.indices.length).toBeGreaterThan(plain.indices.length);
+    expect(skirted.indices.length % 3).toBe(0);
+    // Every index addresses a real vertex.
+    const verts = skirted.positions.length / 3;
+    for (const index of skirted.indices) expect(index).toBeLessThan(verts);
+    // Skirt verts hang at most one cellSize off the chunk: positions stay
+    // within [-cellSize, 32 * cellSize + cellSize].
+    for (const v of skirted.positions) {
+      expect(v).toBeGreaterThanOrEqual(-1 - 1e-6);
+      expect(v).toBeLessThanOrEqual(33 + 1e-6);
+    }
+  });
+
+  it('keeps fully solid and fully air grids empty with skirts on', () => {
+    const solid = new Float32Array(SIZE * SIZE * SIZE).fill(1);
+    expect(
+      polygonize(solid, { x: 0, y: 0, z: 0 }, 1, () => [1, 1, 1], { skirts: true }).empty,
+    ).toBe(true);
+    const air = new Float32Array(SIZE * SIZE * SIZE).fill(-1);
+    expect(
+      polygonize(air, { x: 0, y: 0, z: 0 }, 1, () => [1, 1, 1], { skirts: true }).empty,
+    ).toBe(true);
+  });
+});

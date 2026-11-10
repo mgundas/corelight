@@ -6,12 +6,21 @@ import * as THREE from 'three';
 import { CHUNK_CACHE_BUDGET } from '../core/constants.js';
 import type { Vec3d } from '../core/math.js';
 import type { PlanetConfig } from '../planets/PlanetConfig.js';
+import { chunkSizeForLevel, parseChunkKey } from '../terrain/chunkKey.js';
 import { toLocal } from './floatingOrigin.js';
 import type { MeshResult } from '../terrain/workerPool.js';
 
+export interface ChunkBox {
+  key: string;
+  level: number;
+  /** World-space minimum corner. */
+  min: Vec3d;
+  size: number;
+}
+
 export class ChunkMeshes {
   readonly group = new THREE.Group();
-  private readonly material: THREE.Material;
+  private readonly material: THREE.MeshStandardMaterial;
   private readonly meshes = new Map<string, THREE.Mesh>();
   /** Chunk-origin world position per key (for origin re-sync). */
   private readonly worldPos = new Map<string, Vec3d>();
@@ -28,6 +37,9 @@ export class ChunkMeshes {
       metalness: 0,
     });
     this.group.name = 'chunks';
+    // The group only positions children absolutely (see syncAll): origin
+    // shifts must skip it, or every mesh would move twice.
+    this.group.userData['originManaged'] = true;
   }
 
   get count(): number {
@@ -40,6 +52,11 @@ export class ChunkMeshes {
 
   has(key: string): boolean {
     return this.meshes.has(key) || this.emptyKeys.has(key);
+  }
+
+  /** Remember an empty key without a mesh (worker/boot reported nothing there). */
+  markEmpty(key: string): void {
+    if (!this.meshes.has(key)) this.emptyKeys.add(key);
   }
 
   /** Add a mesh: 'added', 'empty' (cached), or 'duplicate'. */
@@ -71,6 +88,33 @@ export class ChunkMeshes {
     this.lru.push(result.key);
     this.evictIfNeeded();
     return 'added';
+  }
+
+  /** Remove a mesh and dispose its geometry; returns false if absent. */
+  remove(key: string): boolean {
+    const mesh = this.meshes.get(key);
+    if (!mesh) return false;
+    mesh.geometry.dispose();
+    this.group.remove(mesh);
+    this.meshes.delete(key);
+    this.worldPos.delete(key);
+    const at = this.lru.indexOf(key);
+    if (at >= 0) this.lru.splice(at, 1);
+    return true;
+  }
+
+  /** World-space boxes of every visible mesh (for bounds debug + GC). */
+  boxes(): ChunkBox[] {
+    const out: ChunkBox[] = [];
+    for (const [key, min] of this.worldPos) {
+      const { level } = parseChunkKey(key);
+      out.push({ key, level, min: { ...min }, size: chunkSizeForLevel(level) });
+    }
+    return out;
+  }
+
+  setWireframe(enabled: boolean): void {
+    this.material.wireframe = enabled;
   }
 
   /** Reposition every mesh from world doubles (call after origin shifts). */

@@ -1,10 +1,11 @@
 import { MAX_TICKS_PER_FRAME, SIM_DT } from '../core/constants.js';
 import { events } from '../core/events.js';
-import { length } from '../core/math.js';
-import { SELA } from '../planets/configs/sela.js';
+import { distance, length } from '../core/math.js';
+import type { PlanetConfig } from '../planets/PlanetConfig.js';
+import { PLANETS } from '../planets/solarSystem.js';
 import { layerAt } from '../terrain/density.js';
 import { getOrigin, maybeShiftOrigin, toLocal } from '../render/floatingOrigin.js';
-import { Renderer } from '../render/Renderer.js';
+import { Renderer, type PrebuiltTerrain } from '../render/Renderer.js';
 import { FreeFlyCamera } from '../player/freeFlyCamera.js';
 import { World } from '../sim/world.js';
 import { DebugOverlay } from '../ui/debugOverlay.js';
@@ -29,11 +30,19 @@ export class Game {
   private lastTickMs = 0;
   private originShifts = 0;
   private flySpeed = 60;
+  private wireframe = false;
+  private readonly planets: PlanetConfig[];
   private readonly unsubscribeOriginShifted: () => void;
 
-  constructor(canvas: HTMLCanvasElement, seed: number) {
+  constructor(
+    canvas: HTMLCanvasElement,
+    seed: number,
+    planets: PlanetConfig[] = PLANETS,
+    prebuilt: PrebuiltTerrain[] = [],
+  ) {
+    this.planets = planets;
     this.world = new World(seed);
-    this.renderer = new Renderer(canvas, seed);
+    this.renderer = new Renderer(canvas, seed, planets, prebuilt);
     this.flyCamera.speed = 60;
     this.flyCamera.attach(canvas, (speed) => {
       this.flySpeed = speed;
@@ -53,6 +62,13 @@ export class Game {
     } else if (e.code === 'F3') {
       e.preventDefault();
       this.flyCamera.enabled = !this.flyCamera.enabled;
+    } else if (e.code === 'F4') {
+      e.preventDefault();
+      this.wireframe = !this.wireframe;
+      this.renderer.setWireframe(this.wireframe);
+    } else if (e.code === 'F5') {
+      e.preventDefault();
+      this.renderer.setBoundsVisible(!this.renderer.bounds.isVisible());
     }
   };
 
@@ -76,6 +92,19 @@ export class Game {
     this.flyCamera.detach();
     this.overlay.dispose();
     this.renderer.dispose();
+  }
+
+  private nearestPlanet(): PlanetConfig {
+    let nearest = this.planets[0] as PlanetConfig;
+    let best = Infinity;
+    for (const planet of this.planets) {
+      const d = distance(this.flyCamera.position, planet.center);
+      if (d < best) {
+        best = d;
+        nearest = planet;
+      }
+    }
+    return nearest;
   }
 
   private frame(now: number): void {
@@ -116,15 +145,24 @@ export class Game {
     }
     const local = toLocal(this.flyCamera.position);
     this.flyCamera.applyToCamera(this.renderer.camera, local);
+
+    // LOD streaming around the camera (priority queue + 4 ms apply budget).
+    this.renderer.updateStreaming(this.flyCamera.position);
     this.renderer.render();
 
-    // M01 debug: nearest planet, depth below its surface, layer at camera.
+    // Debug: nearest planet, depth below its surface, layer at camera.
+    const planet = this.nearestPlanet();
     const rel = {
-      x: this.flyCamera.position.x - SELA.center.x,
-      y: this.flyCamera.position.y - SELA.center.y,
-      z: this.flyCamera.position.z - SELA.center.z,
+      x: this.flyCamera.position.x - planet.center.x,
+      y: this.flyCamera.position.y - planet.center.y,
+      z: this.flyCamera.position.z - planet.center.z,
     };
-    const depth = SELA.radius - length(rel);
+    const depth = planet.radius - length(rel);
+    const stats = this.renderer.streamStats();
+    const lod = stats.perLevel
+      .map((count, level) => (count ? `L${level}:${count}` : null))
+      .filter((part) => part !== null)
+      .join(' ');
     this.overlay.update({
       fps: this.fps,
       tickMs: this.lastTickMs,
@@ -133,14 +171,14 @@ export class Game {
       drawCalls: this.renderer.renderer.info.render.calls,
       flySpeed: this.flySpeed,
       originShifts: this.originShifts,
-      planet: SELA.name,
+      planet: planet.name,
       depthM: depth,
-      layer: layerAt(SELA, rel.x, rel.y, rel.z).name,
-      chunksLoaded: this.renderer.preview.loaded,
-      chunksTotal: this.renderer.preview.total,
-      chunksAdded: this.renderer.preview.added,
-      chunksEmpty: this.renderer.preview.empty,
-      workerQueue: this.renderer.pool.queuedJobs,
+      layer: layerAt(planet, rel.x, rel.y, rel.z).name,
+      lodCounts: lod,
+      pendingJobs: stats.pending,
+      cacheSize: stats.cacheSize,
+      emptyChunks: stats.empty,
+      desiredChunks: stats.desired,
     });
   }
 }

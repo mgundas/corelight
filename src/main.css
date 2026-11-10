@@ -44,3 +44,42 @@ body {
   pointer-events: none;
   z-index: 10;
 }
+
+#boot {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  background: #05070f;
+  color: #e8eefc;
+  z-index: 20;
+}
+
+#boot h1 {
+  font-size: 42px;
+  letter-spacing: 6px;
+  margin: 0;
+}
+
+#boot-bar {
+  width: 320px;
+  height: 10px;
+  border-radius: 5px;
+  background: rgb(255 255 255 / 12%);
+  overflow: hidden;
+}
+
+#boot-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 5px;
+  background: #6fd3ff;
+}
+
+#boot-label {
+  font-size: 13px;
+  color: #9fb0cc;
+}

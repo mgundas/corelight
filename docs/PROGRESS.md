@@ -8,7 +8,7 @@ The coding agent updates this file at the end of every milestone. Keep it short:
 |---|---|---|
 | M00 Scaffold | done | Vite + TS strict scaffold, fixed-timestep loop, debug overlay, free-fly camera |
 | M01 Density and meshing | done | Deterministic density field + worker meshing; temp preview scene (M02 replaces it with LOD) |
-| M02 Chunk streaming and LOD | not started | |
+| M02 Chunk streaming and LOD | done | Octree streaming, skirts, boot pre-gen, F4/F5 debug |
 | M03 Gravity and player | not started | |
 | M04 Terrain tool | not started | |
 | M05 Light, sky, day/night | not started | |
@@ -32,6 +32,9 @@ The coding agent updates this file at the end of every milestone. Keep it short:
 ## Decisions made during development
 
 - M00 review fixes: `World.nextId()` (seed + per-world counter) is the only ID source in sim paths (`applyAction`); `newId()` is UI-only and counter-based (no `Date.now`/`Math.random`) to keep same-seed replays identical. `Renderer.applyOriginShift` skips `THREE.Light` objects and re-pins the sun to a fixed direction so origin shifts never change lighting. Placeholder sphere detail 24 -> 5 (detail 24 = ~5e15 tris, hangs the tab).
+- M02 solid-skip deviation: ARCH's "certainly all solid" corner+center check is unsound for our density — tunnel walls are cliffs (d -> 0- inside, ~= depth+relief outside), so a worm thinner than the sample spacing reads solid at all 9 points (regression test pins a seed-1337 case). The streamer and boot only pre-skip 'air' verdicts (proven sound: large-magnitude negative density only occurs in the continuous above-ground field); everything else is decided exactly by the worker's full-grid sampling.
+- M02 origin-shift fix: `applyOriginShift` moved `chunks.group` (meshes are re-synced absolutely), which double-shifted all terrain after flying >1000 m. Groups that position children from world doubles now set `userData.originManaged` and are skipped; chunk bounds resync from stored world boxes.
+- M02 drain-before-recompute: applying finished jobs before diffing avoids re-queueing jobs that already completed (was doubling every submission).
 
 ## Per-milestone notes
 
@@ -46,3 +49,7 @@ Run: `npm run dev`, F3 fly out to see the bumpy sphere, fly to the top (detail a
 
 ### M01 review fixes (done)
 Static review of M01 found real bugs; all fixed here. Critical: (1) `polygonize` emitted absolute planet-local positions while `ChunkMeshes.add` also offset by chunk origin — terrain would have rendered double-offset; positions are now chunk-relative per ARCH, colors still sampled at absolute coords; regression test pins `[0, 32*cellSize]` range. (2) Temp scene never meshed the planet center, so the core chamber was unreachable — added 8 L1 chunks over `[-64, 64]^3` (verified: 84k tris across the 8 core chunks). (3) Winding was inverted for our solid-positive convention (Bourke rows assume set-bit = below isolevel) — triangles now emit reversed for outward FrontSide; single-cube test asserts geometric normal `(+,+,+)`. Major: Renderer takes `PlanetConfig[]` (no single-planet assumption); empty worker results are cached (`has`/`emptyCount`) so M02 won't re-queue them; pool has `onerror`/`onmessageerror` with worker replacement + 2-retry requeue (a crash can't hang the preview); removed per-frame `syncAll` (position on add + re-sync on origin shift only) for the 4 ms budget. Minor: color variation seeded per world (`colorAt` salt), cave-threshold ramp divides by `deep - startDepth`, worker memoizes one field per planet+seed, overlay shows planet/depth/layer. 29 tests pass.
+
+### M02 Chunk streaming and LOD (done)
+Built: `src/terrain/octree.ts` (centered single root, root-relative integer coords so the root stays on the key grid; `updateOctree` exact ARCH split rule; `nodesAtLevel`; `classifyNode` + sound `isDefinitelyAir` wrapper), `skirts.ts` (marching-squares boundary ribbons, both windings, 1-cellSize drop; `polygonize(..., { skirts })`, worker enables it), `chunkKey.ts` trimmed to size/key helpers, `chunkManager.ts` (100 ms diff, frustum-bonus priority, maxInflight = 2x workers, 4 ms drain budget, no-hole removal via overlap-vs-loaded, 5 s failure cooldown; render isolated behind `MeshSink`), `render/chunkBounds.ts` (F5 Box3Helpers colored by level) + `frustum.ts`, `game/boot.ts` (Corelight title + progress bar, levels max..max-2, `?skipBoot=1`), `planets/solarSystem.ts` (`PLANETS`), Renderer streams per frame (F4 wireframe, F5 bounds), overlay shows `L0:n ... (desired/pending/cache/empty)`. Deleted `previewTerrain.ts`. Tests: `octree.test.ts` (far=1 root leaf, surface/core contain L0, exact cover no overlaps, deterministic, air-safety sweep + false-solid regression), `chunkManager.test.ts` (root streaming, nearest-first, surface settle with air-skips never submitted, split no-hole, merge no-hole vs single-flight pool), `marchingCubes.test.ts` +2 skirt tests, `chunkMeshes.test.ts` (sink contract, LRU eviction at 1500). 50 tests pass.
+Run: `npm run dev`, watch boot pre-generate, F3 fly out to 3 km (coarse planet), dive back (detail refines, no holes), F5 for LOD boxes, F1 for `chunks L0:.. (desired N, pending M, cache C, empty E)`.

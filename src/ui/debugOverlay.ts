@@ -13,11 +13,11 @@ export interface OverlayStats {
   planet?: string;
   depthM?: number;
   layer?: string;
-  chunksLoaded?: number;
-  chunksTotal?: number;
-  chunksAdded?: number;
-  chunksEmpty?: number;
-  workerQueue?: number;
+  lodCounts?: string;
+  pendingJobs?: number;
+  cacheSize?: number;
+  emptyChunks?: number;
+  desiredChunks?: number;
 }
 
 export class DebugOverlay {
@@ -49,9 +49,9 @@ export class DebugOverlay {
     const c = stats.cameraWorld;
     const o = stats.origin;
     let terrain = '';
-    if (stats.chunksTotal !== undefined) {
+    if (stats.lodCounts !== undefined) {
       terrain =
-        `\nchunks: ${stats.chunksAdded ?? 0} meshes (+${stats.chunksEmpty ?? 0} empty) / ${stats.chunksLoaded ?? 0} done of ${stats.chunksTotal} (queue ${stats.workerQueue ?? 0})`;
+        `\nchunks ${stats.lodCounts} (desired ${stats.desiredChunks ?? 0}, pending ${stats.pendingJobs ?? 0}, cache ${stats.cacheSize ?? 0}, empty ${stats.emptyChunks ?? 0})`;
     }
     let place = '';
     if (stats.planet !== undefined && stats.depthM !== undefined && stats.layer !== undefined) {

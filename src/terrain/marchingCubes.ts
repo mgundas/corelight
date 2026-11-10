@@ -6,6 +6,7 @@
 import type { Rgb } from '../planets/PlanetConfig.js';
 import { gradientAt, sampleIndex } from './density.js';
 import { EDGE_TABLE, TRI_TABLE } from './marchingCubesTables.js';
+import { addSkirts } from './skirts.js';
 
 /** Samples per side: 32 cells + one border sample on each side. */
 export const SAMPLE_GRID = 35;
@@ -13,6 +14,11 @@ export const SAMPLE_GRID = 35;
 export const CELLS_PER_CHUNK = 32;
 
 export type ColorFn = (x: number, y: number, z: number, nx: number, ny: number, nz: number) => Rgb;
+
+export interface PolygonizeOptions {
+  /** Generate boundary skirts to hide cracks between LOD levels. */
+  skirts?: boolean;
+}
 
 export interface ChunkMeshData {
   positions: Float32Array;
@@ -72,6 +78,7 @@ export function polygonize(
   origin: GridPos,
   cellSize: number,
   colorAt: ColorFn,
+  options?: PolygonizeOptions,
 ): ChunkMeshData {
   const size = SAMPLE_GRID;
   const cells = CELLS_PER_CHUNK;
@@ -181,6 +188,10 @@ export function polygonize(
         }
       }
     }
+  }
+
+  if (options?.skirts) {
+    addSkirts(positions, normals, colors, indices, samples, origin, cellSize, colorAt);
   }
 
   return {

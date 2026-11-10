@@ -1,15 +1,25 @@
 import * as THREE from 'three';
 import { SELA } from '../planets/configs/sela.js';
 import type { PlanetConfig } from '../planets/PlanetConfig.js';
-import { MeshWorkerPool } from '../terrain/workerPool.js';
+import type { Vec3d } from '../core/math.js';
+import { ChunkManager, type FrustumPlane, type StreamStats } from '../terrain/chunkManager.js';
+import { MeshWorkerPool, type MeshResult } from '../terrain/workerPool.js';
+import { ChunkBounds } from './chunkBounds.js';
 import { ChunkMeshes } from './chunkMeshes.js';
-import { loadPreviewTerrain, type PreviewProgress } from './previewTerrain.js';
+import { frustumPlanes } from './frustum.js';
 
-// M01 renderer: scene + chunk meshes streamed from mesh workers.
-// The placeholder sphere is gone; M02 adds LOD streaming and atmosphere.
+// M02 renderer: scene + LOD-streamed chunk meshes. The ChunkManager owns
+// which chunks exist; pre-generation results (from the boot screen) are
+// adopted before the first frame so the planet is never bare.
 
 // Fixed world-space sun direction (directional light, infinite distance).
 const SUN_DIRECTION = new THREE.Vector3(1, 0.6, 0.4).normalize();
+
+export interface PrebuiltTerrain {
+  planet: PlanetConfig;
+  results: MeshResult[];
+  emptyKeys: string[];
+}
 
 export class Renderer {
   readonly renderer: THREE.WebGLRenderer;
@@ -17,13 +27,18 @@ export class Renderer {
   readonly camera: THREE.PerspectiveCamera;
   readonly chunks = new ChunkMeshes();
   readonly pool = new MeshWorkerPool();
-  preview: PreviewProgress = { loaded: 0, added: 0, empty: 0, total: 0 };
-  previewDone = false;
+  readonly streamer: ChunkManager;
+  readonly bounds = new ChunkBounds();
 
   private sun: THREE.DirectionalLight;
   private readonly handleResize: () => void;
 
-  constructor(canvas: HTMLCanvasElement, worldSeed: number, planets: PlanetConfig[] = [SELA]) {
+  constructor(
+    canvas: HTMLCanvasElement,
+    worldSeed: number,
+    planets: PlanetConfig[] = [SELA],
+    prebuilt: PrebuiltTerrain[] = [],
+  ) {
     this.renderer = new THREE.WebGLRenderer({
       canvas,
       antialias: true,
@@ -47,34 +62,10 @@ export class Renderer {
     this.scene.add(this.sun);
     this.scene.add(new THREE.AmbientLight(0x8899bb, 0.5));
     this.scene.add(this.chunks.group);
+    this.scene.add(this.bounds.group);
 
-    // M01 fixed set: fire-and-forget; meshes pop in as workers finish.
-    // M02 replaces this with LOD streaming behind the boot screen.
-    this.preview = { loaded: 0, added: 0, empty: 0, total: 0 };
-    const perPlanet = new Map<string, PreviewProgress>();
-    let finishedPlanets = 0;
-    for (const planet of planets) {
-      perPlanet.set(planet.id, { loaded: 0, added: 0, empty: 0, total: 0 });
-      const combine = (): void => {
-        const combined: PreviewProgress = { loaded: 0, added: 0, empty: 0, total: 0 };
-        for (const progress of perPlanet.values()) {
-          combined.loaded += progress.loaded;
-          combined.added += progress.added;
-          combined.empty += progress.empty;
-          combined.total += progress.total;
-        }
-        this.preview = combined;
-      };
-      void loadPreviewTerrain(this.pool, this.chunks, planet, worldSeed, (progress) => {
-        perPlanet.set(planet.id, progress);
-        combine();
-      }).then((progress) => {
-        perPlanet.set(planet.id, progress);
-        combine();
-        finishedPlanets += 1;
-        if (finishedPlanets >= planets.length) this.previewDone = true;
-      });
-    }
+    this.streamer = new ChunkManager(this.pool, this.chunks, planets, worldSeed);
+    for (const pre of prebuilt) this.streamer.adopt(pre.planet, pre.results, pre.emptyKeys);
 
     this.handleResize = (): void => this.onResize();
     window.addEventListener('resize', this.handleResize);
@@ -85,6 +76,26 @@ export class Renderer {
     this.pool.dispose();
     this.chunks.dispose();
     this.renderer.dispose();
+  }
+
+  /** Stream LOD around the camera; call every frame with the world position. */
+  updateStreaming(cameraWorld: Vec3d): void {
+    const frustum: FrustumPlane[] = frustumPlanes(this.camera);
+    this.streamer.update(cameraWorld, frustum);
+    if (this.bounds.isVisible()) this.bounds.update(this.chunks.boxes());
+  }
+
+  streamStats(): StreamStats {
+    return this.streamer.stats();
+  }
+
+  setWireframe(enabled: boolean): void {
+    this.chunks.setWireframe(enabled);
+  }
+
+  setBoundsVisible(visible: boolean): void {
+    this.bounds.setVisible(visible);
+    if (visible) this.bounds.update(this.chunks.boxes());
   }
 
   private onResize(): void {
@@ -104,12 +115,16 @@ export class Renderer {
       // Lights encode direction, not world position: shifting the sun would
       // change the lighting direction, so leave them in the local frame.
       if (obj instanceof THREE.Light) continue;
+      // Groups that position children absolutely from world doubles manage
+      // their own re-sync; shifting them as well would move meshes twice.
+      if (obj.userData['originManaged'] === true) continue;
       obj.position.x -= delta.x;
       obj.position.y -= delta.y;
       obj.position.z -= delta.z;
     }
     // Re-sync authoritative positions on top to avoid drift.
     this.syncObjects();
+    this.bounds.resync(delta);
     // Sun stays at a fixed local offset so its direction never changes.
     this.sun.position.copy(SUN_DIRECTION).multiplyScalar(1000);
   }
