@@ -1,6 +1,6 @@
 import { MAX_TICKS_PER_FRAME, SIM_DT, TOO_HARD_INDICATOR_S } from '../core/constants.js';
 import { events } from '../core/events.js';
-import { distance, length, normalize, sub, type Vec3d } from '../core/math.js';
+import { distance, length, sub, type Vec3d } from '../core/math.js';
 import type { PlanetConfig } from '../planets/PlanetConfig.js';
 import { PLANETS } from '../planets/solarSystem.js';
 import { layerAt, type DensityField } from '../terrain/density.js';
@@ -12,7 +12,7 @@ import { wireTerrainEdits } from './editWiring.js';
 import { FreeFlyCamera } from '../player/freeFlyCamera.js';
 import { PlayerInput } from '../player/input.js';
 import { TerrainTool, type ToolAim } from '../player/terrainTool.js';
-import { computeAim } from '../player/toolAim.js';
+import { computeAim, aimFromOrbitCamera } from '../player/toolAim.js';
 import { World } from '../sim/world.js';
 import type { EntityId } from '../sim/entities.js';
 import { upAt } from '../sim/physics/frames.js';
@@ -158,10 +158,10 @@ export class Game {
       y: renderPos.y + up.y * HEAD_HEIGHT,
       z: renderPos.z + up.z * HEAD_HEIGHT,
     };
-    const dir = normalize(sub(head, this.rig.position));
+    const { origin, dir: viewDir } = aimFromOrbitCamera(head, this.rig.position);
     this.toolAim = computeAim({
-      cameraPos: this.rig.position,
-      viewDir: dir,
+      origin,
+      viewDir,
       planet: followed.planet,
       field,
       castRay: (origin, rayDir, maxDist) =>

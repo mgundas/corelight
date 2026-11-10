@@ -4,11 +4,11 @@
 import { describe, expect, it } from 'vitest';
 import { SELA } from '../../src/planets/configs/sela.js';
 import { TOOL_RANGE_M } from '../../src/core/constants.js';
-import { computeAim, surfaceNormal, type AimInput } from '../../src/player/toolAim.js';
+import { computeAim, aimFromOrbitCamera, surfaceNormal, type AimInput } from '../../src/player/toolAim.js';
 
 function base(input: Partial<AimInput>): AimInput {
   return {
-    cameraPos: { x: 0, y: 0, z: 0 },
+    origin: { x: 0, y: 0, z: 0 },
     viewDir: { x: 1, y: 0, z: 0 },
     planet: SELA,
     field: { config: SELA, density: () => -10, caveThresholdAt: () => 0 },
@@ -80,6 +80,29 @@ describe('computeAim', () => {
     );
     expect(aim.hit).toEqual({ x: 0, y: 0, z: 0 });
     expect(aim.normal).not.toBeNull();
+  });
+
+  it('reaches the ground at the feet even when zoomed far out', () => {
+    // Reported bug: with the ray starting at the orbit camera (8 m
+    // behind), the 6 m budget expired before reaching the ground the
+    // player aims down at, so the brush never fired. The ray starts at
+    // the head; the camera only sets the direction.
+    const head = { x: 0, y: 1.5, z: 0 };
+    const cam = { x: 0, y: 5, z: -8 };
+    const { origin, dir } = aimFromOrbitCamera(head, cam);
+    expect(origin).toEqual(head);
+    // Thin solid slab at y in [-0.5, 0], air elsewhere: both origins
+    // start in air, but only the head is within 6 m of the slab.
+    const field = {
+      config: SELA,
+      density: (_x: number, y: number) => Math.min(y + 0.5, -y),
+      caveThresholdAt: () => 0,
+    };
+    const aim = computeAim({ origin, viewDir: dir, planet: SELA, field, castRay: () => null, detailed: true });
+    expect(aim.hit).not.toBeNull();
+    // Sanity: from the camera the same ray cannot reach (the old behavior).
+    const old = computeAim({ origin: cam, viewDir: dir, planet: SELA, field, castRay: () => null, detailed: true });
+    expect(old.hit).toBeNull();
   });
 
   it('returns no aim for a zero direction or a beyond-range hit', () => {

@@ -12,8 +12,14 @@ import type { DensityField } from '../terrain/density.js';
 import type { ToolAim } from './terrainTool.js';
 
 export interface AimInput {
-  cameraPos: Vec3d;
-  /** View direction: camera toward the crosshair target. */
+  /**
+   * Ray origin: the astronaut's head (player pos + up x HEAD_HEIGHT), not
+   * the camera. The orbit camera sits 2–8 m behind the player; measuring
+   * the 6 m tool budget from the camera would spend the reach on the zoom
+   * distance and make the ground at one's feet unreachable.
+   */
+  origin: Vec3d;
+  /** View direction: camera forward through the crosshair. */
   viewDir: Vec3d;
   planet: PlanetConfig;
   /** Edited-density field for the fallback march + normals. */
@@ -31,32 +37,41 @@ export interface AimInput {
 /** No aim (flying, no player, zero direction): the tool stays quiet. */
 export const NO_AIM: ToolAim = { hit: null, normal: null, planet: null };
 
+/**
+ * Ray for the orbit camera: starts at the head and continues along the
+ * camera's view direction (head - cameraPos), so the crosshair, the
+ * preview sphere, and the edit all agree. Pure, for tests and Game.
+ */
+export function aimFromOrbitCamera(headPos: Vec3d, cameraPos: Vec3d): { origin: Vec3d; dir: Vec3d } {
+  return { origin: { ...headPos }, dir: normalize(sub(headPos, cameraPos)) };
+}
+
 export function computeAim(input: AimInput): ToolAim {
-  const { cameraPos, viewDir, planet, field } = input;
+  const { origin, viewDir, planet, field } = input;
   if (viewDir.x === 0 && viewDir.y === 0 && viewDir.z === 0) return { ...NO_AIM };
-  const toi = input.castRay(cameraPos, viewDir, TOOL_RANGE_M);
+  const toi = input.castRay(origin, viewDir, TOOL_RANGE_M);
   if (toi !== null && toi <= TOOL_RANGE_M) {
     const hit: Vec3d = {
-      x: cameraPos.x + viewDir.x * toi,
-      y: cameraPos.y + viewDir.y * toi,
-      z: cameraPos.z + viewDir.z * toi,
+      x: origin.x + viewDir.x * toi,
+      y: origin.y + viewDir.y * toi,
+      z: origin.z + viewDir.z * toi,
     };
     return { hit, normal: input.detailed ? surfaceNormal(field, planet, hit) : null, planet };
   }
   if (!input.detailed) return { ...NO_AIM };
-  // Fallback march along the ray (quarter-meter steps). When the camera
+  // Fallback march along the ray (quarter-meter steps). When the origin
   // itself starts inside rock, report t = 0 so the brush (and preview)
   // keep working instead of vanishing.
   const at = (t: number): Vec3d => ({
-    x: cameraPos.x + viewDir.x * t - planet.center.x,
-    y: cameraPos.y + viewDir.y * t - planet.center.y,
-    z: cameraPos.z + viewDir.z * t - planet.center.z,
+    x: origin.x + viewDir.x * t - planet.center.x,
+    y: origin.y + viewDir.y * t - planet.center.y,
+    z: origin.z + viewDir.z * t - planet.center.z,
   });
   const start = at(0);
   let prevT = 0;
   let prevD = field.density(start.x, start.y, start.z);
   if (prevD >= 0) {
-    return { hit: { ...cameraPos }, normal: surfaceNormal(field, planet, cameraPos), planet };
+    return { hit: { ...origin }, normal: surfaceNormal(field, planet, origin), planet };
   }
   for (let t = 0.25; t <= TOOL_RANGE_M; t += 0.25) {
     const p = at(t);
@@ -65,9 +80,9 @@ export function computeAim(input: AimInput): ToolAim {
       const f = prevD / (prevD - d);
       const ht = prevT + f * (t - prevT);
       const hit: Vec3d = {
-        x: cameraPos.x + viewDir.x * ht,
-        y: cameraPos.y + viewDir.y * ht,
-        z: cameraPos.z + viewDir.z * ht,
+        x: origin.x + viewDir.x * ht,
+        y: origin.y + viewDir.y * ht,
+        z: origin.z + viewDir.z * ht,
       };
       return { hit, normal: surfaceNormal(field, planet, hit), planet };
     }
