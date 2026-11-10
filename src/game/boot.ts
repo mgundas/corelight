@@ -11,6 +11,8 @@ import type { PrebuiltTerrain } from '../render/Renderer.js';
 
 export interface BootResult {
   prebuilt: PrebuiltTerrain[];
+  /** Chunk keys whose mesh jobs failed; streaming retries them live. */
+  failed: string[];
 }
 
 export async function runBoot(
@@ -20,7 +22,8 @@ export async function runBoot(
   onProgress?: (loaded: number, total: number) => void,
 ): Promise<BootResult> {
   const prebuilt: PrebuiltTerrain[] = planets.map((planet) => ({ planet, results: [], emptyKeys: [] }));
-  if (skipBoot) return { prebuilt };
+  const failed: string[] = [];
+  if (skipBoot) return { prebuilt, failed };
 
   const overlay = document.createElement('div');
   overlay.id = 'boot';
@@ -38,7 +41,10 @@ export async function runBoot(
 
   const report = (loaded: number, total: number): void => {
     fill.style.width = total === 0 ? '100%' : `${(100 * loaded) / total}%`;
-    label.textContent = `Generating terrain ${loaded} / ${total}`;
+    label.textContent =
+      failed.length === 0
+        ? `Generating terrain ${loaded} / ${total}`
+        : `Generating terrain ${loaded} / ${total} (${failed.length} failed, streaming will retry)`;
     onProgress?.(loaded, total);
   };
 
@@ -78,6 +84,7 @@ export async function runBoot(
     try {
       await Promise.all(
         jobs.map(async ({ planet, node }) => {
+          const key = nodeKey(planet.id, node.level, node.coord);
           try {
             const result = await pool.submit({
               planetConfig: planet,
@@ -88,6 +95,11 @@ export async function runBoot(
             const pre = prebuilt.find((p) => p.planet.id === planet.id) as PrebuiltTerrain;
             if (result.empty) pre.emptyKeys.push(result.key);
             else pre.results.push(result);
+          } catch {
+            // One bad chunk must not abort the boot screen: the live
+            // streamer retries failed keys (with cooldown), so the hole
+            // fills in shortly after the game starts.
+            failed.push(key);
           } finally {
             loaded += 1;
             report(loaded, total);
@@ -100,5 +112,5 @@ export async function runBoot(
   } finally {
     overlay.remove();
   }
-  return { prebuilt };
+  return { prebuilt, failed };
 }

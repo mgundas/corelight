@@ -2,10 +2,11 @@ import * as THREE from 'three';
 import { SELA } from '../planets/configs/sela.js';
 import type { PlanetConfig } from '../planets/PlanetConfig.js';
 import type { Vec3d } from '../core/math.js';
-import { ChunkManager, type FrustumPlane, type StreamStats } from '../terrain/chunkManager.js';
+import { ChunkManager, toWorldPlanes, type StreamStats } from '../terrain/chunkManager.js';
 import { MeshWorkerPool, type MeshResult } from '../terrain/workerPool.js';
 import { ChunkBounds } from './chunkBounds.js';
 import { ChunkMeshes } from './chunkMeshes.js';
+import { getOrigin } from './floatingOrigin.js';
 import { frustumPlanes } from './frustum.js';
 
 // M02 renderer: scene + LOD-streamed chunk meshes. The ChunkManager owns
@@ -80,8 +81,10 @@ export class Renderer {
 
   /** Stream LOD around the camera; call every frame with the world position. */
   updateStreaming(cameraWorld: Vec3d): void {
-    const frustum: FrustumPlane[] = frustumPlanes(this.camera);
-    this.streamer.update(cameraWorld, frustum);
+    // Frustum planes come out of the camera in render-local space; the
+    // streamer tests world-frame chunk boxes, so translate by the origin.
+    const worldPlanes = toWorldPlanes(frustumPlanes(this.camera), getOrigin());
+    this.streamer.update(cameraWorld, worldPlanes);
     if (this.bounds.isVisible()) this.bounds.update(this.chunks.boxes());
   }
 

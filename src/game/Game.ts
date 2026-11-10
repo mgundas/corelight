@@ -150,35 +150,38 @@ export class Game {
     this.renderer.updateStreaming(this.flyCamera.position);
     this.renderer.render();
 
-    // Debug: nearest planet, depth below its surface, layer at camera.
-    const planet = this.nearestPlanet();
-    const rel = {
-      x: this.flyCamera.position.x - planet.center.x,
-      y: this.flyCamera.position.y - planet.center.y,
-      z: this.flyCamera.position.z - planet.center.z,
-    };
-    const depth = planet.radius - length(rel);
-    const stats = this.renderer.streamStats();
-    const lod = stats.perLevel
-      .map((count, level) => (count ? `L${level}:${count}` : null))
-      .filter((part) => part !== null)
-      .join(' ');
-    this.overlay.update({
-      fps: this.fps,
-      tickMs: this.lastTickMs,
-      cameraWorld: { ...this.flyCamera.position },
-      origin: getOrigin(),
-      drawCalls: this.renderer.renderer.info.render.calls,
-      flySpeed: this.flySpeed,
-      originShifts: this.originShifts,
-      planet: planet.name,
-      depthM: depth,
-      layer: layerAt(planet, rel.x, rel.y, rel.z).name,
-      lodCounts: lod,
-      pendingJobs: stats.pending,
-      cacheSize: stats.cacheSize,
-      emptyChunks: stats.empty,
-      desiredChunks: stats.desired,
-    });
+    // Debug overlay content. The overlay no-ops while hidden, so skip the
+    // stats work (mesh counts, layer lookup) entirely in that case.
+    if (this.overlay.isVisible()) {
+      const planet = this.nearestPlanet();
+      const rel = {
+        x: this.flyCamera.position.x - planet.center.x,
+        y: this.flyCamera.position.y - planet.center.y,
+        z: this.flyCamera.position.z - planet.center.z,
+      };
+      const depth = planet.radius - length(rel);
+      const stats = this.renderer.streamStats();
+      const lod = stats.perLevel
+        .map((count, level) => (count ? `L${level}:${count}` : null))
+        .filter((part) => part !== null)
+        .join(' ');
+      this.overlay.update({
+        fps: this.fps,
+        tickMs: this.lastTickMs,
+        cameraWorld: { ...this.flyCamera.position },
+        origin: getOrigin(),
+        drawCalls: this.renderer.renderer.info.render.calls,
+        flySpeed: this.flySpeed,
+        originShifts: this.originShifts,
+        planet: planet.name,
+        depthM: depth,
+        layer: layerAt(planet, rel.x, rel.y, rel.z).name,
+        lodCounts: lod,
+        pendingJobs: stats.pending,
+        cacheSize: stats.cacheSize,
+        emptyChunks: stats.empty,
+        desiredChunks: stats.desired,
+      });
+    }
   }
 }

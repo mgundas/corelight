@@ -35,10 +35,16 @@ describe('ChunkMeshes', () => {
     expect(sink.add(SELA, result(0, { x: 4, y: 5, z: 6 }, true))).toBe('empty');
     expect(sink.has('sela:0:4:5:6')).toBe(true);
     expect(sink.emptyCount).toBe(1);
+    expect(sink.meshCounts()).toEqual({ perLevel: [1], total: 1 });
+    // Pruning empties never touches meshes; removing updates counts.
+    sink.pruneEmpty(() => false);
+    expect(sink.emptyCount).toBe(0);
+    expect(sink.has('sela:0:1:2:3')).toBe(true);
     const boxes = sink.boxes();
     expect(boxes.length).toBe(1);
     expect(boxes[0]?.level).toBe(0);
     expect(sink.remove('sela:0:1:2:3')).toBe(true);
+    expect(sink.meshCounts()).toEqual({ perLevel: [0], total: 0 });
     expect(sink.has('sela:0:1:2:3')).toBe(false);
     expect(sink.remove('sela:0:1:2:3')).toBe(false);
     meshes.dispose();

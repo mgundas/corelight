@@ -4,17 +4,19 @@
 
 import { describe, expect, it } from 'vitest';
 import { SELA } from '../../src/planets/configs/sela.js';
+import { distance, type Vec3d } from '../../src/core/math.js';
 import type { PlanetConfig } from '../../src/planets/PlanetConfig.js';
 import { nodeOrigin } from '../../src/terrain/octree.js';
+import { createDensityField } from '../../src/terrain/density.js';
 import { parseChunkKey } from '../../src/terrain/chunkKey.js';
 import {
   boxInFrustum,
   ChunkManager,
+  toWorldPlanes,
   type MeshSink,
 } from '../../src/terrain/chunkManager.js';
 import type { MeshResult } from '../../src/terrain/workerPool.js';
-import { nodeKey, updateOctree, type OctreeNode } from '../../src/terrain/octree.js';
-import type { Vec3d } from '../../src/core/math.js';
+import { nodeKey, updateOctree, isDefinitelyAir, type OctreeNode } from '../../src/terrain/octree.js';
 
 interface PendingJob {
   level: number;
@@ -100,6 +102,21 @@ class FakeSink implements MeshSink {
     if (!this.meshes.has(key)) this.empty.add(key);
   }
 
+  pruneEmpty(keep: (key: string) => boolean): void {
+    for (const key of [...this.empty]) {
+      if (!keep(key)) this.empty.delete(key);
+    }
+  }
+
+  meshCounts(): { perLevel: number[]; total: number } {
+    const perLevel: number[] = [];
+    for (const key of this.meshes) {
+      const { level } = parseChunkKey(key);
+      perLevel[level] = (perLevel[level] ?? 0) + 1;
+    }
+    return { perLevel, total: this.meshes.size };
+  }
+
   boxes(): Array<{ key: string; level: number; min: Vec3d; size: number }> {
     const out: Array<{ key: string; level: number; min: Vec3d; size: number }> = [];
     for (const key of this.meshes) {
@@ -153,6 +170,17 @@ describe('boxInFrustum', () => {
   });
 });
 
+describe('toWorldPlanes', () => {
+  it('translates render-local planes by the floating origin', () => {
+    // Local plane z >= 0 with the origin 100 m up means world z >= 100.
+    const world = toWorldPlanes([{ normal: { x: 0, y: 0, z: 1 }, constant: 0 }], { x: 0, y: 0, z: 100 });
+    expect(world.length).toBe(1);
+    expect(world[0]?.constant).toBe(-100);
+    expect(boxInFrustum({ x: 0, y: 0, z: 150 }, 8, world)).toBe(true);
+    expect(boxInFrustum({ x: 0, y: 0, z: 50 }, 8, world)).toBe(false);
+  });
+});
+
 describe('ChunkManager', () => {
   it('streams a single coarse root for a far camera', async () => {
     const { pool, pending } = fakePool();
@@ -191,6 +219,50 @@ describe('ChunkManager', () => {
     expect(containing?.level).toBe(0);
     expect(first.level).toBe(0);
     expect(first.coord).toEqual(containing?.coord);
+  });
+
+  it('re-scores queued jobs when the camera moves', async () => {
+    const fakes = fakePool();
+    const sink = new FakeSink();
+    const manager = makeManager(fakes.pool, sink, 1);
+    // Start on the surface: the nearest leaf submits, the rest queue.
+    const camA = { x: 10, y: 402, z: 5 };
+    manager.update(camA, null, 100000);
+    expect(fakes.pending.length).toBe(1);
+    // Climb 300 m without resolving: the queue must re-prioritize around
+    // the new camera even though nothing can submit yet (in flight is full).
+    const camB = { x: 10, y: 700, z: 5 };
+    manager.update(camB, null, 100000);
+    expect(fakes.pending.length).toBe(1);
+    const jobs = fakes.pending.splice(0);
+    for (const job of jobs) job.resolve(meshResult(SELA, job.level, job.coord, false));
+    await Promise.resolve();
+    manager.update(camB, null, 100000);
+    expect(fakes.submitted.length).toBe(2);
+    const second = fakes.submitted[1] as string;
+    // Expectation computed independently: nearest desired leaf to camB that
+    // is neither loaded nor air-skipped. With stale scores the streamer
+    // would instead resubmit a leftover surface chunk scored from camA.
+    const field = createDensityField(SELA, 1337);
+    const leavesB = updateOctree(SELA, camB);
+    let expected = '';
+    let best = Infinity;
+    for (const leaf of leavesB) {
+      const key = nodeKey(SELA.id, leaf.level, leaf.coord);
+      if (sink.has(key)) continue;
+      if (isDefinitelyAir(field.density, leaf)) continue;
+      const d = distance(camB, {
+        x: leaf.min.x + leaf.size / 2,
+        y: leaf.min.y + leaf.size / 2,
+        z: leaf.min.z + leaf.size / 2,
+      });
+      if (d < best) {
+        best = d;
+        expected = key;
+      }
+    }
+    expect(expected).not.toBe('');
+    expect(second).toBe(expected);
   });
 
   it('settles at the surface with detail around the camera and skips air', async () => {

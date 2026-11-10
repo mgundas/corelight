@@ -1,5 +1,8 @@
 // View-frustum planes as plain data for the streaming priority queue.
 // Built with three.js math here in render/; terrain/ only sees Vec3d.
+// NOTE: planes are in the camera's render-local (floating-origin) frame;
+// callers translate them with ChunkManager.toWorldPlanes before testing
+// world-frame chunk boxes.
 
 import * as THREE from 'three';
 import type { FrustumPlane } from '../terrain/chunkManager.js';

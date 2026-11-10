@@ -25,6 +25,9 @@ export const MESH_WORKER_MAX = 6;
 /** Max chunk meshes kept in the render cache before LRU eviction (M01: fixed set, headroom). */
 export const CHUNK_CACHE_BUDGET = 1500;
 
+/** Max empty chunk keys cached before aging out stale fine-grained ones. */
+export const EMPTY_KEY_BUDGET = 2000;
+
 /** Split a node when distance(camera, nodeCenter) < size * factor (ARCHITECTURE.md). */
 export const LOD_SPLIT_FACTOR = 1.5;
 

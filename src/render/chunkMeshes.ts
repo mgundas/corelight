@@ -28,6 +28,8 @@ export class ChunkMeshes {
   private readonly emptyKeys = new Set<string>();
   /** Insertion order for LRU eviction. */
   private readonly lru: string[] = [];
+  /** Visible mesh count per LOD level, maintained on add/remove/evict. */
+  private readonly levelCounts: number[] = [];
 
   constructor() {
     this.material = new THREE.MeshStandardMaterial({
@@ -59,6 +61,18 @@ export class ChunkMeshes {
     if (!this.meshes.has(key)) this.emptyKeys.add(key);
   }
 
+  /** Drop empty keys the predicate rejects (bounds the empty-key cache). */
+  pruneEmpty(keep: (key: string) => boolean): void {
+    for (const key of [...this.emptyKeys]) {
+      if (!keep(key)) this.emptyKeys.delete(key);
+    }
+  }
+
+  /** Cheap mesh counts for the per-frame overlay (no key parsing). */
+  meshCounts(): { perLevel: number[]; total: number } {
+    return { perLevel: [...this.levelCounts], total: this.meshes.size };
+  }
+
   /** Add a mesh: 'added', 'empty' (cached), or 'duplicate'. */
   add(config: PlanetConfig, result: MeshResult): 'added' | 'empty' | 'duplicate' {
     if (this.meshes.has(result.key) || this.emptyKeys.has(result.key)) return 'duplicate';
@@ -86,6 +100,8 @@ export class ChunkMeshes {
     this.meshes.set(result.key, mesh);
     this.group.add(mesh);
     this.lru.push(result.key);
+    const { level } = parseChunkKey(result.key);
+    this.levelCounts[level] = (this.levelCounts[level] ?? 0) + 1;
     this.evictIfNeeded();
     return 'added';
   }
@@ -94,10 +110,7 @@ export class ChunkMeshes {
   remove(key: string): boolean {
     const mesh = this.meshes.get(key);
     if (!mesh) return false;
-    mesh.geometry.dispose();
-    this.group.remove(mesh);
-    this.meshes.delete(key);
-    this.worldPos.delete(key);
+    this.dropMesh(key, mesh);
     const at = this.lru.indexOf(key);
     if (at >= 0) this.lru.splice(at, 1);
     return true;
@@ -136,7 +149,19 @@ export class ChunkMeshes {
     this.meshes.clear();
     this.worldPos.clear();
     this.lru.length = 0;
+    this.levelCounts.length = 0;
     this.material.dispose();
+  }
+
+  /** Shared mesh teardown for remove() and LRU eviction. */
+  private dropMesh(key: string, mesh: THREE.Mesh): void {
+    mesh.geometry.dispose();
+    this.group.remove(mesh);
+    this.meshes.delete(key);
+    this.worldPos.delete(key);
+    const { level } = parseChunkKey(key);
+    const count = (this.levelCounts[level] ?? 0) - 1;
+    this.levelCounts[level] = count > 0 ? count : 0;
   }
 
   private evictIfNeeded(): void {
@@ -144,10 +169,7 @@ export class ChunkMeshes {
       const key = this.lru.shift() as string;
       const mesh = this.meshes.get(key);
       if (!mesh) continue;
-      mesh.geometry.dispose();
-      this.group.remove(mesh);
-      this.meshes.delete(key);
-      this.worldPos.delete(key);
+      this.dropMesh(key, mesh);
     }
   }
 }

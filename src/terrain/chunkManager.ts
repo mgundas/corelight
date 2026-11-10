@@ -5,6 +5,7 @@
 // three.js. Meshes upload on the main thread within a 4 ms frame budget.
 
 import {
+  EMPTY_KEY_BUDGET,
   STREAM_APPLY_BUDGET_MS,
   STREAM_FRUSTUM_BONUS,
   STREAM_MAX_INFLIGHT_FACTOR,
@@ -12,6 +13,7 @@ import {
 } from '../core/constants.js';
 import { distance, type Vec3d } from '../core/math.js';
 import type { PlanetConfig } from '../planets/PlanetConfig.js';
+import { parseChunkKey } from './chunkKey.js';
 import { createDensityField, type DensityField } from './density.js';
 import {
   boxesOverlap,
@@ -30,8 +32,12 @@ export interface MeshSink {
   remove(key: string): boolean;
   /** Remember a key the worker (or boot) reported empty: never re-queue. */
   markEmpty(key: string): void;
+  /** Drop empty keys the predicate rejects (bounds the empty-key cache). */
+  pruneEmpty(keep: (key: string) => boolean): void;
   /** Keys known empty (worker-reported + pre-skipped). */
   readonly emptyCount: number;
+  /** Incrementally maintained mesh counts (cheap per-frame overlay source). */
+  meshCounts(): { perLevel: number[]; total: number };
   boxes(): Array<{ key: string; level: number; min: Vec3d; size: number }>;
 }
 
@@ -39,6 +45,22 @@ export interface MeshSink {
 export interface FrustumPlane {
   normal: Vec3d;
   constant: number;
+}
+
+/**
+ * Translate render-local frustum planes into the world frame. The camera
+ * lives in floating-origin local space (local = world - origin), so a
+ * local plane n.l + c >= 0 becomes n.w + (c - n.origin) >= 0 in world
+ * space. Without this the in-frustum priority bonus rewards the wrong
+ * chunks after any origin shift.
+ */
+export function toWorldPlanes(planes: FrustumPlane[], origin: Vec3d): FrustumPlane[] {
+  return planes.map((plane) => ({
+    normal: { ...plane.normal },
+    constant:
+      plane.constant -
+      (plane.normal.x * origin.x + plane.normal.y * origin.y + plane.normal.z * origin.z),
+  }));
 }
 
 export function boxInFrustum(min: Vec3d, size: number, planes: FrustumPlane[] | null): boolean {
@@ -136,22 +158,22 @@ export class ChunkManager {
   }
 
   stats(): StreamStats {
-    const perLevel: number[] = [];
-    let cacheSize = 0;
-    for (const box of this.sink.boxes()) {
-      perLevel[box.level] = (perLevel[box.level] ?? 0) + 1;
-      cacheSize += 1;
-    }
+    const { perLevel, total } = this.sink.meshCounts();
     return {
       perLevel,
       pending: this.pendingCount,
-      cacheSize,
+      cacheSize: total,
       empty: this.sink.emptyCount,
       desired: this.desiredCount,
     };
   }
 
   private recompute(cameraWorld: Vec3d, frustum: FrustumPlane[] | null, now: number): void {
+    // Expire old failures so the map stays bounded and stale entries can
+    // never block a retry (the cooldown check below only reads fresh ones).
+    for (const [key, failedAt] of this.failures) {
+      if (now - failedAt >= FAILURE_COOLDOWN_MS) this.failures.delete(key);
+    }
     const desired: DesiredNode[] = [];
     for (const { config, field } of this.planets) {
       const local: Vec3d = {
@@ -162,16 +184,7 @@ export class ChunkManager {
       for (const node of updateOctree(config, local)) {
         const key = nodeKey(config.id, node.level, node.coord);
         desired.push({ planet: config, node, key });
-        if (this.sink.has(key) || this.inflight.has(key) || this.queued.has(key)) continue;
-        // Only 'air' skips are sound (tunnel-wall cliffs break the 'solid'
-        // branch; see octree.classifyNode). Everything else queues and the
-        // worker's full-grid sampling decides exactly.
-        if (isDefinitelyAir(field.density, node)) {
-          this.sink.markEmpty(key);
-          continue;
-        }
-        const failedAt = this.failures.get(key);
-        if (failedAt !== undefined && now - failedAt < FAILURE_COOLDOWN_MS) continue;
+        if (this.sink.has(key) || this.inflight.has(key)) continue;
         const worldMin: Vec3d = {
           x: config.center.x + node.min.x,
           y: config.center.y + node.min.y,
@@ -183,7 +196,23 @@ export class ChunkManager {
           z: worldMin.z + node.size / 2,
         };
         const bonus = boxInFrustum(worldMin, node.size, frustum) ? STREAM_FRUSTUM_BONUS : 0;
-        this.queued.set(key, { planet: config, node, key, score: distance(cameraWorld, center) - bonus });
+        const score = distance(cameraWorld, center) - bonus;
+        const waiting = this.queued.get(key);
+        if (waiting) {
+          // Re-score every tick: a fast camera outdates first-sighting
+          // priority while entries wait behind the in-flight cap.
+          waiting.score = score;
+          continue;
+        }
+        // Only 'air' skips are sound (tunnel-wall cliffs break the 'solid'
+        // branch; see octree.classifyNode). Everything else queues and the
+        // worker's full-grid sampling decides exactly.
+        if (isDefinitelyAir(field.density, node)) {
+          this.sink.markEmpty(key);
+          continue;
+        }
+        if (this.failures.has(key)) continue;
+        this.queued.set(key, { planet: config, node, key, score });
       }
     }
     this.desiredCount = desired.length;
@@ -191,6 +220,20 @@ export class ChunkManager {
     this.desiredKeys = wanted;
     for (const key of this.queued.keys()) {
       if (!wanted.has(key)) this.queued.delete(key);
+    }
+    // Fine-grained empty keys from flown-over regions accumulate without
+    // bound, so age out the non-desired ones past a budget. Coarse empties
+    // (few, huge volumes) are kept; re-verifying a pruned key later costs a
+    // single background worker job.
+    if (this.sink.emptyCount > EMPTY_KEY_BUDGET) {
+      this.sink.pruneEmpty((key) => {
+        if (this.desiredKeys.has(key)) return true;
+        try {
+          return parseChunkKey(key).level >= 2;
+        } catch {
+          return true;
+        }
+      });
     }
     const sorted = [...this.queued.values()].sort((a, b) => a.score - b.score);
     while (this.inflight.size < this.maxInflight && sorted.length > 0) {
@@ -227,6 +270,11 @@ export class ChunkManager {
    * survive the drain budget boundary.
    */
   private collectGarbage(desired: DesiredNode[]): void {
+    // Cheap path first: visible meshes that are still desired cost one Set
+    // lookup each. Only stale leftovers pay the overlap scan, so the cost
+    // scales with transitions, not with visible x desired.
+    const stale = this.sink.boxes().filter((box) => !this.desiredKeys.has(box.key));
+    if (stale.length === 0) return;
     const loaded = (key: string): boolean => this.sink.has(key);
     const desiredBoxes = desired.map((d) => ({
       key: d.key,
@@ -237,8 +285,7 @@ export class ChunkManager {
       },
       size: d.node.size,
     }));
-    for (const box of this.sink.boxes()) {
-      if (this.desiredKeys.has(box.key)) continue;
+    for (const box of stale) {
       let covered = true;
       for (const other of desiredBoxes) {
         if (boxesOverlap(box.min, box.size, other.min, other.size) && !loaded(other.key)) {
