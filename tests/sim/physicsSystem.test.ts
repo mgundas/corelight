@@ -93,11 +93,11 @@ describe('physics system on real terrain', () => {
     const world = new World(1337);
     world.addSystem(makePhysicsSystem({ planets: [SELA], worldSeed: 1337, colliders }));
     const field = createDensityField(SELA, 1337);
-    // 50 m deep on the surface axis: well inside solid terrain.
-    const buried = { x: 0, y: SELA.radius - 50, z: 0 };
+    // Solid slab rock with a healthy gradient (probed: d=3.05, |grad|=1.26).
+    const buried = { x: -76, y: SELA.radius - 72, z: -20 };
     expect(field.density(buried.x, buried.y, buried.z)).toBeGreaterThan(0.5);
     world.dispatch({ type: 'spawnPlayer', planetId: 'sela', position: buried });
-    // Grace period first (1 s), then push-out at 2 m/s.
+    // Grace period first (1 s), then gradient-descent push-out.
     await tickFlushed(world, 200);
     const entity = [...world.entities.values()][0];
     expect(entity).toBeDefined();

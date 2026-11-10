@@ -35,6 +35,39 @@ export interface CoreConfig {
   chamberColor: Rgb;
 }
 
+/**
+ * Cavern-floor stacking (supplements the worm tunnels, which thread the
+ * slabs and connect adjacent floors). Floors are derived from planet size:
+ * count = clamp(floor(usable / (cavernHeight + slabThickness)), min, max)
+ * where usable = radius - chamber - shell - surfaceCap. Leftover rock stays
+ * above the core shell, so rooms never touch it.
+ */
+export interface CavernConfig {
+  enabled: boolean;
+  /** No cavern rooms above this depth (keeps the surface solid). */
+  surfaceCapDepth: number;
+  /** Open room height in meters. */
+  cavernHeight: number;
+  /** Rock slab thickness between rooms in meters. */
+  slabThickness: number;
+  minFloors: number;
+  maxFloors: number;
+  /** Gentle floor relief amplitude in meters (walkable, not flat). */
+  floorRoughness: number;
+  /** Floor relief spatial frequency (per meter). */
+  floorRoughFrequency: number;
+  /** Fraction of floor area covered by shallow pits (0..1). */
+  pitCoverage: number;
+  /** Maximum pit dip in meters (capped by minSlabLeftover). */
+  pitDepth: number;
+  /** Pit blotch spatial frequency (per meter). */
+  pitFrequency: number;
+  /** Minimum rock left under the deepest pit (pits never breach slabs). */
+  minSlabLeftover: number;
+  /** Worm widening inside slabs (threshold multiplier bonus, e.g. 0.8). */
+  openingBoost: number;
+}
+
 export interface PlanetConfig {
   id: string;
   name: string;
@@ -51,6 +84,7 @@ export interface PlanetConfig {
   caves: CaveConfig;
   layers: LayerConfig[];
   core: CoreConfig;
+  caverns: CavernConfig;
   surfaceColors: { flat: Rgb; steep: Rgb };
   atmosphere: { sky: Rgb; ground: Rgb; height: number };
   lodMaxLevel: number;

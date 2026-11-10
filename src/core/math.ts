@@ -65,6 +65,18 @@ export function lerp(a: Vec3d, b: Vec3d, t: number): Vec3d {
   };
 }
 
+/** Clamp a scalar into [lo, hi]. */
+export function clampScalar(v: number, lo: number, hi: number): number {
+  return Math.min(hi, Math.max(lo, v));
+}
+
+/** Smoothstep: 0 below `lo`, 1 above `hi`, smooth S-curve between. */
+export function smoothstep(lo: number, hi: number, v: number): number {
+  if (hi <= lo) return v >= hi ? 1 : 0;
+  const t = clampScalar((v - lo) / (hi - lo), 0, 1);
+  return t * t * (3 - 2 * t);
+}
+
 export const IDENTITY_QUAT: Quat = { x: 0, y: 0, z: 0, w: 1 };
 
 export function quatFromAxisAngle(axis: Vec3d, angleRad: number): Quat {

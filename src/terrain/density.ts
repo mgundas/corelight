@@ -4,6 +4,7 @@
 // Positive = solid, negative = air, surface at 0. Pure + deterministic.
 
 import type { LayerConfig, PlanetConfig, Rgb } from '../planets/PlanetConfig.js';
+import { smoothstep } from '../core/math.js';
 import { createSeededNoise3D, fbm3, type NoiseFunction3D } from './noise.js';
 
 export type DensityFn = (x: number, y: number, z: number) => number;
@@ -27,12 +28,54 @@ export function caveThresholdAtDepth(config: PlanetConfig, depth: number): numbe
   return config.caves.thresholdTop + (config.caves.thresholdBottom - config.caves.thresholdTop) * t;
 }
 
+export interface CavernStack {
+  /** Depth where the first room top starts. */
+  start: number;
+  /** Room + slab cycle in meters. */
+  pitch: number;
+  /** Number of cavern floors (scales with planet size). */
+  count: number;
+  cavernHeight: number;
+  slabThickness: number;
+}
+
+/**
+ * Derive the cavern floor stack from planet size: the count is the usable
+ * shell thickness divided by the room+slab pitch, clamped to the config
+ * band. Leftover rock stays above the core shell, so rooms can never touch
+ * it (the count is reduced first if clamping would overflow).
+ */
+export function cavernStack(config: PlanetConfig): CavernStack {
+  const { caverns } = config;
+  const shellOuterDepth = config.radius - config.core.chamberRadius - config.core.shellThickness;
+  const usable = shellOuterDepth - caverns.surfaceCapDepth;
+  const pitch = caverns.cavernHeight + caverns.slabThickness;
+  let count = Math.min(
+    caverns.maxFloors,
+    Math.max(caverns.minFloors, Math.floor(usable / pitch)),
+  );
+  while (count > 1 && caverns.surfaceCapDepth + count * pitch > shellOuterDepth) {
+    count -= 1;
+  }
+  return {
+    start: caverns.surfaceCapDepth,
+    pitch,
+    count,
+    cavernHeight: caverns.cavernHeight,
+    slabThickness: caverns.slabThickness,
+  };
+}
+
 export function createDensityField(config: PlanetConfig, worldSeed: number): DensityField {
   const base = `${worldSeed}:${config.seed}`;
   const surfaceNoise = createSeededNoise3D(`${base}:surface`);
   const caveA = createSeededNoise3D(`${base}:caveA`);
   const caveB = createSeededNoise3D(`${base}:caveB`);
+  const cavernRough = createSeededNoise3D(`${base}:cavernRough`);
+  const cavernPit = createSeededNoise3D(`${base}:cavernPit`);
   const caveThresholdAt = (depth: number): number => caveThresholdAtDepth(config, depth);
+  const stack = cavernStack(config);
+  const caverns = config.caverns;
 
   const density: DensityFn = (x, y, z) => {
     const r = Math.sqrt(x * x + y * y + z * z);
@@ -50,6 +93,23 @@ export function createDensityField(config: PlanetConfig, worldSeed: number): Den
     const f = config.surfaceFrequency;
     const relief = fbm3(surfaceNoise, nx * f, ny * f, nz * f, 4) * config.surfaceAmplitude;
     let d = depth + relief;
+    // Cavern floors supplement the worm tunnels: wide rooms on a regular
+    // depth cycle, separated by thick slabs the worms thread through.
+    // u runs 0..pitch from a room top: the room is air, the slab is rock.
+    const shellOuter = config.core.chamberRadius + config.core.shellThickness;
+    let slabness = 0;
+    let roomU = -1;
+    if (caverns.enabled && depth >= stack.start && r >= shellOuter) {
+      const dd = depth - stack.start;
+      const idx = Math.floor(dd / stack.pitch);
+      if (idx < stack.count) {
+        const u = dd - idx * stack.pitch;
+        roomU = u;
+        // 0 inside rooms, 1 inside slabs: worms widen where they cross slabs
+        // so floors get irregular diggable openings, not pinholes.
+        slabness = smoothstep(caverns.cavernHeight - 3, caverns.cavernHeight + 3, u);
+      }
+    }
     // Cave worms: carve where both fields are near zero. min() keeps the
     // carve independent of depth so tunnels stay open in the deep mantle.
     // The carve applies UNCONDITIONALLY (plain min, exactly as documented):
@@ -60,11 +120,32 @@ export function createDensityField(config: PlanetConfig, worldSeed: number): Den
     // wall vertex onto a grid point, shredding walls into slivers. The zero
     // set is identical either way: min() is zero exactly at the surface or
     // at a worm wall.
-    const shellOuter = config.core.chamberRadius + config.core.shellThickness;
     if (depth >= config.caves.startDepth && r >= shellOuter) {
       const cf = config.caves.frequency;
       const c = Math.abs(caveA(x * cf, y * cf, z * cf)) + Math.abs(caveB(x * cf, y * cf, z * cf));
-      d = Math.min(d, (c - caveThresholdAt(depth)) * 10);
+      const threshold = caveThresholdAt(depth) * (1 + caverns.openingBoost * slabness);
+      d = Math.min(d, (c - threshold) * 10);
+    }
+    // Cavern rooms: hollow out the room band with walkable floors. The
+    // floor surface is the slab top displaced by gentle relief plus capped
+    // pit bowls; the ceiling gets a light independent relief. min() keeps
+    // the zero set exactly on those displaced surfaces.
+    if (roomU >= 0) {
+      const fr = caverns.floorRoughFrequency;
+      const rough = caverns.floorRoughness * fbm3(cavernRough, x * fr, y * fr, z * fr, 3);
+      const pr = caverns.pitFrequency;
+      const pitm = smoothstep(
+        1 - 2 * caverns.pitCoverage,
+        1 - 2 * caverns.pitCoverage + 0.2,
+        cavernPit(x * pr, y * pr, z * pr),
+      );
+      // Pits dip the floor but can never eat through the slab.
+      const maxDip = caverns.slabThickness - caverns.minSlabLeftover;
+      const dip = Math.min(rough + caverns.pitDepth * pitm * pitm, maxDip);
+      const floorSurf = caverns.cavernHeight + dip;
+      const ceilSurf = cavernRough(x * fr + 7.3, y * fr + 7.3, z * fr + 7.3);
+      const room = Math.max(roomU - floorSurf, ceilSurf - roomU);
+      if (room < d) d = room;
     }
     // Hollow core chamber (no caves inside the shell by the guard above).
     const chamber = r - config.core.chamberRadius;

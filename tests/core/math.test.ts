@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   add,
+  clampScalar,
   cross,
   distance,
   dot,
@@ -12,6 +13,7 @@ import {
   quatMultiply,
   rotateVector,
   scale,
+  smoothstep,
   sub,
   vec3,
   IDENTITY_QUAT,
@@ -48,6 +50,16 @@ describe('vec3 math', () => {
     expect(rotateVector(vec3(1, 2, 3), IDENTITY_QUAT)).toEqual({ x: 1, y: 2, z: 3 });
     // q * identity = q.
     expect(quatMultiply(q, IDENTITY_QUAT)).toEqual(q);
+  });
+
+  it('clamps and smoothsteps scalars', () => {
+    expect(clampScalar(5, 0, 3)).toBe(3);
+    expect(clampScalar(-1, 0, 3)).toBe(0);
+    expect(clampScalar(2, 0, 3)).toBe(2);
+    expect(smoothstep(0, 10, -1)).toBe(0);
+    expect(smoothstep(0, 10, 11)).toBe(1);
+    expect(smoothstep(0, 10, 5)).toBeCloseTo(0.5, 6);
+    expect(smoothstep(0, 10, 2.5)).toBeCloseTo(0.15625, 6);
   });
 
   it('quatFromTo aligns unit vectors (incl. degenerate cases)', () => {

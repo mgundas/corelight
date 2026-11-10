@@ -87,11 +87,13 @@ r = length(localPos)
 depth = planet.radius - r
 d = depth + surfaceNoise(dir) * planet.surfaceAmplitude        // fbm on the unit direction, amplitude ~15 m
 d = carveCaves(d, localPos, depth)                              // see below
+d = carveCaverns(d, localPos, depth)                           // cavern floors: open rooms + walkable floors, slab rock between
 d = min(d, r - planet.core.chamberRadius)                       // hollow core chamber
 d += editDelta(localPos)                                        // player edits
 ```
 
-- Caves: two 3D simplex "worm" fields, `c = abs(n1(p*f)) + abs(n2(p*f))`; carve where `c < caveThreshold(depth)`. No caves in the top 6 m (keeps the surface solid), threshold grows with depth, no caves inside the core shell.
+- Caves: two 3D simplex "worm" fields, `c = abs(n1(p*f)) + abs(n2(p*f))`; carve where `c < caveThreshold(depth)` (unconditional `min`, so wall crossings sit mid-cell). No caves in the top 6 m (keeps the surface solid), threshold grows with depth, no caves inside the core shell.
+- Cavern floors: room/slab bands on a depth cycle derived from planet size (`cavernStack`: Sela gets 6 floors of ~30 m rooms separated by ~24 m slabs). Rooms are hollowed with walkable noise-relief floors and capped pit bowls (pits can never breach a slab); slabs stay solid except where worms pierce them (widened inside slabs, so floors get irregular diggable openings). Same deterministic density field: same seed = identical floors.
 - Layer at a point = from `depth` using `planet.layers`. Layer gives hardness and color.
 - Vertex color = layer color blended with a small noise variation. Surface top uses `planet.surfaceColors` (grass/dirt by slope).
 - The density function must be pure and deterministic (seeded noise). It runs in workers.

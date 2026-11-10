@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { SELA } from '../../src/planets/configs/sela.js';
-import { createDensityFn, layerAt } from '../../src/terrain/density.js';
+import { cavernStack, createDensityFn, layerAt } from '../../src/terrain/density.js';
 
 describe('density', () => {
   it('is deterministic for the same seed', () => {
@@ -66,4 +66,110 @@ describe('density', () => {
     const chamber = layerAt(SELA, 0, 0, 0);
     expect(chamber.kind).toBe('core_chamber');
   });
+});
+
+describe('cavernStack', () => {
+  it('derives six floors for Sela that fit above the core shell', () => {
+    const stack = cavernStack(SELA);
+    expect(stack.start).toBe(SELA.caverns.surfaceCapDepth);
+    expect(stack.pitch).toBe(
+      SELA.caverns.cavernHeight + SELA.caverns.slabThickness,
+    );
+    // usable = 400 - 40 - 6 - 30 = 324; pitch = 54 -> 6 floors, exact fit.
+    expect(stack.count).toBe(6);
+    const shellOuterDepth =
+      SELA.radius - SELA.core.chamberRadius - SELA.core.shellThickness;
+    expect(stack.start + stack.count * stack.pitch).toBeLessThanOrEqual(shellOuterDepth);
+  });
+});
+
+describe('cavern floors', () => {
+  it('opens every room and keeps slabs mostly solid with real openings', () => {
+    const density = createDensityFn(SELA, 1337);
+    const stack = cavernStack(SELA);
+    // Room centers on the axis are open air on every floor.
+    for (let i = 0; i < stack.count; i += 1) {
+      const depth = stack.start + i * stack.pitch + stack.cavernHeight / 2;
+      expect(density(0, SELA.radius - depth, 0)).toBeLessThan(0);
+    }
+    // Slab-middle samples (by true band position): mostly rock, but worms
+    // genuinely pierce the slabs (the diggable openings).
+    let slab = 0;
+    let slabAir = 0;
+    for (let x = -120; x <= 120; x += 10) {
+      for (let z = -120; z <= 120; z += 10) {
+        for (let i = 0; i < stack.count; i += 1) {
+          const y = SELA.radius - (stack.start + i * stack.pitch + stack.cavernHeight + 12);
+          const depth = SELA.radius - Math.hypot(x, y, z);
+          const dd = depth - stack.start;
+          if (dd < 0) continue;
+          const idx = Math.floor(dd / stack.pitch);
+          if (idx !== i) continue;
+          const u = dd - idx * stack.pitch;
+          if (u < stack.cavernHeight + 6 || u > stack.cavernHeight + 18) continue;
+          slab += 1;
+          if (density(x, y, z) < 0) slabAir += 1;
+        }
+      }
+    }
+    expect(slab).toBeGreaterThan(100);
+    const airFrac = slabAir / slab;
+    // Solid slabs punctured by openings: neither solid rock nor Swiss cheese.
+    expect(airFrac).toBeGreaterThan(0);
+    expect(airFrac).toBeLessThan(0.3);
+  });
+
+  it('lays walkable floors: present everywhere, gentle, pits never breach', () => {
+    const density = createDensityFn(SELA, 1337);
+    const stack = cavernStack(SELA);
+    const lo = stack.start + stack.cavernHeight - 3;
+    const hi = stack.start + stack.cavernHeight + 8;
+    // 2 m grid over a 40x40 m patch of floor 0: first solid going down,
+    // starting inside room air (just under the room top).
+    const step = 2;
+    const half = 20;
+    const grid: number[][] = [];
+    let inBand = 0;
+    let total = 0;
+    for (let ix = 0; ix <= half * 2; ix += step) {
+      const row: number[] = [];
+      for (let iz = 0; iz <= half * 2; iz += step) {
+        const x = -half + ix;
+        const z = -half + iz;
+        let fy = -1;
+        for (let y = SELA.radius - 32; y >= SELA.radius - 90; y -= 0.5) {
+          if (density(x, y, z) >= 0) { fy = y; break; }
+        }
+        row.push(fy);
+        total += 1;
+        if (fy < 0) continue;
+        const depth = SELA.radius - Math.hypot(x, fy, z);
+        if (depth >= lo && depth <= hi) inBand += 1;
+      }
+      grid.push(row);
+    }
+    // The floor exists everywhere in the patch (no missing floor, no deep
+    // shafts): pits dip but stay inside their band.
+    expect(inBand / total).toBeGreaterThan(0.95);
+    // Slopes from the heightfield stay climbable almost everywhere.
+    let steep = 0;
+    let counted = 0;
+    const n = grid.length;
+    for (let ix = 1; ix < n - 1; ix += 1) {
+      for (let iz = 1; iz < n - 1; iz += 1) {
+        const f = (grid[ix] as number[])[iz] as number;
+        const fx1 = (grid[ix + 1] as number[])[iz] as number;
+        const fx0 = (grid[ix - 1] as number[])[iz] as number;
+        const fz1 = (grid[ix] as number[])[iz + 1] as number;
+        const fz0 = (grid[ix] as number[])[iz - 1] as number;
+        if (f < 0 || fx1 < 0 || fx0 < 0 || fz1 < 0 || fz0 < 0) continue;
+        const gx = (fx1 - fx0) / (2 * step);
+        const gz = (fz1 - fz0) / (2 * step);
+        counted += 1;
+        if (Math.atan(Math.hypot(gx, gz)) > (50 * Math.PI) / 180) steep += 1;
+      }
+    }
+    expect(counted).toBeGreaterThan(0);
+    expect(steep / counted).toBeLessThan(0.05);
+  }, 30000);
 });
