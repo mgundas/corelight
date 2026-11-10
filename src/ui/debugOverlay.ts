@@ -18,6 +18,10 @@ export interface OverlayStats {
   cacheSize?: number;
   emptyChunks?: number;
   desiredChunks?: number;
+  playerWorld?: Vec3d;
+  grounded?: boolean;
+  pendingColliders?: number;
+  loadedColliders?: number;
 }
 
 export class DebugOverlay {
@@ -57,10 +61,18 @@ export class DebugOverlay {
     if (stats.planet !== undefined && stats.depthM !== undefined && stats.layer !== undefined) {
       place = `\n${stats.planet}: depth ${stats.depthM.toFixed(1)} m, layer ${stats.layer}`;
     }
+    let player = '';
+    if (stats.playerWorld !== undefined) {
+      const p = stats.playerWorld;
+      player =
+        `\nplayer: ${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)}` +
+        (stats.grounded !== undefined ? ` grounded: ${stats.grounded ? 'yes' : 'no'}` : '') +
+        (stats.pendingColliders !== undefined ? ` colliders: ${stats.loadedColliders ?? 0} +${stats.pendingColliders} pending` : '');
+    }
     this.el.textContent =
       `FPS: ${stats.fps.toFixed(0)} | tick: ${stats.tickMs.toFixed(2)} ms | draws: ${stats.drawCalls}\n` +
       `cam: ${c.x.toFixed(1)}, ${c.y.toFixed(1)}, ${c.z.toFixed(1)}\n` +
       `origin: ${o.x.toFixed(0)}, ${o.y.toFixed(0)}, ${o.z.toFixed(0)} (shifts: ${stats.originShifts})\n` +
-      `fly speed: ${stats.flySpeed.toFixed(1)} m/s${place}${terrain}`;
+      `fly speed: ${stats.flySpeed.toFixed(1)} m/s${place}${player}${terrain}`;
   }
 }

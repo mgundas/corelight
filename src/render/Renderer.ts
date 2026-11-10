@@ -1,13 +1,14 @@
 import * as THREE from 'three';
 import { SELA } from '../planets/configs/sela.js';
 import type { PlanetConfig } from '../planets/PlanetConfig.js';
-import type { Vec3d } from '../core/math.js';
+import type { Quat, Vec3d } from '../core/math.js';
 import { ChunkManager, toWorldPlanes, type StreamStats } from '../terrain/chunkManager.js';
 import { MeshWorkerPool, type MeshResult } from '../terrain/workerPool.js';
 import { ChunkBounds } from './chunkBounds.js';
 import { ChunkMeshes } from './chunkMeshes.js';
-import { getOrigin } from './floatingOrigin.js';
+import { getOrigin, toLocal } from './floatingOrigin.js';
 import { frustumPlanes } from './frustum.js';
+import { PlayerView } from './views/playerView.js';
 
 // M02 renderer: scene + LOD-streamed chunk meshes. The ChunkManager owns
 // which chunks exist; pre-generation results (from the boot screen) are
@@ -30,6 +31,7 @@ export class Renderer {
   readonly pool = new MeshWorkerPool();
   readonly streamer: ChunkManager;
   readonly bounds = new ChunkBounds();
+  readonly playerView = new PlayerView();
 
   private sun: THREE.DirectionalLight;
   private readonly handleResize: () => void;
@@ -64,6 +66,7 @@ export class Renderer {
     this.scene.add(new THREE.AmbientLight(0x8899bb, 0.5));
     this.scene.add(this.chunks.group);
     this.scene.add(this.bounds.group);
+    this.scene.add(this.playerView.group);
 
     this.streamer = new ChunkManager(this.pool, this.chunks, planets, worldSeed);
     for (const pre of prebuilt) this.streamer.adopt(pre.planet, pre.results, pre.emptyKeys);
@@ -76,6 +79,7 @@ export class Renderer {
     window.removeEventListener('resize', this.handleResize);
     this.pool.dispose();
     this.chunks.dispose();
+    this.playerView.dispose();
     this.renderer.dispose();
   }
 
@@ -90,6 +94,15 @@ export class Renderer {
 
   streamStats(): StreamStats {
     return this.streamer.stats();
+  }
+
+  /** Third-person view: camera behind `camWorld`, looking at `headWorld`. */
+  applyRigCamera(headWorld: Vec3d, camWorld: Vec3d, upWorld: Vec3d): void {
+    const head = toLocal(headWorld);
+    const cam = toLocal(camWorld);
+    this.camera.up.set(upWorld.x, upWorld.y, upWorld.z);
+    this.camera.position.set(cam.x, cam.y, cam.z);
+    this.camera.lookAt(head.x, head.y, head.z);
   }
 
   setWireframe(enabled: boolean): void {
@@ -130,6 +143,30 @@ export class Renderer {
     this.bounds.resync(delta);
     // Sun stays at a fixed local offset so its direction never changes.
     this.sun.position.copy(SUN_DIRECTION).multiplyScalar(1000);
+  }
+
+  /** World-space ray against loaded chunk meshes; nearest hit or null. */
+  raycastTerrain(originWorld: Vec3d, dirWorld: Vec3d, maxDist: number): number | null {
+    const origin = toLocal(originWorld);
+    const ray = new THREE.Raycaster(
+      new THREE.Vector3(origin.x, origin.y, origin.z),
+      new THREE.Vector3(dirWorld.x, dirWorld.y, dirWorld.z),
+      0,
+      maxDist,
+    );
+    const hits = ray.intersectObjects(this.chunks.group.children, false);
+    const first = hits[0];
+    return first ? first.distance : null;
+  }
+
+  /** Record the player state after a sim tick (call once per tick). */
+  pushPlayerSample(pos: Vec3d, quat: Quat): void {
+    this.playerView.pushSample(pos, quat);
+  }
+
+  /** Place the astronaut view between the last two tick samples. */
+  renderPlayer(alpha: number): void {
+    this.playerView.render(alpha);
   }
 
   render(): void {

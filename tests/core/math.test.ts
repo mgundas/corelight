@@ -8,6 +8,7 @@ import {
   lerp,
   normalize,
   quatFromAxisAngle,
+  quatFromTo,
   quatMultiply,
   rotateVector,
   scale,
@@ -47,5 +48,19 @@ describe('vec3 math', () => {
     expect(rotateVector(vec3(1, 2, 3), IDENTITY_QUAT)).toEqual({ x: 1, y: 2, z: 3 });
     // q * identity = q.
     expect(quatMultiply(q, IDENTITY_QUAT)).toEqual(q);
+  });
+
+  it('quatFromTo aligns unit vectors (incl. degenerate cases)', () => {
+    const r = rotateVector(vec3(0, 1, 0), quatFromTo(vec3(0, 1, 0), vec3(0, 0, 1)));
+    expect(r.x).toBeCloseTo(0, 5);
+    expect(r.y).toBeCloseTo(0, 5);
+    expect(r.z).toBeCloseTo(1, 5);
+    // Identity case.
+    expect(quatFromTo(vec3(0, 1, 0), vec3(0, 1, 0))).toEqual(IDENTITY_QUAT);
+    // Antiparallel case maps +Y to -Y.
+    const flip = rotateVector(vec3(0, 1, 0), quatFromTo(vec3(0, 1, 0), vec3(0, -1, 0)));
+    expect(flip.x).toBeCloseTo(0, 5);
+    expect(flip.y).toBeCloseTo(-1, 5);
+    expect(flip.z).toBeCloseTo(0, 5);
   });
 });

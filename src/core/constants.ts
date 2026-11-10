@@ -45,3 +45,42 @@ export const STREAM_FRUSTUM_BONUS = 300;
 
 /** Low-poly detail for the M00 placeholder sphere (icosahedron subdivisions). */
 export const PLACEHOLDER_SPHERE_DETAIL = 5;
+
+/** Player capsule: total height 1.8 m, radius 0.35 m (M03). */
+export const PLAYER_HEIGHT = 1.8;
+export const PLAYER_RADIUS = 0.35;
+/** Capsule half-height of the cylindrical middle: height / 2 - radius. */
+export const PLAYER_HALF_HEIGHT = PLAYER_HEIGHT / 2 - PLAYER_RADIUS;
+
+/** Walk / sprint speeds in m/s (Astroneer-like, M03 feel). */
+export const PLAYER_WALK_SPEED = 5;
+export const PLAYER_SPRINT_SPEED = 8.5;
+/** Takeoff velocity for jumps; floaty in the low-g core chamber. */
+export const PLAYER_JUMP_SPEED = 4.5;
+
+/** Steepest slope the character climbs instead of sliding (degrees). */
+export const PLAYER_MAX_CLIMB_DEG = 50;
+/** Slopes steeper than this always slide (degrees). */
+export const PLAYER_MIN_SLIDE_DEG = 55;
+/** Step offset for autostep (stairs, small rocks). */
+export const PLAYER_STEP_HEIGHT = 0.3;
+/** Snap-to-ground distance so downhill steps don't bounce. */
+export const PLAYER_SNAP_DISTANCE = 0.5;
+/** Small gap the character controller keeps from colliders. */
+export const PLAYER_CONTROLLER_OFFSET = 0.02;
+
+/** Terrain collider ring around the player (ARCHITECTURE.md). */
+export const COLLIDER_RANGE_M = 48;
+
+/** Spawn raymarch: start this far above the nominal surface, step inward. */
+export const SPAWN_RAY_START_M = 200;
+export const SPAWN_RAY_STEP_M = 1;
+/** Capsule-center hover above the located surface point. */
+export const SPAWN_HOVER_M = PLAYER_HALF_HEIGHT + PLAYER_RADIUS + 0.3;
+
+/** Density at the capsule center that counts as "inside solid terrain". */
+export const EMBED_DENSITY_THRESHOLD = 0.5;
+/** Seconds embedded before the safety push-out kicks in. */
+export const EMBED_GRACE_S = 1;
+/** Push-out speed along the inverse density gradient. */
+export const EMBED_PUSH_SPEED = 2;

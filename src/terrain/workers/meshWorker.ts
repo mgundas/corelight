@@ -6,8 +6,8 @@
 import type { PlanetConfig } from '../../planets/PlanetConfig.js';
 import { cellSizeForLevel, type ChunkCoord } from '../chunkKey.js';
 import { colorAt, createDensityField, type DensityField } from '../density.js';
-import { SAMPLE_GRID, polygonize } from '../marchingCubes.js';
-import { nodeOrigin } from '../octree.js';
+import { polygonize } from '../marchingCubes.js';
+import { sampleGrid } from '../sampleGrid.js';
 
 export interface MeshJob {
   id: number;
@@ -56,26 +56,11 @@ workerScope.onmessage = (event: MessageEvent<MeshJob>): void => {
   const job = event.data;
   try {
     const field = fieldFor(job.planetConfig, job.worldSeed);
-    const density = field.density;
     const colorSalt = `${job.worldSeed}:${job.planetConfig.seed}:color`;
     const cellSize = cellSizeForLevel(job.level);
-    const size = SAMPLE_GRID;
-    const samples = new Float32Array(size * size * size);
-    const origin = nodeOrigin(job.planetConfig, job.level, job.coord);
-    // Sample the full 35^3 grid: inner 33^3 cells marched, outer ring is the
-    // border for central-difference normals. Index 1,1,1 == chunk origin.
-    let i = 0;
-    for (let iz = 0; iz < size; iz += 1) {
-      const z = origin.z + (iz - 1) * cellSize;
-      for (let iy = 0; iy < size; iy += 1) {
-        const y = origin.y + (iy - 1) * cellSize;
-        for (let ix = 0; ix < size; ix += 1) {
-          const x = origin.x + (ix - 1) * cellSize;
-          samples[i] = density(x, y, z);
-          i += 1;
-        }
-      }
-    }
+    // Full 35^3 grid: inner 33^3 cells marched, outer ring is the border
+    // for central-difference normals. Index 1,1,1 == chunk origin.
+    const { samples, origin } = sampleGrid(field, job.planetConfig, job.level, job.coord, cellSize);
     const mesh = polygonize(
       samples,
       origin,

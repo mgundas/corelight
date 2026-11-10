@@ -4,9 +4,12 @@ import { PLANETS } from './planets/solarSystem.js';
 import { runBoot } from './game/boot.js';
 import { Game } from './game/Game.js';
 import type { PrebuiltTerrain } from './render/Renderer.js';
+import { initPhysics } from './sim/physics/rapierWorld.js';
 import './main.css';
 
 async function boot(): Promise<void> {
+  // Rapier wasm must be ready before the game (and its physics system) starts.
+  await initPhysics();
   const params = getUrlParams();
   const seed = params.seed ?? DEFAULT_SEED;
 
@@ -20,7 +23,7 @@ async function boot(): Promise<void> {
   const hint = document.createElement('div');
   hint.id = 'hint';
   hint.textContent =
-    'Corelight M02 — streaming octree LOD, drag/click to look, WASD fly, Q/E down/up, wheel = speed, F1 overlay, F3 toggle fly, F4 wireframe, F5 chunk bounds';
+    'Corelight M03 — walk with WASD, mouse look (click), Space jump, Shift sprint, wheel zoom, F1 overlay, F3 fly, F4 wireframe, F5 chunk bounds';
   app.appendChild(hint);
 
   const { prebuilt } = await runBootSafe(seed, params.skipBoot);

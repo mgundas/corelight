@@ -91,3 +91,20 @@ export function rotateVector(v: Vec3d, q: Quat): Vec3d {
   const out = quatMultiply(tmp, conj);
   return { x: out.x, y: out.y, z: out.z };
 }
+
+/**
+ * Shortest-arc rotation taking unit vector `from` onto unit vector `to`.
+ * WHY: player orientation aligns local +Y with the spherical "up" every
+ * tick; building it here keeps three.js out of the sim.
+ */
+export function quatFromTo(from: Vec3d, to: Vec3d): Quat {
+  const d = Math.min(1, Math.max(-1, dot(from, to)));
+  if (d >= 1 - 1e-9) return { ...IDENTITY_QUAT };
+  if (d <= -1 + 1e-9) {
+    // Antiparallel: rotate PI around any perpendicular axis.
+    const axis =
+      Math.abs(from.x) < 0.9 ? cross(from, { x: 1, y: 0, z: 0 }) : cross(from, { x: 0, y: 1, z: 0 });
+    return quatFromAxisAngle(axis, Math.PI);
+  }
+  return quatFromAxisAngle(cross(from, to), Math.acos(d));
+}

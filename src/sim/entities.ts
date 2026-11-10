@@ -22,6 +22,7 @@ export interface Components {
   power: PowerComponent;
   printer: PrinterComponent;
   furnace: FurnaceComponent;
+  player: PlayerComponent;
 }
 
 export interface OxygenComponent {
@@ -42,6 +43,29 @@ export interface PrinterComponent {
 
 export interface FurnaceComponent {
   progress: number;
+}
+
+/** One-shot movement intent for the current tick (cleared when consumed). */
+export interface PlayerInputState {
+  /** Strafe right (+x) / left (-x), each in [-1, 1]. */
+  moveX: number;
+  /** Forward (+z) / back (-z), each in [-1, 1]. */
+  moveZ: number;
+  jump: boolean;
+  sprint: boolean;
+}
+
+export interface PlayerComponent {
+  /** World-frame velocity in m/s (vertical part is gravity-integrated). */
+  velocity: Vec3d;
+  grounded: boolean;
+  /** Look orientation: yaw around local up, pitch up/down (radians). */
+  yaw: number;
+  pitch: number;
+  /** Latest input, consumed once per tick by the physics system. */
+  input: PlayerInputState | null;
+  /** Seconds the capsule center has spent inside solid terrain. */
+  embeddedTime: number;
 }
 
 export interface Entity {
