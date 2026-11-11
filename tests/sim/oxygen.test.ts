@@ -163,8 +163,7 @@ describe('oxygen system', () => {
     expect(hazardMultiplier(vorn, local)).toBe(1.5);
   });
 
-  it('a canister auto-fires at 20 and refills to full', () => {
-    const { world, playerId } = oxygenWorld();
+  it('a canister auto-fires at 20 and refills to full', () => {    const { world, playerId } = oxygenWorld();
     const player = world.entities.get(playerId);
     if (!player) throw new Error('no player');
     const up = upAt(SELA, player.position);
@@ -189,6 +188,20 @@ describe('oxygen system', () => {
     const packAfter = world.entities.get(playerId)?.components.inventory?.slots ?? [];
     expect(
       packAfter.every((id) => id === null || world.entities.get(id)?.components.item?.itemId !== 'oxygen_canister'),
+    ).toBe(true);
+  });
+
+  it('on-network refill never burns a canister', () => {
+    const { world, playerId } = oxygenWorld();
+    giveItem(world, playerId, 'oxygen_canister');
+    // At the habitat (distance 0): refill only, canister stays packed.
+    setOxygen(world, playerId, 15);
+    world.tick(SIM_DT);
+    expect(oxygenOf(world, playerId)).toBeGreaterThan(15);
+    expect(oxygenOf(world, playerId)).toBeLessThan(OXYGEN_MAX);
+    const pack = world.entities.get(playerId)?.components.inventory?.slots ?? [];
+    expect(
+      pack.some((id) => id !== null && world.entities.get(id)?.components.item?.itemId === 'oxygen_canister'),
     ).toBe(true);
   });
 

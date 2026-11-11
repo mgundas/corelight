@@ -160,7 +160,8 @@ export function updateOxygen(world: World, planets: PlanetConfig[], dt: number):
         playerComp.deathMarkerId = null;
       }
     }
-    if (planet && isOnOxygenNetwork(world, player.id)) {
+    const onNetwork = planet ? isOnOxygenNetwork(world, player.id) : false;
+    if (onNetwork) {
       oxygen.value = Math.min(OXYGEN_MAX, oxygen.value + OXYGEN_REFILL_PER_S * dt);
     } else if (planet) {
       const local = {
@@ -173,7 +174,9 @@ export function updateOxygen(world: World, planets: PlanetConfig[], dt: number):
       // Deep space (no planet yet in v1 beyond SOIs): slow drain, no refill.
       oxygen.value = Math.max(0, oxygen.value - OXYGEN_DRAIN_PER_S * dt);
     }
-    if (oxygen.value <= OXYGEN_CANISTER_THRESHOLD && consumeCanister(world, player)) {
+    // Emergency canisters fire off-network only: arriving home at low O2
+    // must refill from the habitat, not burn a packed canister.
+    if (!onNetwork && oxygen.value <= OXYGEN_CANISTER_THRESHOLD && consumeCanister(world, player)) {
       oxygen.value = OXYGEN_MAX;
     }
     if (oxygen.value <= 0) {
