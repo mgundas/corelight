@@ -215,40 +215,56 @@ function findCaveSpot(
  * Deterministic node specs for one LOD0 chunk. Same world seed + planet +
  * chunk = identical nodes (positions, resources, charges), so live worlds
  * only store mining outcomes, never placements.
+ *
+ * Identity stability across edits: each index draws from its own RNG streams
+ * (`:i:spot` for the density march, `:i:props` for charges/resource), so a
+ * dig that changes one spot's march never cascades into other indices.
+ * Spot + resource derive from the BASE (unedited) density; the live (edited)
+ * field only re-seats the position onto the current surface nearby. Same
+ * id therefore always addresses the same deposit.
  */
 export function nodesForChunk(
   worldSeed: number,
   planet: PlanetConfig,
   coord: ChunkCoord,
-  density: DensityFn,
+  baseDensity: DensityFn,
+  liveDensity?: DensityFn,
 ): NodeSpec[] {
   const key = nodeChunkKey(planet.id, coord);
-  const rng = createRng(`${worldSeed}:${planet.seed}:${key}`);
-  const roll = rng();
+  const countRng = createRng(`${worldSeed}:${planet.seed}:${key}:count`);
+  const roll = countRng();
   const count = roll < 0.25 ? 0 : roll < 0.65 ? 1 : roll < 0.9 ? 2 : 3;
+  const live = liveDensity ?? baseDensity;
   const min = nodeOrigin(planet, 0, coord);
   const size = chunkSizeForLevel(0);
   const out: NodeSpec[] = [];
   for (let i = 0; i < count; i += 1) {
+    const spotRng = createRng(`${worldSeed}:${planet.seed}:${key}:${i}:spot`);
+    const propRng = createRng(`${worldSeed}:${planet.seed}:${key}:${i}:props`);
     // Alternate surface/cave attempts so walks find surface nodes and
     // cavers find wall crystals; a failed attempt just yields fewer nodes.
     const surfaceTurn = i % 2 === 0;
-    const spot = surfaceTurn
-      ? (findSurfaceSpot(density, planet, min, size, rng) ?? findCaveSpot(density, planet, min, size, rng))
-      : (findCaveSpot(density, planet, min, size, rng) ?? findSurfaceSpot(density, planet, min, size, rng));
-    if (!spot) continue;
-    const layer = layerAt(planet, spot.local.x, spot.local.y, spot.local.z);
-    const caveWall = !surfaceTurn || Math.abs(density(spot.local.x, spot.local.y, spot.local.z)) <= 1.5;
-    const charges = NODE_MIN_CHARGES + Math.floor(rng() * (NODE_MAX_CHARGES - NODE_MIN_CHARGES + 1));
-    const rotation = quatFromTo({ x: 0, y: 1, z: 0 }, spot.normal);
+    const baseSpot = surfaceTurn
+      ? (findSurfaceSpot(baseDensity, planet, min, size, spotRng) ??
+        findCaveSpot(baseDensity, planet, min, size, spotRng))
+      : (findCaveSpot(baseDensity, planet, min, size, spotRng) ??
+        findSurfaceSpot(baseDensity, planet, min, size, spotRng));
+    if (!baseSpot) continue;
+    const layer = layerAt(planet, baseSpot.local.x, baseSpot.local.y, baseSpot.local.z);
+    const caveWall =
+      !surfaceTurn || Math.abs(baseDensity(baseSpot.local.x, baseSpot.local.y, baseSpot.local.z)) <= 1.5;
+    const charges = NODE_MIN_CHARGES + Math.floor(propRng() * (NODE_MAX_CHARGES - NODE_MIN_CHARGES + 1));
+    const resourceId = pickResource(propRng, planet.id, layer.name, caveWall);
+    const seated = reseatOnLive(live, baseDensity, min, size, baseSpot);
+    const rotation = quatFromTo({ x: 0, y: 1, z: 0 }, seated.normal);
     out.push({
       id: nodeIdFor(planet.id, coord, i),
       chunkKey: key,
-      resourceId: pickResource(rng, planet.id, layer.name, caveWall),
+      resourceId,
       position: {
-        x: planet.center.x + spot.local.x,
-        y: planet.center.y + spot.local.y,
-        z: planet.center.z + spot.local.z,
+        x: planet.center.x + seated.local.x,
+        y: planet.center.y + seated.local.y,
+        z: planet.center.z + seated.local.z,
       },
       // +0: keep -0 out of saved rotations (JSON turns -0 into 0).
       rotation: { x: rotation.x + 0, y: rotation.y + 0, z: rotation.z + 0, w: rotation.w + 0 },
@@ -257,4 +273,46 @@ export function nodesForChunk(
     });
   }
   return out;
+}
+
+/**
+ * Re-seat a base spot onto the live edited field: when the ground moved a
+ * little (a nearby dig), track the surface along the same radial ray so the
+ * node never floats. When no crossing is found nearby (its own ground dug
+ * away), keep the base spot so mining re-seats the same id instead of
+ * deleting it.
+ */
+function reseatOnLive(
+  live: DensityFn,
+  base: DensityFn,
+  min: Vec3d,
+  size: number,
+  baseSpot: { local: Vec3d; normal: Vec3d },
+): { local: Vec3d; normal: Vec3d } {
+  if (live === base) return baseSpot;
+  if (Math.abs(live(baseSpot.local.x, baseSpot.local.y, baseSpot.local.z)) < 2) return baseSpot;
+  const dir = normalize(baseSpot.local);
+  if (dir.x === 0 && dir.y === 0 && dir.z === 0) return baseSpot;
+  const baseR = length(baseSpot.local);
+  let prevR = baseR + 6;
+  let prevD = live(dir.x * prevR, dir.y * prevR, dir.z * prevR);
+  for (let r = prevR - 0.5; r >= baseR - 6; r -= 0.5) {
+    const d = live(dir.x * r, dir.y * r, dir.z * r);
+    if (prevD < 0 && d >= 0) {
+      let lo = r;
+      let hi = prevR;
+      for (let k = 0; k < 8; k += 1) {
+        const mid = (lo + hi) / 2;
+        if (live(dir.x * mid, dir.y * mid, dir.z * mid) >= 0) lo = mid;
+        else hi = mid;
+      }
+      const cross = (lo + hi) / 2;
+      const local = { x: dir.x * cross, y: dir.y * cross, z: dir.z * cross };
+      if (!boxContains(min, size, local)) return baseSpot;
+      return { local, normal: normalAt(live, local) };
+    }
+    prevR = r;
+    prevD = d;
+  }
+  return baseSpot;
 }

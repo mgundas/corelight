@@ -4,6 +4,9 @@ import { World } from '../../src/sim/world.js';
 import { updateNodes } from '../../src/sim/systems/nodes.js';
 import { l0ChunksNear, nodeIdFor, nodesForChunk } from '../../src/sim/nodes.js';
 import { createDensityField } from '../../src/terrain/density.js';
+import { TerrainEdits } from '../../src/terrain/edits.js';
+import { chunkSizeForLevel } from '../../src/terrain/chunkKey.js';
+import { nodeOrigin } from '../../src/terrain/octree.js';
 import { findSpawnPosition } from '../../src/sim/physics/spawn.js';
 import { distance } from '../../src/core/math.js';
 import { NODE_DESPAWN_RANGE_M } from '../../src/core/constants.js';
@@ -139,6 +142,77 @@ describe('node streaming system', () => {
     const { world } = spawnWorld();
     // Fresh full-charge nodes near the player record nothing.
     expect(world.nodeCharges.size).toBe(0);
+  });
+
+  it('an unrelated dig in the same chunk keeps id to resource mapping', () => {
+    // Base specs from the unedited field; live specs after a far-away dig
+    // in the same chunk must keep every id -> resource (and charges).
+    let coord: { x: number; y: number; z: number } | null = null;
+    let before: ReturnType<typeof nodesForChunk> = [];
+    const probeBase = createDensityField(SELA, 1337);
+    for (let x = 12; x <= 20 && !coord; x += 1) {
+      for (let z = 12; z <= 20 && !coord; z += 1) {
+        const candidate = { x, y: 15, z };
+        const specs = nodesForChunk(1337, SELA, candidate, probeBase.density);
+        if (specs.length > 0) {
+          coord = candidate;
+          before = specs;
+        }
+      }
+    }
+    if (!coord) throw new Error('no nodes for stability probe');
+    const base = createDensityField(SELA, 1337);
+    const min = nodeOrigin(SELA, 0, coord);
+    const size = chunkSizeForLevel(0);
+    // Dig center far from every node spot (same chunk, unrelated ground).
+    let center: { x: number; y: number; z: number } | null = null;
+    for (let gx = 0; gx <= 4 && !center; gx += 1) {
+      for (let gz = 0; gz <= 4 && !center; gz += 1) {
+        const candidate = {
+          x: min.x + 4 + gx * 6 - SELA.center.x,
+          y: 0,
+          z: min.z + 4 + gz * 6 - SELA.center.z,
+        };
+        // Project onto the surface along the radial ray first.
+        const dirLen = Math.hypot(candidate.x, 10, candidate.z);
+        const dir = { x: candidate.x / dirLen, y: 10 / dirLen, z: candidate.z / dirLen };
+        let hit: { x: number; y: number; z: number } | null = null;
+        let prevD = base.density(dir.x * (SELA.radius + 80), dir.y * (SELA.radius + 80), dir.z * (SELA.radius + 80));
+        let prevR = SELA.radius + 80;
+        for (let r = prevR - 1; r > SELA.radius - 60; r -= 1) {
+          const d = base.density(dir.x * r, dir.y * r, dir.z * r);
+          if (prevD < 0 && d >= 0) {
+            hit = { x: dir.x * r, y: dir.y * r, z: dir.z * r };
+            break;
+          }
+          prevR = r;
+          prevD = d;
+        }
+        if (!hit) continue;
+        const far = before.every((spec) => {
+          const local = {
+            x: spec.position.x - SELA.center.x,
+            y: spec.position.y - SELA.center.y,
+            z: spec.position.z - SELA.center.z,
+          };
+          return Math.hypot(local.x - hit.x, local.y - hit.y, local.z - hit.z) > 10;
+        });
+        if (far) center = hit;
+      }
+    }
+    if (!center) throw new Error('no unrelated dig spot in chunk');
+    const edits = new TerrainEdits();
+    edits.applySphere(SELA, base.density, center, 2, 0.5, 'dig');
+    const live = createDensityField(SELA, 1337, (x, y, z) => edits.deltaAt(SELA, SELA.id, x, y, z));
+    const after = nodesForChunk(1337, SELA, coord, base.density, live.density);
+    expect(after.map((s) => s.id)).toEqual(before.map((s) => s.id));
+    for (const spec of after) {
+      const prev = before.find((s) => s.id === spec.id);
+      expect(prev).toBeDefined();
+      expect(spec.resourceId).toBe(prev?.resourceId);
+      expect(spec.charges).toBe(prev?.charges);
+    }
+    void size;
   });
 
   it('l0ChunksNear always includes the player chunk', () => {

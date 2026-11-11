@@ -41,6 +41,23 @@ function fieldFor(world: World, planet: PlanetConfig): DensityField {
   return field;
 }
 
+const baseFieldCache = new WeakMap<World, Map<string, DensityField>>();
+
+/** Unedited placement field: identity (spot + resource) never sees digs. */
+function baseFieldFor(world: World, planet: PlanetConfig): DensityField {
+  let perWorld = baseFieldCache.get(world);
+  if (!perWorld) {
+    perWorld = new Map();
+    baseFieldCache.set(world, perWorld);
+  }
+  let field = perWorld.get(planet.id);
+  if (!field) {
+    field = createDensityField(planet, world.seed);
+    perWorld.set(planet.id, field);
+  }
+  return field;
+}
+
 function settledFor(world: World): Set<string> {
   let settled = settledCache.get(world);
   if (!settled) {
@@ -109,12 +126,13 @@ export function updateNodes(world: World, planets: PlanetConfig[]): void {
     const planet = planets.find((p) => p.id === player.planetId);
     if (!planet) continue;
     const field = fieldFor(world, planet);
+    const base = baseFieldFor(world, planet);
     for (const coord of l0ChunksNear(player.position, planet)) {
       // Placement marches are the expensive part: run them once per visit.
       const key = nodeChunkKey(planet.id, coord);
       if (settled.has(key)) continue;
       settled.add(key);
-      for (const spec of nodesForChunk(world.seed, planet, coord, field.density)) {
+      for (const spec of nodesForChunk(world.seed, planet, coord, base.density, field.density)) {
         if (world.depletedNodes.has(spec.id)) continue;
         if (world.entities.has(spec.id)) continue;
         const charges = world.nodeCharges.get(spec.id) ?? spec.charges;
