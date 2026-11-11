@@ -4,13 +4,13 @@
 
 import { beforeEach, describe, expect, it } from 'vitest';
 import { SELA } from '../../src/planets/configs/sela.js';
-import { SIM_DT } from '../../src/core/constants.js';
+import { SIM_DT, TETHER_PLACE_AHEAD_M } from '../../src/core/constants.js';
 import { events } from '../../src/core/events.js';
-import { IDENTITY_QUAT } from '../../src/core/math.js';
+import { distance, IDENTITY_QUAT } from '../../src/core/math.js';
 import { findSpawnPosition } from '../../src/sim/physics/spawn.js';
 import { upAt } from '../../src/sim/physics/frames.js';
 import { updateTethers, segmentBlocked } from '../../src/sim/systems/tethers.js';
-import type { DensityField } from '../../src/terrain/density.js';
+import { createDensityField, type DensityField } from '../../src/terrain/density.js';
 import type { EntityId } from '../../src/sim/entities.js';
 import { World } from '../../src/sim/world.js';
 
@@ -193,6 +193,33 @@ describe('tether graph', () => {
     const posts = [...world.entities.values()].filter((e) => e.kind === 'tether');
     expect(posts).toHaveLength(1);
     expect(world.entities.get(playerId)?.components.inventory?.slots).not.toContain(itemId);
+  });
+
+  it('seats the post ahead of the player, never inside the avatar', () => {
+    const { world, playerId } = airChainWorld();
+    giveTetherItem(world, playerId);
+    world.dispatch({ type: 'placeTether', playerId });
+    world.tick(SIM_DT);
+    const player = world.entities.get(playerId);
+    const post = [...world.entities.values()].find((e) => e.kind === 'tether');
+    if (!player || !post) throw new Error('setup failed');
+    // Far enough to clear the 0.35 m capsule, close enough to see and
+    // to pull back up with E (3 m cone).
+    const d = distance(post.position, player.position);
+    expect(d).toBeGreaterThan(1);
+    expect(d).toBeLessThan(TETHER_PLACE_AHEAD_M + 1.5);
+    // Seated on the surface, not buried: base ~0, tip in open air.
+    const field = createDensityField(SELA, world.seed, (x, y, z) =>
+      world.terrainEdits.deltaAt(SELA, SELA.id, x, y, z),
+    );
+    const up = upAt(SELA, post.position);
+    const lp = {
+      x: post.position.x - SELA.center.x,
+      y: post.position.y - SELA.center.y,
+      z: post.position.z - SELA.center.z,
+    };
+    expect(field.density(lp.x, lp.y, lp.z)).toBeLessThanOrEqual(0.5);
+    expect(field.density(lp.x + up.x * 0.9, lp.y + up.y * 0.9, lp.z + up.z * 0.9)).toBeLessThan(0);
   });
 
   it('placeTether with an empty-handed pack places nothing', () => {

@@ -2,12 +2,12 @@
 // both files under the 400-line hard rule: placement math (ground seating,
 // backpack spend/refund) lives here, dispatch stays in applyAction.
 
-import { distance, IDENTITY_QUAT, quatFromTo } from '../core/math.js';
-import { BACKPACK_SLOTS, PICKUP_RANGE_M, TETHER_GROUND_SEARCH_M } from '../core/constants.js';
+import { distance, dot, IDENTITY_QUAT, normalize, quatFromTo, sub } from '../core/math.js';
+import { BACKPACK_SLOTS, PICKUP_RANGE_M, TETHER_GROUND_SEARCH_M, TETHER_PLACE_AHEAD_M, TETHER_SEAT_TOP_M } from '../core/constants.js';
 import { events } from '../core/events.js';
 import { createDensityField, type DensityField } from '../terrain/density.js';
 import type { Entity, EntityId } from './entities.js';
-import { upAt } from './physics/frames.js';
+import { moveBasis, upAt } from './physics/frames.js';
 import type { World } from './world.js';
 
 /** Backpack, lazily created (old M06 saves predate inventory). */
@@ -66,9 +66,10 @@ export function spawnHabitatEntity(world: World, planetId: string, position: { x
 }
 
 /**
- * Seat a new tether on the ground under the player: march down along -up
- * through the live (edited) density field for the first air->solid crossing.
- * Falls back to the player's feet when nothing is hit (mid-air placement).
+ * Seat a post at a ground anchor: march down along -up through the live
+ * (edited) density field for the first air->solid crossing. Starts well
+ * above the anchor to clear overhangs; falls back to 1 m below the anchor
+ * when nothing is hit (mid-air placement).
  */
 export function seatTetherOnGround(
   world: World,
@@ -87,7 +88,7 @@ export function seatTetherOnGround(
     baseFieldFor(world, planet.id).density(x, y, z) +
     world.terrainEdits.deltaAt(planet, planet.id, x, y, z);
   const step = 0.25;
-  const top = 1.0;
+  const top = TETHER_SEAT_TOP_M;
   const bottom = -TETHER_GROUND_SEARCH_M;
   let prevT = top;
   let prevD = live(local.x + up.x * prevT, local.y + up.y * prevT, local.z + up.z * prevT);
@@ -116,7 +117,9 @@ export function seatTetherOnGround(
   return { x: playerPos.x - up.x, y: playerPos.y - up.y, z: playerPos.z - up.z };
 }
 
-/** Spend one backpack Tether item on a post under the player. */
+/** Spend one backpack Tether item on a post ahead of the player. The post
+ * lands TETHER_PLACE_AHEAD_M in front (level with the look yaw): seating it
+ * under the feet buries it inside the astronaut where no camera can see it. */
 export function placeTether(world: World, playerId: EntityId): void {
   const playerEntity = world.entities.get(playerId);
   const inventory = playerEntity ? backpackFor(playerEntity) : null;
@@ -137,8 +140,18 @@ export function placeTether(world: World, playerId: EntityId): void {
   world.entities.delete(spentId);
   inventory.slots[slot] = null;
   const planet = world.planets.find((p) => p.id === playerEntity.planetId);
-  const position = seatTetherOnGround(world, playerEntity.planetId, playerEntity.position);
   const up = planet ? upAt(planet, playerEntity.position) : { x: 0, y: 1, z: 0 };
+  // Level the look direction (yaw only): pitching up must not skydrop the
+  // post, pitching down must not plant it inside the boots.
+  const { forward } = moveBasis(up, player.yaw, 0);
+  const flat = sub(forward, { x: up.x * dot(forward, up), y: up.y * dot(forward, up), z: up.z * dot(forward, up) });
+  const ahead = dot(flat, flat) > 1e-6 ? normalize(flat) : forward;
+  const anchor = {
+    x: playerEntity.position.x + ahead.x * TETHER_PLACE_AHEAD_M,
+    y: playerEntity.position.y + ahead.y * TETHER_PLACE_AHEAD_M,
+    z: playerEntity.position.z + ahead.z * TETHER_PLACE_AHEAD_M,
+  };
+  const position = seatTetherOnGround(world, playerEntity.planetId, anchor);
   const id = world.nextId('tether');
   world.entities.set(id, {
     id,

@@ -190,3 +190,9 @@ export const HABITAT_FLATTEN_RADIUS_M = 14;
 export const HABITAT_SPAWN_OFFSET_M = 8;
 /** Max drop distance for the tether ground-seat raymarch (m). */
 export const TETHER_GROUND_SEARCH_M = 6;
+/** Raymarch start height above the seat anchor (m, clears overhangs). */
+export const TETHER_SEAT_TOP_M = 6;
+/** How far ahead of the player a new post lands (m). Seating it under the
+ * feet hides it inside the astronaut; ahead keeps it visible and out of
+ * the capsule. Deviation from the prompt's "under the player", documented. */
+export const TETHER_PLACE_AHEAD_M = 1.5;
