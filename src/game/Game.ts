@@ -23,9 +23,9 @@ import { TerrainColliders } from '../sim/physics/terrainColliders.js';
 import { serializeWorld, type SaveData } from '../save/serialize.js';
 import { DebugOverlay } from '../ui/debugOverlay.js';
 import { Hud } from '../ui/hud.js';
-import { backpackFrame, tickBackpackInput } from './backpackWiring.js';
+import { tickBackpackInput } from './backpackWiring.js';
+import { updateFrameHud, updateToolPreview } from './frameHud.js';
 import { installDebugHandle } from './debugHandle.js';
-import { oxygenStatusFor } from './oxygenStatus.js';
 import { setupWorldSystems } from './worldSetup.js';
 import { updateDebugOverlay } from './debugStats.js';
 
@@ -215,7 +215,8 @@ export class Game {
 
   start(): void {
     if (this.running) return;
-    this.running = true;    this.lastTime = performance.now();
+    this.running = true;
+    this.lastTime = performance.now();
     const loop = (now: number): void => {
       if (!this.running) return;
       this.frame(now);
@@ -358,29 +359,18 @@ export class Game {
     // origin shifts only.
     this.renderer.updateStreaming(activePos);
     this.renderer.renderPlayer(alpha);
-    // Items, nodes, backpack and glow lights (M07) + the HUD slot bar.
-    {
-      const frame = backpackFrame(this.world, flying ? null : this.playerId, flying);
-      const o2 = oxygenStatusFor(this.world, flying ? null : this.playerId);
-      this.renderer.renderEntities(this.world.entities.values(), focusWorld, frame.carriedItemIds);
-      this.hud.update({
-        slots: frame.slotDefs,
-        selectedSlot: frame.selectedSlot,
-        soil: frame.soil,
-        prompt: frame.prompt,
-        oxygen: o2?.oxygen ?? 100,
-        onNetwork: o2?.onNetwork ?? true,
-        habitatHint: o2?.habitat ?? null,
-        deathHint: o2?.deathMarker ?? null,
-      });
-    }
+    updateFrameHud({
+      renderer: this.renderer,
+      hud: this.hud,
+      world: this.world,
+      playerId: this.playerId,
+      flying,
+      focusWorld,
+    });
     // Terrain brush preview: translucent sphere at the aim point (hidden in
     // fly mode or when nothing is in range). Re-set every frame from world
     // doubles, so origin shifts can never desync it.
-    this.renderer.setToolPreview(
-      flying || !this.toolAim.hit ? null : this.toolAim.hit,
-      this.tool.radius,
-    );
+    updateToolPreview({ renderer: this.renderer, flying, hit: this.toolAim.hit, radius: this.tool.radius });
     this.renderer.render();
 
     // Debug overlay content. The overlay no-ops while hidden, so skip the
