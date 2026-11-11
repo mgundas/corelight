@@ -1,11 +1,11 @@
-import { MAX_TICKS_PER_FRAME, SIM_DT, TOO_HARD_INDICATOR_S } from '../core/constants.js';
+import { MAX_TICKS_PER_FRAME, SIM_DT } from '../core/constants.js';
 import { events } from '../core/events.js';
-import { length, sub, type Vec3d } from '../core/math.js';
+import { type Vec3d } from '../core/math.js';
 import type { PlanetConfig } from '../planets/PlanetConfig.js';
 import { PLANETS } from '../planets/solarSystem.js';
-import { layerAt, type DensityField } from '../terrain/density.js';
+import { type DensityField } from '../terrain/density.js';
 import { ColliderPool } from '../terrain/colliderPool.js';
-import { getOrigin, maybeShiftOrigin, toLocal } from '../render/floatingOrigin.js';
+import { maybeShiftOrigin, toLocal } from '../render/floatingOrigin.js';
 import { Renderer, type PrebuiltTerrain } from '../render/Renderer.js';
 import { CameraRig } from '../player/cameraRig.js';
 import { wireTerrainEdits } from './editWiring.js';
@@ -15,14 +15,16 @@ import { PlayerInput } from '../player/input.js';
 import { TerrainTool, type ToolAim } from '../player/terrainTool.js';
 import { World } from '../sim/world.js';
 import type { EntityId } from '../sim/entities.js';
-import { timeOfDay, updateSun } from '../sim/systems/sun.js';
-import { computeEnvironment, findFollowed, nearestPlanet } from './environment.js';
+import { updateSun } from '../sim/systems/sun.js';
+import { computeEnvironment, findFollowed } from './environment.js';
 import { upAt } from '../sim/physics/frames.js';
 import { disposePhysics, physicsWorldFor } from '../sim/physics/rapierWorld.js';
 import { findSpawnPosition } from '../sim/physics/spawn.js';
 import { makePhysicsSystem } from '../sim/physics/system.js';
 import { TerrainColliders } from '../sim/physics/terrainColliders.js';
+import { serializeWorld, type SaveData } from '../save/serialize.js';
 import { DebugOverlay } from '../ui/debugOverlay.js';
+import { updateDebugOverlay } from './debugStats.js';
 
 // Game owns World + Renderer and wires the fixed-timestep loop:
 // sim advances at 30 Hz with an accumulator; rendering interpolates
@@ -57,6 +59,8 @@ export class Game {
   private originShifts = 0;
   private flySpeed = 60;
   private wireframe = false;
+  /** Pause menu state: ticks stop, rendering continues behind the menu. */
+  private paused = false;
   private readonly planets: PlanetConfig[];
   private readonly unsubscribeOriginShifted: () => void;
   private readonly unsubscribeTerrainEdited: () => void;
@@ -67,16 +71,27 @@ export class Game {
     planets: PlanetConfig[] = PLANETS,
     prebuilt: PrebuiltTerrain[] = [],
     initialTimeS = 0,
+    /** Restored world for the Continue path (edits/entities/clock intact). */
+    existingWorld?: World,
   ) {
     this.planets = planets;
-    this.world = new World(seed);
-    this.world.planets = planets;
-    // ?time= starts the clock mid-cycle; the sun system derives light from it.
-    this.world.time = initialTimeS;
+    if (existingWorld) {
+      // Continue path: the world already carries planets, clock, entities
+      // and edits. It must reach the streamer before the first frame (the
+      // edit source below reads it live) so edited ground never flashes
+      // unedited. Seeding/spawning is skipped; the clock stays exact.
+      this.world = existingWorld;
+    } else {
+      // Fresh setup goes through the constructor: no direct World field
+      // assignment (hard rule 2), only dispatch() + systems after this.
+      this.world = new World(seed, { planets, time: initialTimeS });
+    }
 
     // Physics first: collider ring (worker-backed, edit-aware) + movement
     // system, then the spawn so the very first tick already
-    // freezes/requests correctly.
+    // freezes/requests correctly. All seeds derive from the world (a
+    // restored save brings its own), never from boot/URL params.
+    const worldSeed = this.world.seed;
     this.colliders = new TerrainColliders(
       {
         request: (planet, worldSeed, coord, editVersion) =>
@@ -91,25 +106,34 @@ export class Game {
       physicsWorldFor,
     );
     this.world.addSystem(
-      makePhysicsSystem({ planets, worldSeed: seed, colliders: this.colliders, edits: this.world.terrainEdits }),
+      makePhysicsSystem({ planets, worldSeed, colliders: this.colliders, edits: this.world.terrainEdits }),
     );
     // Environment clock (order-free: only re-derives sunDirection from time).
     this.world.addSystem(updateSun);
     const home = planets[0] as PlanetConfig;
-    this.world.dispatch({
-      type: 'spawnPlayer',
-      planetId: home.id,
-      position: findSpawnPosition(home, seed),
-    });
-    this.world.tick(SIM_DT);
-    for (const entity of this.world.entities.values()) {
-      if (entity.kind === 'player') {
-        this.playerId = entity.id;
-        break;
+    if (existingWorld) {
+      for (const entity of this.world.entities.values()) {
+        if (entity.kind === 'player') {
+          this.playerId = entity.id;
+          break;
+        }
+      }
+    } else {
+      this.world.dispatch({
+        type: 'spawnPlayer',
+        planetId: home.id,
+        position: findSpawnPosition(home, seed),
+      });
+      this.world.tick(SIM_DT);
+      for (const entity of this.world.entities.values()) {
+        if (entity.kind === 'player') {
+          this.playerId = entity.id;
+          break;
+        }
       }
     }
 
-    this.renderer = new Renderer(canvas, seed, planets, prebuilt);
+    this.renderer = new Renderer(canvas, worldSeed, planets, prebuilt);
     const wiring = wireTerrainEdits(this.world, planets, this.colliders, this.renderer.streamer);
     this.toolFields = wiring.toolFields;
     this.unsubscribeTerrainEdited = wiring.dispose;
@@ -182,10 +206,23 @@ export class Game {
     }
   }
 
+  /** Freeze sim ticks (pause menu); rendering continues behind the menu. */
+  setPaused(paused: boolean): void {
+    this.paused = paused;
+  }
+
+  isPaused(): boolean {
+    return this.paused;
+  }
+
+  /** Current world as a save payload (autosave / Save now). */
+  snapshot(): SaveData {
+    return serializeWorld(this.world);
+  }
+
   start(): void {
     if (this.running) return;
-    this.running = true;
-    this.lastTime = performance.now();
+    this.running = true;    this.lastTime = performance.now();
     const loop = (now: number): void => {
       if (!this.running) return;
       this.frame(now);
@@ -231,10 +268,11 @@ export class Game {
     const toolButtons = this.input.toolButtons();
     const toolActive = toolButtons.dig || toolButtons.add || toolButtons.flatten;
     this.computeToolAim(Math.min(1, Math.max(0, this.accumulator / SIM_DT)), toolActive);
-    this.accumulator += frameDt;
-    let ticks = 0;
     const flying = this.flyCamera.enabled;
-    while (this.accumulator >= SIM_DT && ticks < MAX_TICKS_PER_FRAME) {
+    if (!this.paused) {
+      this.accumulator += frameDt;
+      let ticks = 0;
+      while (this.accumulator >= SIM_DT && ticks < MAX_TICKS_PER_FRAME) {
       // Headlamp toggle is consumed every tick, in fly mode too (the lamp
       // rides the camera): gating it on third-person would swallow presses.
       if (this.input.consumeHeadlampToggle() && this.playerId) {
@@ -263,9 +301,10 @@ export class Game {
       ticks += 1;
       const player = this.playerId ? this.world.entities.get(this.playerId) : undefined;
       if (player) this.renderer.pushPlayerSample(player.position, player.rotation);
-    }
-    if (ticks === MAX_TICKS_PER_FRAME) {
-      this.accumulator = 0;
+      }
+      if (ticks === MAX_TICKS_PER_FRAME) {
+        this.accumulator = 0;
+      }
     }
 
     // Active camera: fly cam in F3 mode, orbit rig otherwise (streaming and
@@ -332,58 +371,21 @@ export class Game {
     // Debug overlay content. The overlay no-ops while hidden, so skip the
     // stats work (mesh counts, layer lookup) entirely in that case.
     if (this.overlay.isVisible()) {
-      const followed = findFollowed(this.world, this.planets, this.playerId);
-      const planet = followed?.planet ?? nearestPlanet(this.planets, activePos);
-      const focus = followed?.position ?? activePos;
-      const rel = {
-        x: focus.x - planet.center.x,
-        y: focus.y - planet.center.y,
-        z: focus.z - planet.center.z,
-      };
-      const depth = planet.radius - length(rel);
-      const stats = this.renderer.streamStats();
-      const lod = stats.perLevel
-        .map((count, level) => (count ? `L${level}:${count}` : null))
-        .filter((part) => part !== null)
-        .join(' ');
-      const player = this.playerId ? this.world.entities.get(this.playerId) : undefined;
-      const playerComp = player?.components.player;
-      // Tool readout: layer + hardness under the brush cursor, soil counter,
-      // and the too-hard indicator (freshly blocked dig, <1.5 s ago).
-      let toolInfo: string | undefined;
-      if (this.toolAim.hit && this.toolAim.planet) {
-        const hitLocal = sub(this.toolAim.hit, this.toolAim.planet.center);
-        const toolLayer = layerAt(this.toolAim.planet, hitLocal.x, hitLocal.y, hitLocal.z);
-        toolInfo = `${toolLayer.name} h${toolLayer.hardness}`;
-      }
-      this.overlay.update({
+      updateDebugOverlay({
+        world: this.world,
+        planets: this.planets,
+        renderer: this.renderer,
+        overlay: this.overlay,
+        colliders: this.colliders,
+        playerId: this.playerId,
+        toolAim: this.toolAim,
+        toolRadius: this.tool.radius,
         fps: this.fps,
         tickMs: this.lastTickMs,
-        cameraWorld: { ...activePos },
-        origin: getOrigin(),
-        drawCalls: this.renderer.renderer.info.render.calls,
         flySpeed: this.flySpeed,
         originShifts: this.originShifts,
-        timeOfDay: timeOfDay(this.world),
-        belowSurfaceM: depthBelowM,
-        planet: planet.name,
-        depthM: depth,
-        layer: layerAt(planet, rel.x, rel.y, rel.z).name,
-        lodCounts: lod,
-        pendingJobs: stats.pending,
-        cacheSize: stats.cacheSize,
-        emptyChunks: stats.empty,
-        desiredChunks: stats.desired,
-        playerWorld: player ? { ...player.position } : undefined,
-        grounded: player?.components.player?.grounded,
-        pendingColliders: this.colliders.pendingCount,
-        loadedColliders: this.colliders.loadedCount,
-        soil: playerComp?.soil,
-        toolRadius: this.tool.radius,
-        toolInfo,
-        tooHard:
-          playerComp !== undefined &&
-          this.world.time - playerComp.lastTooHard < TOO_HARD_INDICATOR_S,
+        activePos,
+        depthBelowM,
       });
     }
   }

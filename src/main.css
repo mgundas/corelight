@@ -83,3 +83,71 @@ body {
   font-size: 13px;
   color: #9fb0cc;
 }
+
+#menu,
+#pause-menu {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: rgb(5 7 15 / 82%);
+  color: #e8eefc;
+  z-index: 30;
+}
+
+#menu h1,
+#pause-menu h1 {
+  font-size: 42px;
+  letter-spacing: 6px;
+  margin: 0;
+}
+
+.menu-sub {
+  font-size: 14px;
+  color: #9fb0cc;
+}
+
+.menu-buttons {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.menu-button {
+  min-width: 260px;
+  padding: 10px 18px;
+  font-size: 15px;
+  color: #e8eefc;
+  background: rgb(255 255 255 / 10%);
+  border: 1px solid rgb(255 255 255 / 22%);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.menu-button:hover:not(:disabled) {
+  background: rgb(111 211 255 / 25%);
+}
+
+.menu-button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.menu-note {
+  font-size: 13px;
+  color: #9fb0cc;
+  max-width: 320px;
+  text-align: center;
+}
+
+.menu-error {
+  font-size: 13px;
+  color: #ff9d9d;
+  max-width: 340px;
+  text-align: center;
+}

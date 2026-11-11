@@ -12,7 +12,7 @@ The coding agent updates this file at the end of every milestone. Keep it short:
 | M03 Gravity and player | done | Spherical gravity, Rapier character controller, collider ring, third-person astronaut |
 | M04 Terrain tool | done | Dig/add/flatten via sparse TerrainEdits, worker edit deltas, priority remesh, soil + hardness, tool preview |
 | M05 Light, sky, day/night | done | Shared orbiting sun, depth darkness, headlamp, atmosphere shell, sky/stars/sun disc, matched fog, texel-snapped shadows |
-| M06 Save and load | not started | |
+| M06 Save and load | done | Versioned IndexedDB saves (entities, clock, ID counter, base64 Float32 edits), autosave, main/pause menus, clean architecture checkpoint |
 | M07 Resources and backpack | not started | |
 | M08 Oxygen and tethers | not started | |
 | M09 Printing | not started | |
@@ -54,6 +54,11 @@ The coding agent updates this file at the end of every milestone. Keep it short:
 - M05 shadows: single 64 m / 2048 cascade around the player, texel-snapped in light space (unit-tested idempotence); only LOD0/LOD1 cast/receive, so the depth pass covers a handful of near chunks. HemisphereLight (sky/ground tinted) replaces the old AmbientLight.
 - M05 headlamp defaults ON (helmet lamp at spawn); L toggles via `toggleHeadlamp` action.
 - M05 file-size split: per-frame environment assembly + `findFollowed`/`nearestPlanet` live in `game/environment.ts`, keeping `Game.ts` at 398 lines.
+
+- M06 direct-mutation fix (checkpoint item 2): `Game` used to assign `world.planets`/`world.time` after construction. `World` now takes `WorldOptions { planets, time, idCounter }` in its constructor; save restore passes all three, and all mesh/physics seeds derive from `world.seed` (a Continue with a foreign `?seed=` no longer builds terrain with the URL seed).
+- M06 save format: one base64 little-endian Float32 blob per edited chunk (`[index, delta, ...]`; indices < 2^24 round-trip exactly). Base64 lives in `save/serialize.ts`, not `TerrainEdits` (terrain stays free of encoding APIs; edits re-enter through the validated `TerrainEdits.deserialize`). Player `lastTooHard: -Infinity` normalizes to JSON null at the boundary and back. Float32 quantizes deltas ~1e-9, so density equality is asserted to 1e-6, and re-saves are bit-stable.
+- M06 boot/seed deviation: the menu appears after the boot screen per the prompt, but boot pre-generation is seed-dependent — on Continue with a different seed the coarse prebuilt is dropped (streamer rebuilds live) rather than flashing wrong terrain. `?time=` applies to fresh games only; Continue keeps the stored clock.
+- M06 pause: `Game.setPaused` freezes tick accumulation (rendering continues behind the menu). Esc while pointer-locked exits the lock instead of reaching the page (browser behavior), so the menu needs a second press — noted in the hint bar.
 
 ## Per-milestone notes
 
@@ -132,3 +137,9 @@ Fix: shell multiplier 1.25 → 1.5 (new `ATMOSPHERE_SHELL_MULT` constant; delibe
 Tests: fade-complete-by-2000 m, day-sky-preserved at 300 m, near-black night. 193 tests pass.
 Run: `npm run dev`, F3-fly to ~600 m — shell clearly separated above the terrain; keep climbing past ~2 km — sky goes black with stars while the planet stays lit.
 Follow-up: 1.5x read as a detached glass "cell" from far away, so the shell is now 1.35x (140 m over Sela) — between the too-low 1.25x and the too-bubbly 1.5x — with a test pinning the radius wiring.
+
+### M06 Save and load (done)
+Built: `src/save/serialize.ts` (`SAVE_VERSION = 1`, empty `migrations`, `serializeWorld`/`deserializeWorld` with seed/clock/ID-counter/entities/base64-Float32 edits, full validation), `src/save/storage.ts` (idb-keyval `corelight-save-v1`, 60 s autosave + `visibilitychange`/pagehide, `startAutosave` stop handle), `src/ui/menu.ts` (main menu after boot: Continue only with a save, New game with overwrite confirm, Settings placeholder; Esc pause menu: Resume, Save now with feedback, Quit to menu), `main.ts` menu→session→menu loop (restored world reaches `Game` before the streamer starts; seed-mismatched prebuilt dropped), `Game.setPaused`/`snapshot`, `game/debugStats.ts` extraction (Game 392 lines). Tests: `tests/save/serialize.test.ts` (round trip incl. JSON string pass, density to 1e-6, corrupt rejection, version pin). 197 tests pass.
+Run: `npm run dev`, dig/add, Esc → Save now (or wait 60 s / hide the tab), reload, Continue — player, clock and holes intact; New game resets; Esc pauses/resumes.
+Architecture checkpoint (all zero violations): `from 'three'` in `src/sim`/`src/terrain` — none; gameplay mutations outside dispatch/systems — none (one fix: `Game` assigned `world.planets`/`world.time` directly, now via `WorldOptions` constructor); files >400 lines — none (max `Game.ts` 392); `: any`/`as any` — none (one comment false positive, "any steady direction").
+Manual acceptance still to verify in-browser: full dig/reload/Continue cycle with time-of-day match (covered headless by the round-trip test; no GPU here).

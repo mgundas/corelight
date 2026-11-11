@@ -286,6 +286,14 @@ export class TerrainEdits {
     return { version: 1, chunks };
   }
 
+  /** Replace all stored deltas with a copy of another instance (save restore). */
+  copyFrom(other: TerrainEdits): void {
+    this.chunks.clear();
+    for (const [key, inner] of other.chunks) {
+      if (inner.size > 0) this.chunks.set(key, new Map(inner));
+    }
+  }
+
   static deserialize(data: unknown): TerrainEdits {
     const edits = new TerrainEdits();
     if (typeof data !== 'object' || data === null) throw new Error('bad edits: not an object');
