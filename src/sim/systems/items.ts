@@ -1,14 +1,17 @@
 // Item physics (M07): loose items are Rapier dynamic bodies with custom
 // spherical gravity. The global Rapier gravity stays zero (ARCHITECTURE.md);
 // each tick the system integrates the planet pull into each loose item's
-// velocity by hand and steps the world once per planet, so items fall and
-// rest on the same trimesh terrain the player stands on. Carried items
-// (holder set) own no body and are skipped.
+// velocity by hand. Stepping is centralized: the physics system steps every
+// planet world once per tick after all intents are written (players and
+// items share these worlds, and stepping twice would integrate items 2x
+// fast). Positions are read back from the bodies integrated by the previous
+// tick's central step, so entity state always reflects resolved contacts.
+// Carried items (holder set) own no body and are skipped.
 
 import RAPIER from '@dimforge/rapier3d-compat';
 import { ITEM_BODY_RADIUS } from '../../core/constants.js';
 import type { PlanetConfig } from '../../planets/PlanetConfig.js';
-import type { Entity, EntityId } from '../entities.js';
+import type { EntityId } from '../entities.js';
 import { toLocalFrame, toWorldFrame } from '../physics/frames.js';
 import { gravityAt } from '../physics/gravity.js';
 import type { World } from '../world.js';
@@ -40,8 +43,17 @@ export function makeItemsSystem(opts: ItemsOptions): (world: World, dt: number) 
         bodies.delete(id);
       }
     }
-    const stepped = new Set<string>();
-    const touched: { entity: Entity; entry: ItemBody }[] = [];
+    // Read back positions from bodies moved by the previous tick's central
+    // step (contacts resolved there, not here).
+    for (const [id, entry] of bodies) {
+      const entity = world.entities.get(id);
+      const planet = opts.planets.find((p) => p.id === entry.planetId);
+      if (!entity || entity.kind !== 'item' || !planet) continue;
+      const t = entry.body.translation();
+      entity.position = toWorldFrame(planet, { x: t.x, y: t.y, z: t.z });
+    }
+    // Integrate custom gravity into velocities (the central step applies
+    // them). Rapier global gravity stays zero.
     for (const entity of world.entities.values()) {
       if (entity.kind !== 'item' || entity.components.item?.holder !== undefined) continue;
       const sample = gravityAt(opts.planets, entity.position);
@@ -59,8 +71,6 @@ export function makeItemsSystem(opts: ItemsOptions): (world: World, dt: number) 
         bodies.set(entity.id, entry);
       }
       if (entry.planetId !== planet.id) continue;
-      // Custom gravity: Rapier global gravity is zero, so integrate the
-      // spherical pull into the body velocity by hand each tick.
       const linvel = entry.body.linvel();
       entry.body.setLinvel(
         {
@@ -70,20 +80,6 @@ export function makeItemsSystem(opts: ItemsOptions): (world: World, dt: number) 
         },
         true,
       );
-      touched.push({ entity, entry });
-      stepped.add(planet.id);
-    }
-    // One deterministic step per touched planet, then read positions back.
-    for (const planetId of stepped) {
-      const rapierWorld = opts.worldFor(planetId);
-      rapierWorld.timestep = dt;
-      rapierWorld.step();
-    }
-    for (const { entity, entry } of touched) {
-      const planet = opts.planets.find((p) => p.id === entry.planetId);
-      if (!planet) continue;
-      const t = entry.body.translation();
-      entity.position = toWorldFrame(planet, { x: t.x, y: t.y, z: t.z });
     }
   };
 }

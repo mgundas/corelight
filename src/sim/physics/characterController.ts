@@ -99,7 +99,6 @@ export class PlayerBody {
     this.ensureBound(planet, local);
     const controller = this.controller as RAPIER.KinematicCharacterController;
     const collider = this.collider as RAPIER.Collider;
-    const world = this.world as RAPIER.World;
     controller.setUp(up);
 
     const intent: PlayerInputState = player.input ?? { moveX: 0, moveZ: 0, jump: false, sprint: false };
@@ -129,12 +128,10 @@ export class PlayerBody {
     const movement = controller.computedMovement();
     const nextLocal = { x: local.x + movement.x, y: local.y + movement.y, z: local.z + movement.z };
     collider.setTranslation(nextLocal);
-    // Propagate collider moves (and freshly added terrain trimeshes) into
-    // the broadphase: without a step, queries run on stale structures and
-    // the character falls through. No dynamic bodies exist in M03, so this
-    // only refreshes queries. Deterministic: fixed dt, fixed order.
-    world.timestep = dt;
-    world.step();
+    // No world.step() here: stepping is centralized at the end of the
+    // physics system tick (single authority; item bodies share these
+    // worlds, and stepping twice would integrate them 2x fast). Queries
+    // run on last tick's broadphase, which is fine at fixed 30 Hz.
     player.grounded = controller.computedGrounded();
     player.input = null;
 

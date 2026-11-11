@@ -10,13 +10,23 @@ import type { EntityId } from '../sim/entities.js';
 import type { World } from '../sim/world.js';
 import { findAimedItem } from './pickup.js';
 
-/** Consume edge-triggered backpack keys into Actions (call once per tick). */
-export function tickBackpackInput(world: World, playerId: EntityId, input: PlayerInput): void {
+/** Consume edge-triggered backpack keys into Actions (call once per tick).
+ * Queues drain unconditionally so presses with no eligible player never fire
+ * late; dispatches only happen when the player can act. */
+export function tickBackpackInput(
+  world: World,
+  playerId: EntityId | null,
+  input: PlayerInput,
+  canAct: boolean,
+): void {
   const select = input.consumeSelect();
+  const drop = input.consumeDrop();
+  const interact = input.consumeInteract();
+  if (!canAct || !playerId) return;
   if (select !== null && select >= 0 && select < BACKPACK_SLOTS) {
     world.dispatch({ type: 'selectSlot', playerId, slot: select });
   }
-  if (input.consumeDrop()) {
+  if (drop) {
     const holder = world.entities.get(playerId);
     world.dispatch({
       type: 'drop',
@@ -24,7 +34,7 @@ export function tickBackpackInput(world: World, playerId: EntityId, input: Playe
       slot: holder?.components.inventory?.selectedSlot ?? 0,
     });
   }
-  if (input.consumeInteract()) {
+  if (interact) {
     const aimed = findAimedItem(world, playerId);
     if (aimed) world.dispatch({ type: 'pickUp', playerId, itemId: aimed });
   }

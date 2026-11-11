@@ -331,7 +331,9 @@ function mineNodes(world: World, planetId: string, center: Vec3d, radius: number
     if (distance(entity.position, center) > radius + 1.5) continue;
     node.charges -= 1;
     // Partial progress persists across far despawns (reapplied on respawn).
-    world.nodeCharges.set(id, node.charges);
+    // Full-charge nodes need no record (placement already derives them).
+    if (node.charges !== node.maxCharges) world.nodeCharges.set(id, node.charges);
+    else world.nodeCharges.delete(id);
     const up = upAt(planet, entity.position);
     const itemId = world.nextId('item');
     world.entities.set(itemId, {

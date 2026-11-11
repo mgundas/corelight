@@ -85,6 +85,38 @@ describe('item physics', () => {
     colliders.dispose();
   }, 60000);
 
+  it('loose items integrate gravity once per tick (single step authority)', async () => {
+    const { world, colliders, playerId } = makeWorld();
+    const player = world.entities.get(playerId);
+    if (!player) throw new Error('missing player');
+    // Let the player land so terrain colliders are loaded (shared world).
+    await tickFlushed(world, 400);
+    const up = upAt(SELA, player.position);
+    const start = {
+      x: player.position.x + up.x * 30,
+      y: player.position.y + up.y * 30,
+      z: player.position.z + up.z * 30,
+    };
+    const itemId = world.nextId('item');
+    world.entities.set(itemId, {
+      id: itemId,
+      kind: 'item',
+      planetId: SELA.id,
+      position: { ...start },
+      rotation: { ...IDENTITY_QUAT },
+      components: { item: { itemId: 'resin' } },
+    });
+    // 60 ticks = 2 s at g = 6: semi-implicit Euler falls ~12 m. A second
+    // world.step per tick would double-integrate to ~24 m.
+    await tickFlushed(world, 60);
+    const item = world.entities.get(itemId);
+    if (!item) throw new Error('item lost');
+    const fallen = length(sub(start, item.position));
+    expect(fallen).toBeGreaterThan(10);
+    expect(fallen).toBeLessThan(14);
+    colliders.dispose();
+  }, 60000);
+
   it('carried items own no body and never move', async () => {
     const { world, colliders, playerId } = makeWorld();
     const player = world.entities.get(playerId);

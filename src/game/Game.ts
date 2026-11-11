@@ -243,6 +243,9 @@ export class Game {
       if (this.input.consumeHeadlampToggle() && this.playerId) {
         this.world.dispatch({ type: 'toggleHeadlamp', playerId: this.playerId });
       }
+      // Backpack keys drain every tick (E/Q/digits never fire late); they
+      // only dispatch when the player can act.
+      tickBackpackInput(this.world, this.playerId, this.input, !flying && this.playerId !== null);
       if (!flying && this.playerId) {
         const move = this.input.move();
         this.world.dispatch({
@@ -254,9 +257,7 @@ export class Game {
           lookYaw: this.rig.yaw,
           lookPitch: this.rig.pitch,
         });
-        // Backpack keys (M07): digits select a slot immediately, Q drops
-        // the selected slot, E picks up the aimed item in range.
-        tickBackpackInput(this.world, this.playerId, this.input);
+        // Backpack dispatches already happened above (drained every tick).
         if (toolActive) {
           const edit = this.tool.update(performance.now(), this.playerId, toolButtons, this.toolAim);
           if (edit) this.world.dispatch(edit);

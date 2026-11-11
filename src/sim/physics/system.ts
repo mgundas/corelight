@@ -20,7 +20,7 @@ import type { System } from '../world.js';
 import { PlayerBody } from './characterController.js';
 import { toLocalFrame, upAt } from './frames.js';
 import { gravityAt } from './gravity.js';
-import { physicsWorldFor } from './rapierWorld.js';
+import { physicsWorldFor, stepPlanetWorlds } from './rapierWorld.js';
 import { TerrainColliders } from './terrainColliders.js';
 
 export interface PhysicsOptions {
@@ -140,5 +140,9 @@ export function makePhysicsSystem(opts: PhysicsOptions): System {
       }
       body.step(entity, opts.planets, dt);
     }
+    // Single stepping authority: one step per planet world per tick, after
+    // every controller and item body has written its intent. Shared worlds
+    // must not step per body (loose items would integrate 2x fast).
+    stepPlanetWorlds(dt);
   };
 }

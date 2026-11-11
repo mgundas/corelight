@@ -18,6 +18,10 @@ describe('item catalog', () => {
       'copper',
       'polymer',
       'research_sample',
+      // Backpack-printer outputs (crafting arrives in M09; defs first).
+      'tether',
+      'light_stick',
+      'oxygen_canister',
     ]) {
       expect(ids.has(id)).toBe(true);
     }

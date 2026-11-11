@@ -106,6 +106,41 @@ describe('node streaming system', () => {
     expect(world.entities.has(node.id)).toBe(false);
   });
 
+  it('a terrain edit re-seats nodes instead of leaving them floating', () => {
+    const { world, playerId } = spawnWorld();
+    updateNodes(world, [SELA]);
+    const node = [...world.entities.values()].find((e) => e.kind === 'node');
+    if (!node) throw new Error('no nodes spawned');
+    const nodeComp = node.components.node;
+    if (!nodeComp) throw new Error('node has no component');
+    const full = nodeComp.charges;
+    world.dispatch({ type: 'playerTeleport', playerId, position: { ...node.position } });
+    world.tick();
+    // One dig stroke mines a charge AND flags the chunk dirty. The drain
+    // re-seats the same deterministic id with progress kept.
+    world.dispatch({
+      type: 'terrainEdit',
+      playerId,
+      planetId: SELA.id,
+      mode: 'dig',
+      center: { ...node.position },
+      radius: 2,
+      strength: 0.5,
+    });
+    world.tick();
+    updateNodes(world, [SELA]);
+    const reseated = world.entities.get(node.id);
+    expect(reseated).toBeDefined();
+    expect(reseated?.components.node?.charges).toBe(full - 1);
+    expect(world.nodeCharges.get(node.id)).toBe(full - 1);
+  });
+
+  it('nodeCharges only tracks partial progress', () => {
+    const { world } = spawnWorld();
+    // Fresh full-charge nodes near the player record nothing.
+    expect(world.nodeCharges.size).toBe(0);
+  });
+
   it('l0ChunksNear always includes the player chunk', () => {
     const { world, playerId } = spawnWorld();
     const player = world.entities.get(playerId);

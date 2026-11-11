@@ -2,6 +2,8 @@
 // as a playerInput Action (ARCHITECTURE.md hard rule 2). Pointer lock on
 // click; drag fallback like the free-fly camera. F3 is owned by Game.
 
+import { BACKPACK_SLOTS } from '../core/constants.js';
+
 export class PlayerInput {
   private keys = new Set<string>();
   private mouseButtons = new Set<number>();
@@ -150,7 +152,9 @@ export class PlayerInput {
     }
     if (e.code.startsWith('Digit')) {
       const slot = Number(e.code.slice(5)) - 1;
-      if (Number.isInteger(slot) && slot >= 0 && slot < 8 && !e.repeat) this.selectQueued = slot;
+      if (Number.isInteger(slot) && slot >= 0 && slot < BACKPACK_SLOTS && !e.repeat) {
+        this.selectQueued = slot;
+      }
       return;
     }
     if (e.code === 'Space') {

@@ -31,9 +31,13 @@ describe('PlayerBody on a flat floor', () => {
     expect(entity).toBeDefined();
     if (!entity) return;
     const body = new PlayerBody(() => rapierWorld);
-    // Drop 20 m at g = 6 (~2.6 s of fall).
+    // Drop 20 m at g = 6 (~2.6 s of fall). Production steps the shared
+    // world once per tick after every body writes intent; the loop mirrors
+    // that here with an explicit step per iteration.
     for (let i = 0; i < 200; i += 1) {
       body.step(entity, [SELA], SIM_DT);
+      rapierWorld.timestep = SIM_DT;
+      rapierWorld.step();
     }
     // Landed on the capsule (half-height + radius = 0.9, plus controller gap).
     expect(entity.position.y).toBeGreaterThan(FLOOR_TOP + 0.5);
@@ -51,7 +55,11 @@ describe('PlayerBody on a flat floor', () => {
     expect(entity).toBeDefined();
     if (!entity) return;
     const body = new PlayerBody(() => rapierWorld);
-    for (let i = 0; i < 200; i += 1) body.step(entity, [SELA], SIM_DT);
+    for (let i = 0; i < 200; i += 1) {
+      body.step(entity, [SELA], SIM_DT);
+      rapierWorld.timestep = SIM_DT;
+      rapierWorld.step();
+    }
     expect(entity.components.player?.grounded).toBe(true);
     const startX = entity.position.x;
     const startZ = entity.position.z;
@@ -60,6 +68,8 @@ describe('PlayerBody on a flat floor', () => {
       const player = entity.components.player;
       if (player) player.input = { moveX: 0, moveZ: 1, jump: false, sprint: false };
       body.step(entity, [SELA], SIM_DT);
+      rapierWorld.timestep = SIM_DT;
+      rapierWorld.step();
     }
     const walked = Math.hypot(entity.position.x - startX, entity.position.z - startZ);
     expect(walked).toBeGreaterThan(3);
@@ -68,9 +78,13 @@ describe('PlayerBody on a flat floor', () => {
     const player = entity.components.player;
     if (player) player.input = { moveX: 0, moveZ: 0, jump: true, sprint: false };
     body.step(entity, [SELA], SIM_DT);
+    rapierWorld.timestep = SIM_DT;
+    rapierWorld.step();
     let apex = entity.position.y;
     for (let i = 0; i < 60; i += 1) {
       body.step(entity, [SELA], SIM_DT);
+      rapierWorld.timestep = SIM_DT;
+      rapierWorld.step();
       apex = Math.max(apex, entity.position.y);
     }
     expect(apex).toBeGreaterThan(FLOOR_TOP + 1.5);

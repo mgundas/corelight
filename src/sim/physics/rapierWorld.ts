@@ -31,6 +31,24 @@ export function physicsWorldFor(planetId: string): RAPIER.World {
   return world;
 }
 
+/** Live planet world ids (insertion order, so iteration is deterministic). */
+export function planetWorldIds(): string[] {
+  return [...worlds.keys()];
+}
+
+/**
+ * Step every live planet world once. Single stepping authority per tick:
+ * the physics system calls this after players and items have written their
+ * intent, so shared worlds (character controllers + item bodies + terrain
+ * trimeshes) integrate exactly once however many bodies are active.
+ */
+export function stepPlanetWorlds(dt: number): void {
+  for (const world of worlds.values()) {
+    world.timestep = dt;
+    world.step();
+  }
+}
+
 /** Test/owner teardown: frees all worlds (controllers free themselves). */
 export function disposePhysics(): void {
   for (const world of worlds.values()) world.free();

@@ -12,5 +12,8 @@
   { "id": "copper", "name": "Copper", "color": "#c87f4a", "shape": "cube", "size": "small", "stackable": false },
   { "id": "polymer", "name": "Polymer", "color": "#f2f2f2", "shape": "capsule", "size": "small", "stackable": false },
   { "id": "research_sample", "name": "Research sample", "color": "#7dff6a", "shape": "sphere", "size": "small", "stackable": false, "emitsLight": { "color": "#7dff6a", "intensity": 12 } },
-  { "id": "fuel_cell", "name": "Fuel cell", "color": "#ff9a3c", "shape": "canister", "size": "small", "stackable": false }
+  { "id": "fuel_cell", "name": "Fuel cell", "color": "#ff9a3c", "shape": "canister", "size": "small", "stackable": false },
+  { "id": "tether", "name": "Tether", "color": "#4fc3ff", "shape": "capsule", "size": "small", "stackable": false },
+  { "id": "light_stick", "name": "Light stick", "color": "#ffe08a", "shape": "capsule", "size": "small", "stackable": false, "emitsLight": { "color": "#ffe08a", "intensity": 16 } },
+  { "id": "oxygen_canister", "name": "Oxygen canister", "color": "#9fd8ff", "shape": "canister", "size": "small", "stackable": false }
 ]
