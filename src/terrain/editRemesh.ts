@@ -20,8 +20,10 @@ export interface EditCompletion {
 }
 
 export interface EditRemeshHooks {
-  /** Drop the sink's empty mark so the chunk re-meshes. */
-  forgetEmpty(key: string): void;
+  /** Drop the sink's empty mark; true when a mark was actually removed. */
+  forgetEmpty(key: string): boolean;
+  /** True while the sink shows a mesh for the key (visible right now). */
+  hasMesh(key: string): boolean;
   /** Drop any queued (not yet submitted) streaming job for the key. */
   unqueue(key: string): void;
   /** True while a streaming job for the key is in flight. */
@@ -94,9 +96,12 @@ export class EditRemesher {
    * (coarse meshes ignore edits past LOD1, so parents are the widest level
    * that must refresh). Submits immediately (bypassing the 100 ms
    * recompute throttle) so the visual update lands within a couple of
-   * frames; the old mesh stays visible until the fresh result is applied.
-   * Stale in-flight jobs are detected by version at completion and
-   * refreshed, never shown.
+   * frames — but only for chunks that have a mesh (visible) or carried an
+   * empty mark (air turned solid): materializing an invisible chunk would
+   * flash a coarse mesh over the fine children until the next garbage
+   * collection, and the streaming path re-attaches fresh deltas if the
+   * chunk ever meshes later. Stale in-flight jobs are detected by version
+   * at completion and refreshed, never shown.
    */
   notifyEdited(lod0Keys: string[], hooks: EditRemeshHooks): void {
     const keys = new Set<string>();
@@ -119,8 +124,14 @@ export class EditRemesher {
     for (const key of keys) {
       this.versions.set(key, (this.versions.get(key) ?? 0) + 1);
       this.dirty.add(key);
-      hooks.forgetEmpty(key);
+      const wasEmpty = hooks.forgetEmpty(key);
       hooks.unqueue(key);
+      // Invisible chunks (no mesh, no empty mark) skip the priority submit:
+      // building them now would pop a mesh over the scene until the next
+      // garbage collection, and the streaming path picks them up with fresh
+      // deltas if they are ever desired. They stay dirty so the retry
+      // fallback still covers them while desired.
+      if (!hooks.hasMesh(key) && !wasEmpty) continue;
       if ((this.inflight.get(key) ?? 0) === 0 && !hooks.isStreamingInflight(key)) {
         this.submitEditJob(key, hooks.pushCompletion);
       }

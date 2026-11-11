@@ -100,6 +100,7 @@ export class ChunkManager {
   notifyEdited(lod0Keys: string[]): void {
     this.remesher.notifyEdited(lod0Keys, {
       forgetEmpty: (key) => this.sink.forgetEmpty(key),
+      hasMesh: (key) => this.sink.hasMesh(key),
       unqueue: (key) => {
         this.queued.delete(key);
       },
@@ -324,6 +325,12 @@ export class ChunkManager {
       this.remesher.applied(item.key, this.inflight.has(item.key));
       if (item.result.empty) {
         this.sink.markEmpty(item.key);
+      } else if (item.isEdit && !this.desiredKeys.has(item.key) && !this.sink.hasMesh(item.key)) {
+        // The chunk left the visible set while its rebuild ran (or was
+        // never visible, e.g. an LOD1 parent): materializing it now would
+        // flash a stale mesh over the scene until the next garbage
+        // collection. Edits persist in the store and re-attach with fresh
+        // deltas if the chunk streams back.
       } else if (item.isEdit) {
         // Edit rebuild: keep the old mesh visible until the new one is
         // ready, then swap atomically.

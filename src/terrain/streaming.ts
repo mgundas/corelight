@@ -10,13 +10,16 @@ import type { MeshResult } from './workerPool.js';
 /** Render-side mesh store (structurally satisfied by ChunkMeshes). */
 export interface MeshSink {
   has(key: string): boolean;
+  /** True only when a mesh (not just an empty mark) is stored. */
+  hasMesh(key: string): boolean;
   add(config: PlanetConfig, result: MeshResult): 'added' | 'empty' | 'duplicate';
   /** Forget a mesh and dispose its geometry. */
   remove(key: string): boolean;
   /** Remember a key the worker (or boot) reported empty: never re-queue. */
   markEmpty(key: string): void;
-  /** Drop a remembered empty key so the next update re-meshes it (edits). */
-  forgetEmpty(key: string): void;
+  /** Drop a remembered empty key so the next update re-meshes it (edits).
+   * Returns true when a mark was actually removed. */
+  forgetEmpty(key: string): boolean;
   /** Drop empty keys the predicate rejects (bounds the empty-key cache). */
   pruneEmpty(keep: (key: string) => boolean): void;
   /** Keys known empty (worker-reported + pre-skipped). */

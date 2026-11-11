@@ -84,6 +84,10 @@ class FakeSink implements MeshSink {
     return this.meshes.has(key) || this.empty.has(key);
   }
 
+  hasMesh(key: string): boolean {
+    return this.meshes.has(key);
+  }
+
   add(_config: PlanetConfig, result: MeshResult): 'added' | 'empty' | 'duplicate' {
     if (this.has(result.key)) return 'duplicate';
     if (result.empty) {
@@ -102,8 +106,8 @@ class FakeSink implements MeshSink {
     if (!this.meshes.has(key)) this.empty.add(key);
   }
 
-  forgetEmpty(key: string): void {
-    this.empty.delete(key);
+  forgetEmpty(key: string): boolean {
+    return this.empty.delete(key);
   }
 
   pruneEmpty(keep: (key: string) => boolean): void {

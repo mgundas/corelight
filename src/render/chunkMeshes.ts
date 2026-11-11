@@ -59,14 +59,18 @@ export class ChunkMeshes {
     return this.meshes.has(key) || this.emptyKeys.has(key);
   }
 
+  hasMesh(key: string): boolean {
+    return this.meshes.has(key);
+  }
+
   /** Remember an empty key without a mesh (worker/boot reported nothing there). */
   markEmpty(key: string): void {
     if (!this.meshes.has(key)) this.emptyKeys.add(key);
   }
 
   /** Drop a remembered empty key so the chunk remeshes (player edits). */
-  forgetEmpty(key: string): void {
-    this.emptyKeys.delete(key);
+  forgetEmpty(key: string): boolean {
+    return this.emptyKeys.delete(key);
   }
 
   /** Drop empty keys the predicate rejects (bounds the empty-key cache). */
