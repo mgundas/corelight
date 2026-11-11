@@ -9,7 +9,7 @@ import type { EntityId } from '../sim/entities.js';
 import type { World } from '../sim/world.js';
 
 /** Bump on every user-visible fix so stale tabs are instantly detectable. */
-export const DEBUG_BUILD = 'm08-fix5-scene';
+export const DEBUG_BUILD = 'm08-fix6-multi';
 
 export interface ViewItemStat {
   type: string;
@@ -50,24 +50,42 @@ function statGroup(group: ViewGroupLike): ViewGroupStat {
 
 export interface DebugHandle {
   version: string;
+  /** Random id per Game construction (detects double sessions in one tab). */
+  gameId: number;
+  flying: () => boolean;
   player: () => EntityId | null;
   playerPos: () => { x: number; y: number; z: number } | null;
   oxygen: () => number | null;
+  counts: () => Record<string, number>;
   tethers: () => { id: EntityId; pos: { x: number; y: number; z: number }; live: boolean; links: EntityId[] }[];
   habitats: () => { id: EntityId; pos: { x: number; y: number; z: number } }[];
   /** Live scene-graph state: do the synced views actually hold meshes? */
   scene: () => SceneStat;
 }
 
+declare global {
+  interface Window {
+    __corelight?: DebugHandle;
+    __corelight_all?: DebugHandle[];
+  }
+}
+
+let nextGameId = 1;
+
 /** Install `window.__corelight` for the live session (browser only). */
 export function installDebugHandle(
   world: World,
   playerId: () => EntityId | null,
-  views?: () => { tethers: ViewGroupLike; habitats: ViewGroupLike; markers: ViewGroupLike },
+  extra: {
+    flying: () => boolean;
+    views?: () => { tethers: ViewGroupLike; habitats: ViewGroupLike; markers: ViewGroupLike };
+  },
 ): void {
   if (typeof window === 'undefined') return;
   const handle: DebugHandle = {
     version: DEBUG_BUILD,
+    gameId: nextGameId++,
+    flying: extra.flying,
     player: () => playerId(),
     playerPos: () => {
       const id = playerId();
@@ -77,6 +95,13 @@ export function installDebugHandle(
     oxygen: () => {
       const id = playerId();
       return id ? (world.entities.get(id)?.components.oxygen?.value ?? null) : null;
+    },
+    counts: () => {
+      const out: Record<string, number> = {};
+      for (const entity of world.entities.values()) {
+        out[entity.kind] = (out[entity.kind] ?? 0) + 1;
+      }
+      return out;
     },
     tethers: () =>
       [...world.entities.values()]
@@ -92,7 +117,7 @@ export function installDebugHandle(
         .filter((e) => e.kind === 'machine')
         .map((e) => ({ id: e.id, pos: { ...e.position } })),
     scene: () => {
-      const v = views?.();
+      const v = extra.views?.();
       const empty: ViewGroupStat = { count: -1, items: [] };
       return {
         tethers: v ? statGroup(v.tethers) : empty,
@@ -101,5 +126,6 @@ export function installDebugHandle(
       };
     },
   };
-  (window as unknown as { __corelight?: DebugHandle }).__corelight = handle;
+  window.__corelight = handle;
+  window.__corelight_all = [...(window.__corelight_all ?? []), handle];
 }
