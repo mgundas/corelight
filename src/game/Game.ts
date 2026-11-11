@@ -202,6 +202,14 @@ export class Game {
   /** Freeze sim ticks (pause menu); rendering continues behind the menu. */
   setPaused(paused: boolean): void {
     this.paused = paused;
+    // Edges queued while paused must never fire on resume (e.g. Q dropping
+    // a slot): disabling clears every queue, and re-enabling on resume
+    // drains anything queued by the menu itself (including the L bypass).
+    if (paused) {
+      this.input.setEnabled(false);
+    } else {
+      this.input.setEnabled(!this.flyCamera.enabled);
+    }
   }
 
   isPaused(): boolean {
@@ -316,7 +324,8 @@ export class Game {
     const alpha = this.accumulator / SIM_DT;
     let activePos: Vec3d;
     if (flying) {
-      this.flyCamera.update(frameDt);
+      // Frozen while paused: the debug camera must not drift behind the menu.
+      if (!this.paused) this.flyCamera.update(frameDt);
       activePos = this.flyCamera.position;
       const local = toLocal(activePos);
       this.flyCamera.applyToCamera(this.renderer.camera, local);
