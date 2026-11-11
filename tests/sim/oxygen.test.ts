@@ -219,6 +219,13 @@ describe('oxygen system', () => {
     };
     world.dispatch({ type: 'playerTeleport', playerId, position: deathSpot });
     world.tick(SIM_DT);
+    // Stale motion must not survive the respawn (same reset as teleport).
+    const dying = world.entities.get(playerId);
+    if (!dying?.components.player) throw new Error('no player comp');
+    dying.components.player.velocity = { x: 5, y: -9, z: 2 };
+    dying.components.player.grounded = true;
+    dying.components.player.embeddedTime = 3;
+    dying.components.player.escaping = true;
     let died: string | null = null;
     const off = events.on('playerDied', ({ playerId: id }) => {
       died = id;
@@ -232,6 +239,12 @@ describe('oxygen system', () => {
     if (!respawned) throw new Error('player lost');
     expect(respawned.position.x).toBeCloseTo(habitat.position.x + up.x * 2, 6);
     expect(oxygenOf(world, playerId)).toBe(OXYGEN_MAX);
+    // Motion state reset like a teleport (no fall-through or push-out).
+    expect(respawned.components.player?.velocity).toEqual({ x: 0, y: 0, z: 0 });
+    expect(respawned.components.player?.grounded).toBe(false);
+    expect(respawned.components.player?.input).toBeNull();
+    expect(respawned.components.player?.embeddedTime).toBe(0);
+    expect(respawned.components.player?.escaping).toBe(false);
     // The pack dropped where the player died, plus a marker.
     const markerId = respawned.components.player?.deathMarkerId;
     expect(markerId).not.toBeNull();

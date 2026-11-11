@@ -129,6 +129,8 @@ function die(world: World, player: Entity, planets: PlanetConfig[]): void {
   });
   if (playerComp) playerComp.deathMarkerId = markerId;
   const habitat = planet ? habitatsOn(world, planet.id)[0] : undefined;
+  // NOTE: single-habitat v1 respawns at habitats[0]; with several habitats
+  // this must become the last visited one (PROJECT.md). Latent until M10+.
   if (habitat && planet) {
     const hub = upAt(planet, habitat.position);
     player.position = {
@@ -137,6 +139,15 @@ function die(world: World, player: Entity, planets: PlanetConfig[]): void {
       z: habitat.position.z + hub.z * 2,
     };
     player.planetId = planet.id;
+  }
+  if (playerComp) {
+    // Same reset as playerTeleport: no fall velocity, no stale input, out
+    // of any embedded-escape latch so the respawn never pushes or drops.
+    playerComp.velocity = { x: 0, y: 0, z: 0 };
+    playerComp.grounded = false;
+    playerComp.input = null;
+    playerComp.embeddedTime = 0;
+    playerComp.escaping = false;
   }
   const oxygen = oxygenFor(player);
   oxygen.value = OXYGEN_MAX;
