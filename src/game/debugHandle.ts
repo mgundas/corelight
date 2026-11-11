@@ -9,7 +9,44 @@ import type { EntityId } from '../sim/entities.js';
 import type { World } from '../sim/world.js';
 
 /** Bump on every user-visible fix so stale tabs are instantly detectable. */
-export const DEBUG_BUILD = 'm08-fix4-raycast';
+export const DEBUG_BUILD = 'm08-fix5-scene';
+
+export interface ViewItemStat {
+  type: string;
+  pos: { x: number; y: number; z: number };
+  visible: boolean;
+}
+
+export interface ViewGroupStat {
+  count: number;
+  items: ViewItemStat[];
+}
+
+/** Structural subset of THREE.Group (no three.js import needed). */
+export interface ViewGroupLike {
+  readonly children: readonly {
+    readonly type: string;
+    readonly visible: boolean;
+    readonly position: { readonly x: number; readonly y: number; readonly z: number };
+  }[];
+}
+
+export interface SceneStat {
+  tethers: ViewGroupStat;
+  habitats: ViewGroupStat;
+  markers: ViewGroupStat;
+}
+
+function statGroup(group: ViewGroupLike): ViewGroupStat {
+  return {
+    count: group.children.length,
+    items: group.children.map((o) => ({
+      type: o.type,
+      pos: { x: o.position.x, y: o.position.y, z: o.position.z },
+      visible: o.visible,
+    })),
+  };
+}
 
 export interface DebugHandle {
   version: string;
@@ -18,10 +55,16 @@ export interface DebugHandle {
   oxygen: () => number | null;
   tethers: () => { id: EntityId; pos: { x: number; y: number; z: number }; live: boolean; links: EntityId[] }[];
   habitats: () => { id: EntityId; pos: { x: number; y: number; z: number } }[];
+  /** Live scene-graph state: do the synced views actually hold meshes? */
+  scene: () => SceneStat;
 }
 
 /** Install `window.__corelight` for the live session (browser only). */
-export function installDebugHandle(world: World, playerId: () => EntityId | null): void {
+export function installDebugHandle(
+  world: World,
+  playerId: () => EntityId | null,
+  views?: () => { tethers: ViewGroupLike; habitats: ViewGroupLike; markers: ViewGroupLike },
+): void {
   if (typeof window === 'undefined') return;
   const handle: DebugHandle = {
     version: DEBUG_BUILD,
@@ -48,6 +91,15 @@ export function installDebugHandle(world: World, playerId: () => EntityId | null
       [...world.entities.values()]
         .filter((e) => e.kind === 'machine')
         .map((e) => ({ id: e.id, pos: { ...e.position } })),
+    scene: () => {
+      const v = views?.();
+      const empty: ViewGroupStat = { count: -1, items: [] };
+      return {
+        tethers: v ? statGroup(v.tethers) : empty,
+        habitats: v ? statGroup(v.habitats) : empty,
+        markers: v ? statGroup(v.markers) : empty,
+      };
+    },
   };
   (window as unknown as { __corelight?: DebugHandle }).__corelight = handle;
 }

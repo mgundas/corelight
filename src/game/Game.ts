@@ -135,7 +135,11 @@ export class Game {
     });
     // Console debug handle: lets a blank screen be diagnosed with facts
     // (entity positions) instead of theories. Read-only, browser only.
-    installDebugHandle(this.world, () => this.playerId);
+    installDebugHandle(this.world, () => this.playerId, () => ({
+      tethers: this.renderer.tetherViews.group,
+      habitats: this.renderer.habitatViews.group,
+      markers: this.renderer.markerViews.group,
+    }));
   }
 
   private handleGlobalKey = (e: KeyboardEvent): void => {
