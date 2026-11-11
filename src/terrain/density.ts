@@ -4,6 +4,7 @@
 // Positive = solid, negative = air, surface at 0. Pure + deterministic.
 
 import type { LayerConfig, PlanetConfig, Rgb } from '../planets/PlanetConfig.js';
+import { NOISE_CACHE_BUDGET } from '../core/constants.js';
 import { smoothstep, type Vec3d } from '../core/math.js';
 import { createSeededNoise3D, fbm3, type NoiseFunction3D } from './noise.js';
 
@@ -226,10 +227,17 @@ const noiseCache = new Map<string, NoiseFunction3D>();
  * helper and the color variation below. One entry per (seed, planet, field):
  * bounded by the session's worlds in practice, and a single source of truth
  * so the helpers can never disagree about "the same seeded noise".
+ * Capped FIFO (Map insertion order): eviction only drops a memoized
+ * function, and the rebuild from the same key is bit-identical, so the cap
+ * can never change terrain — it just bounds New Game / Continue growth.
  */
 function cachedNoise(key: string): NoiseFunction3D {
   let noise = noiseCache.get(key);
   if (!noise) {
+    if (noiseCache.size >= NOISE_CACHE_BUDGET) {
+      const oldest = noiseCache.keys().next();
+      if (!oldest.done) noiseCache.delete(oldest.value);
+    }
     noise = createSeededNoise3D(key);
     noiseCache.set(key, noise);
   }

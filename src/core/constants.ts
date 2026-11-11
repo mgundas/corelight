@@ -146,3 +146,8 @@ export const HEADLAMP_DISTANCE = 90;
 export const HEADLAMP_ANGLE = 0.46;
 export const HEADLAMP_PENUMBRA = 0.5;
 export const HEADLAMP_DECAY = 1.2;
+
+/** Max entries in the module-level seeded-noise cache (density.ts).
+ * One session holds ~7 per world-seed x planet; 64 covers several
+ * New Game / Continue cycles before the oldest entry is rebuilt. */
+export const NOISE_CACHE_BUDGET = 64;

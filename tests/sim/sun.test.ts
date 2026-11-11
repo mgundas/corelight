@@ -42,7 +42,7 @@ describe('updateSun + timeOfDay', () => {
   it('re-derives the stored direction from the clock each tick', () => {
     const world = new World(7);
     world.time = 100;
-    updateSun(world);
+    updateSun(world, 0);
     expect(world.sunDirection).toEqual(sunDirectionAt(100));
     expect(sunDirection(world)).toEqual(world.sunDirection);
     world.addSystem(updateSun);

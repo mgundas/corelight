@@ -34,8 +34,10 @@ export function sunDirection(world: World): Vec3d {
 
 /**
  * True when the sun is above the local horizon at a planet-local point.
- * Both planets share one sun; planetId selects the frame (unused for the
- * math, kept so call sites cannot mix up planet-local coordinates).
+ * `planetId` is intentionally unused: both planets share one sun and neither
+ * moves in v1 (ARCHITECTURE.md: Coordinates and scale), so daylight math is
+ * planet-independent. The parameter stays so call sites must name the frame
+ * explicitly and cannot silently mix up planet-local coordinates.
  */
 export function isDaylight(world: World, _planetId: string, localPos: Vec3d): boolean {
   const up = normalize(localPos);
@@ -55,7 +57,9 @@ export function depthBelowSurface(world: World, planet: PlanetConfig, localPos: 
 /** Sim system: re-derive the stored direction from the clock every tick.
  * Uses `time + dt` (the post-tick clock) because `World.tick` advances time
  * after running systems: the stored direction then matches `world.time`
- * exactly instead of lagging one tick behind it. */
-export function updateSun(world: World, dt = 0): void {
+ * exactly instead of lagging one tick behind it. `dt` is required (no
+ * default): a bare `updateSun(world)` call would silently use the pre-tick
+ * clock and disagree with the system path for the same world. */
+export function updateSun(world: World, dt: number): void {
   world.sunDirection = sunDirectionAt(world.time + dt);
 }

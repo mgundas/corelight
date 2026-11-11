@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { SELA } from '../../src/planets/configs/sela.js';
-import { cavernAnchorPoints, cavernStack, createDensityFn, layerAt } from '../../src/terrain/density.js';
+import { cavernAnchorPoints, cavernStack, createDensityFn, layerAt, surfaceDepthAt } from '../../src/terrain/density.js';
 
 describe('density', () => {
   it('is deterministic for the same seed', () => {
@@ -197,4 +197,17 @@ describe('cavern floors', () => {
     // (pit rims and worm mouths); the rest walks.
     expect(steep / counted).toBeLessThan(0.1);
   }, 30000);
+});
+
+describe('noise cache', () => {
+  it('rebuilds evicted entries bit-identically (cap never changes terrain)', () => {
+    const probe = { x: 12.5, y: SELA.radius - 42.25, z: -7.75 };
+    const before = surfaceDepthAt(SELA, 4242, probe.x, probe.y, probe.z);
+    // Flood the cache past NOISE_CACHE_BUDGET with foreign seeds so the
+    // probe's entry is evicted and rebuilt on the next call.
+    for (let seed = 100000; seed < 100200; seed += 1) {
+      surfaceDepthAt(SELA, seed, probe.x, probe.y, probe.z);
+    }
+    expect(surfaceDepthAt(SELA, 4242, probe.x, probe.y, probe.z)).toBe(before);
+  });
 });
