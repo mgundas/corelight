@@ -1,11 +1,15 @@
 // Tiny typed event bus. Sim emits events; UI/audio/render subscribe.
 // WHY: keeps sim decoupled from presentation (hard rule 2 support).
 
+import type { EntityId } from '../sim/entities.js';
+
 export type EventMap = {
   originShifted: { origin: { x: number; y: number; z: number } };
   actionApplied: { type: string };
   tick: { time: number };
   terrainEdited: { planetId: string; keys: string[] };
+  /** Emitted by the oxygen system when a player hits 0 oxygen and respawns. */
+  playerDied: { playerId: EntityId };
 };
 
 export type EventName = keyof EventMap;

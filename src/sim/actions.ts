@@ -1,13 +1,14 @@
 import type { Vec3d } from '../core/math.js';
 import { distance, IDENTITY_QUAT } from '../core/math.js';
-import { BACKPACK_SLOTS, PICKUP_RANGE_M, SOIL_MAX, TOOL_RANGE_M, TOOL_RANGE_SLACK_M } from '../core/constants.js';
+import { BACKPACK_SLOTS, OXYGEN_MAX, PICKUP_RANGE_M, SOIL_MAX, TOOL_RANGE_M, TOOL_RANGE_SLACK_M } from '../core/constants.js';
 import { events } from '../core/events.js';
 import { isKnownItem } from '../data/loadData.js';
-import { createDensityField, layerAt, type DensityField } from '../terrain/density.js';
+import { layerAt } from '../terrain/density.js';
 import type { EditMode, FlattenPlane } from '../terrain/edits.js';
 import type { EntityId } from './entities.js';
 import { moveBasis } from './physics/frames.js';
 import { upAt } from './physics/frames.js';
+import { baseFieldFor, placeTether, removeTether, spawnHabitatEntity } from './tetherActions.js';
 import type { World } from './world.js';
 
 // All gameplay changes go through Actions (ARCHITECTURE.md hard rule 2).
@@ -42,7 +43,10 @@ export type Action =
     }
   | { type: 'pickUp'; playerId: EntityId; itemId: EntityId }
   | { type: 'drop'; playerId: EntityId; slot: number }
-  | { type: 'selectSlot'; playerId: EntityId; slot: number };
+  | { type: 'selectSlot'; playerId: EntityId; slot: number }
+  | { type: 'spawnHabitat'; planetId: string; position: Vec3d }
+  | { type: 'placeTether'; playerId: EntityId }
+  | { type: 'removeTether'; playerId: EntityId; tetherId: EntityId };
 
 function clampAxis(v: number): number {
   return Math.min(1, Math.max(-1, v));
@@ -86,11 +90,13 @@ export function applyAction(world: World, action: Action): void {
             toolHardness: 2,
             lastTooHard: -Infinity,
             headlampOn: true,
+            deathMarkerId: null,
           },
           inventory: {
             slots: Array<EntityId | null>(BACKPACK_SLOTS).fill(null),
             selectedSlot: 0,
           },
+          oxygen: { value: OXYGEN_MAX },
         },
       });
       events.emit('actionApplied', { type: action.type });
@@ -227,6 +233,18 @@ export function applyAction(world: World, action: Action): void {
       events.emit('actionApplied', { type: action.type });
       return;
     }
+    case 'spawnHabitat': {
+      spawnHabitatEntity(world, action.planetId, action.position);
+      return;
+    }
+    case 'placeTether': {
+      placeTether(world, action.playerId);
+      return;
+    }
+    case 'removeTether': {
+      removeTether(world, action.playerId, action.tetherId);
+      return;
+    }
   }
 }
 
@@ -354,28 +372,4 @@ function mineNodes(world: World, planetId: string, center: Vec3d, radius: number
       world.depletedNodes.add(id);
     }
   }
-}
-
-/**
- * Base (unedited) density fields per world, cached so every stroke bit does
- * not rebuild seeded noise. Crossings are measured against base + stored
- * deltas inside TerrainEdits; the live (edited) fields used by physics are
- * built separately in the physics system.
- */
-const baseFieldCache = new WeakMap<World, Map<string, DensityField>>();
-
-function baseFieldFor(world: World, planetId: string): DensityField {
-  let perWorld = baseFieldCache.get(world);
-  if (!perWorld) {
-    perWorld = new Map();
-    baseFieldCache.set(world, perWorld);
-  }
-  let field = perWorld.get(planetId);
-  if (!field) {
-    const planet = world.planets.find((p) => p.id === planetId);
-    if (!planet) throw new Error(`terrainEdit: unknown planet ${planetId}`);
-    field = createDensityField(planet, world.seed);
-    perWorld.set(planetId, field);
-  }
-  return field;
 }

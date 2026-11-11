@@ -1,7 +1,8 @@
 // Aimed-item query (M07): E picks up the loose item the player is looking
-// at within PICKUP_RANGE_M. Pure sim-side math (no three.js): the forward
-// comes from the player's yaw/pitch, so the client and any future server
-// agree on what "looking at" means.
+// at within PICKUP_RANGE_M. M08 adds tether posts to the same cone: E on a
+// post pulls it back up (removeTether). Pure sim-side math (no three.js):
+// the forward comes from the player's yaw/pitch, so the client and any
+// future server agree on what "looking at" means.
 
 import { PICKUP_RANGE_M } from '../core/constants.js';
 import { distance, dot, normalize, sub, type Vec3d } from '../core/math.js';
@@ -14,6 +15,18 @@ const AIM_COS = Math.cos((25 * Math.PI) / 180);
 
 /** Nearest loose item in range and inside the look cone, if any. */
 export function findAimedItem(world: World, playerId: EntityId): EntityId | null {
+  return findAimed(world, playerId, 'item');
+}
+
+/**
+ * Nearest tether post in range and inside the look cone, if any.
+ * E on a post pulls it back up (removeTether refunds the item).
+ */
+export function findAimedTether(world: World, playerId: EntityId): EntityId | null {
+  return findAimed(world, playerId, 'tether');
+}
+
+function findAimed(world: World, playerId: EntityId, kind: 'item' | 'tether'): EntityId | null {
   const player = world.entities.get(playerId);
   const playerComp = player?.components.player;
   if (!player || player.kind !== 'player' || !playerComp) return null;
@@ -24,7 +37,11 @@ export function findAimedItem(world: World, playerId: EntityId): EntityId | null
   let best: EntityId | null = null;
   let bestDist = Infinity;
   for (const entity of world.entities.values()) {
-    if (entity.kind !== 'item' || entity.components.item?.holder !== undefined) continue;
+    if (kind === 'item') {
+      if (entity.kind !== 'item' || entity.components.item?.holder !== undefined) continue;
+    } else {
+      if (entity.kind !== 'tether') continue;
+    }
     if (entity.planetId !== planet.id) continue;
     const dist = distance(entity.position, player.position);
     if (dist > PICKUP_RANGE_M || dist >= bestDist) continue;

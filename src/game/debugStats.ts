@@ -51,6 +51,15 @@ export function updateDebugOverlay(ctx: DebugStatsContext): void {
     .join(' ');
   const player = ctx.playerId ? ctx.world.entities.get(ctx.playerId) : undefined;
   const playerComp = player?.components.player;
+  let tetherLive = 0;
+  let tetherTotal = 0;
+  if (ctx.playerId) {
+    for (const entity of ctx.world.entities.values()) {
+      if (entity.kind !== 'tether') continue;
+      tetherTotal += 1;
+      if (entity.components.tether?.live === true) tetherLive += 1;
+    }
+  }
   // Tool readout: layer + hardness under the brush cursor, soil counter,
   // and the too-hard indicator (freshly blocked dig, <1.5 s ago).
   let toolInfo: string | undefined;
@@ -87,5 +96,8 @@ export function updateDebugOverlay(ctx: DebugStatsContext): void {
     tooHard:
       playerComp !== undefined &&
       ctx.world.time - playerComp.lastTooHard < TOO_HARD_INDICATOR_S,
+    oxygen: player?.components.oxygen?.value,
+    tetherLive,
+    tetherTotal,
   });
 }

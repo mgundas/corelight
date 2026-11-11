@@ -11,6 +11,7 @@ export class PlayerInput {
   private headlampQueued = false;
   private interactQueued = false;
   private dropQueued = false;
+  private tetherQueued = false;
   private selectQueued: number | null = null;
   private enabled = true;
   private canvas: HTMLCanvasElement | null = null;
@@ -64,6 +65,7 @@ export class PlayerInput {
     this.headlampQueued = false;
     this.interactQueued = false;
     this.dropQueued = false;
+    this.tetherQueued = false;
     this.selectQueued = null;
     this.dragging = false;
   }
@@ -111,6 +113,13 @@ export class PlayerInput {
     return drop;
   }
 
+  /** Edge-triggered: true once per T keydown (place a tether post). */
+  consumeTether(): boolean {
+    const tether = this.tetherQueued;
+    this.tetherQueued = false;
+    return tether;
+  }
+
   /** Edge-triggered: slot index once per Digit1..8 keydown. */
   consumeSelect(): number | null {
     const select = this.selectQueued;
@@ -148,6 +157,10 @@ export class PlayerInput {
     }
     if (e.code === 'KeyQ') {
       if (!e.repeat) this.dropQueued = true;
+      return;
+    }
+    if (e.code === 'KeyT') {
+      if (!e.repeat) this.tetherQueued = true;
       return;
     }
     if (e.code.startsWith('Digit')) {

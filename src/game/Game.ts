@@ -5,6 +5,7 @@ import type { PlanetConfig } from '../planets/PlanetConfig.js';
 import { PLANETS } from '../planets/solarSystem.js';
 import { type DensityField } from '../terrain/density.js';
 import { ColliderPool } from '../terrain/colliderPool.js';
+import { getUrlParams } from '../core/urlParams.js';
 import { maybeShiftOrigin, toLocal } from '../render/floatingOrigin.js';
 import { Renderer, type PrebuiltTerrain } from '../render/Renderer.js';
 import { CameraRig } from '../player/cameraRig.js';
@@ -23,6 +24,7 @@ import { serializeWorld, type SaveData } from '../save/serialize.js';
 import { DebugOverlay } from '../ui/debugOverlay.js';
 import { Hud } from '../ui/hud.js';
 import { backpackFrame, tickBackpackInput } from './backpackWiring.js';
+import { oxygenStatusFor } from './oxygenStatus.js';
 import { setupWorldSystems } from './worldSetup.js';
 import { updateDebugOverlay } from './debugStats.js';
 
@@ -65,6 +67,7 @@ export class Game {
   private readonly planets: PlanetConfig[];
   private readonly unsubscribeOriginShifted: () => void;
   private readonly unsubscribeTerrainEdited: () => void;
+  private readonly unsubscribePlayerDied: () => void;
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -93,13 +96,24 @@ export class Game {
     // freezes/requests correctly. All seeds derive from the world (a
     // restored save brings its own), never from boot/URL params.
     const worldSeed = this.world.seed;
-    const setup = setupWorldSystems(this.world, planets, this.colliderPool, seed, existingWorld);
+    const setup = setupWorldSystems(this.world, planets, this.colliderPool, seed, existingWorld, {
+      // Dev shortcut: a fresh ?dev=1 run starts with a full tether pack for
+      // oxygen testing. Continue keeps the stored backpack instead.
+      devTethers: !existingWorld && getUrlParams().dev,
+    });
     this.colliders = setup.colliders;
     this.playerId = setup.playerId;
 
     this.renderer = new Renderer(canvas, worldSeed, planets, prebuilt);
     const wiring = wireTerrainEdits(this.world, planets, this.colliders, this.renderer.streamer);
     this.toolFields = wiring.toolFields;
+    // The habitat pad is flattened during setup (after the seed-dependent
+    // boot prebuilt was baked): push its chunks through the priority remesh
+    // and the collider ring so the pad never flashes unflattened.
+    if (setup.editedKeys.length > 0) {
+      this.colliders.notifyEdited(setup.editedKeys);
+      this.renderer.streamer.notifyEdited(setup.editedKeys);
+    }
     this.unsubscribeTerrainEdited = wiring.dispose;
     this.flyCamera.speed = 60;
     this.flyCamera.enabled = false;
@@ -113,6 +127,10 @@ export class Game {
     window.addEventListener('keydown', this.handleGlobalKey);
     this.unsubscribeOriginShifted = events.on('originShifted', () => {
       this.originShifts += 1;
+    });
+    // Oxygen death: fade to black as the sim respawns at the habitat.
+    this.unsubscribePlayerDied = events.on('playerDied', ({ playerId }) => {
+      if (playerId === this.playerId) this.hud.showDeathFade();
     });
   }
 
@@ -203,6 +221,7 @@ export class Game {
     this.unsubscribeTerrainEdited();
     this.flyCamera.detach();
     this.input.detach();
+    this.unsubscribePlayerDied();
     this.colliderPool.dispose();
     this.colliders.dispose();
     disposePhysics();
@@ -331,12 +350,17 @@ export class Game {
     // Items, nodes, backpack and glow lights (M07) + the HUD slot bar.
     {
       const frame = backpackFrame(this.world, flying ? null : this.playerId, flying);
+      const o2 = oxygenStatusFor(this.world, flying ? null : this.playerId);
       this.renderer.renderEntities(this.world.entities.values(), focusWorld, frame.carriedItemIds);
       this.hud.update({
         slots: frame.slotDefs,
         selectedSlot: frame.selectedSlot,
         soil: frame.soil,
         prompt: frame.prompt,
+        oxygen: o2?.oxygen ?? 100,
+        onNetwork: o2?.onNetwork ?? true,
+        habitatHint: o2?.habitat ?? null,
+        deathHint: o2?.deathMarker ?? null,
       });
     }
     // Terrain brush preview: translucent sphere at the aim point (hidden in

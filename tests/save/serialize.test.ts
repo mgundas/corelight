@@ -139,4 +139,50 @@ describe('save round trip', () => {
     expect(revived.depletedNodes.size).toBe(0);
     expect(revived.nodeCharges.size).toBe(0);
   });
+
+  it('round-trips habitats, tethers, oxygen and death markers exactly', () => {
+    events.clear();
+    const world = new World(1337, { planets: [SELA] });
+    world.dispatch({
+      type: 'spawnPlayer',
+      planetId: SELA.id,
+      position: findSpawnPosition(SELA, 1337),
+    });
+    world.tick();
+    const playerId = [...world.entities.values()].find((e) => e.kind === 'player')?.id ?? '';
+    if (!playerId) throw new Error('no player');
+    const player = world.entities.get(playerId);
+    if (!player) throw new Error('missing player');
+    world.dispatch({ type: 'spawnHabitat', planetId: SELA.id, position: { ...player.position } });
+    world.tick();
+    const habitat = [...world.entities.values()].find((e) => e.kind === 'machine');
+    if (!habitat) throw new Error('no habitat');
+    const tetherId = world.nextId('tether');
+    world.entities.set(tetherId, {
+      id: tetherId,
+      kind: 'tether',
+      planetId: SELA.id,
+      position: { ...player.position },
+      rotation: { x: 0, y: 0, z: 0, w: 1 },
+      components: { tether: { live: true, links: [] } },
+    });
+    const markerId = world.nextId('marker');
+    world.entities.set(markerId, {
+      id: markerId,
+      kind: 'marker',
+      planetId: SELA.id,
+      position: { ...player.position },
+      rotation: { x: 0, y: 0, z: 0, w: 1 },
+      components: {},
+    });
+    const comp = player.components.player;
+    if (!comp) throw new Error('no player comp');
+    comp.deathMarkerId = markerId;
+    if (player.components.oxygen) player.components.oxygen.value = 42.5;
+    const revived = deserializeWorld(JSON.parse(JSON.stringify(serializeWorld(world))) as unknown, [SELA]);
+    expect(revived.entities.size).toBe(world.entities.size);
+    for (const [id, entity] of world.entities) {
+      expect(revived.entities.get(id)).toEqual(entity);
+    }
+  });
 });

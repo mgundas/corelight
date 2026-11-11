@@ -31,6 +31,11 @@ export interface OverlayStats {
   /** Layer + hardness under the tool cursor, e.g. "crust h2". */
   toolInfo?: string;
   tooHard?: boolean;
+  /** Suit oxygen 0..100 (M08). */
+  oxygen?: number;
+  /** Tether graph: live posts / total posts (M08). */
+  tetherLive?: number;
+  tetherTotal?: number;
 }
 
 export class DebugOverlay {
@@ -95,10 +100,18 @@ export class DebugOverlay {
       ].filter((part) => part !== null);
       tool = `\ntool: ${parts.join(' | ')}${stats.tooHard ? '  TOO HARD!' : ''}`;
     }
+    let o2 = '';
+    if (stats.oxygen !== undefined || stats.tetherTotal !== undefined) {
+      const o2Parts = [
+        stats.oxygen !== undefined ? `o2 ${stats.oxygen.toFixed(0)}` : null,
+        stats.tetherTotal !== undefined ? `tethers ${stats.tetherLive ?? 0}/${stats.tetherTotal}` : null,
+      ].filter((part) => part !== null);
+      o2 = `\n${o2Parts.join(' | ')}`;
+    }
     this.el.textContent =
       `FPS: ${stats.fps.toFixed(0)} | tick: ${stats.tickMs.toFixed(2)} ms | draws: ${stats.drawCalls}\n` +
       `cam: ${c.x.toFixed(1)}, ${c.y.toFixed(1)}, ${c.z.toFixed(1)}\n` +
       `origin: ${o.x.toFixed(0)}, ${o.y.toFixed(0)}, ${o.z.toFixed(0)} (shifts: ${stats.originShifts})\n` +
-      `fly speed: ${stats.flySpeed.toFixed(1)} m/s${sun}${place}${player}${tool}${terrain}`;
+      `fly speed: ${stats.flySpeed.toFixed(1)} m/s${sun}${place}${player}${tool}${o2}${terrain}`;
   }
 }

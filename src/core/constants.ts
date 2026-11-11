@@ -167,3 +167,26 @@ export const NODE_MAX_CHARGES = 5;
 export const ITEM_BODY_RADIUS = 0.25;
 /** Max active point lights for glowing items (ARCHITECTURE.md budget). */
 export const ITEM_LIGHT_BUDGET = 12;
+
+/** Tether link range: tethers connect to habitats/others within this (m). */
+export const TETHER_RANGE_M = 12;
+/** Oxygen radius around a live tether or habitat (m, PROJECT.md/M08). */
+export const OXYGEN_RANGE_M = 12;
+/** Player oxygen 0..OXYGEN_MAX (100 units, 1/s drain off-network). */
+export const OXYGEN_MAX = 100;
+/** Oxygen refill per second inside a live network. */
+export const OXYGEN_REFILL_PER_S = 20;
+/** Oxygen drain per second off-network (before hazard multipliers). */
+export const OXYGEN_DRAIN_PER_S = 1;
+/** Mantle heat multiplies off-network oxygen drain (PROJECT.md: 2x). */
+export const OXYGEN_MANTLE_MULT = 2;
+/** Vorn surface cold multiplies off-network drain (PROJECT.md: 1.5x). */
+export const OXYGEN_VORN_COLD_MULT = 1.5;
+/** Oxygen at/below which a carried canister auto-refills to full. */
+export const OXYGEN_CANISTER_THRESHOLD = 20;
+/** Habitat flatten radius at spawn (m). */
+export const HABITAT_FLATTEN_RADIUS_M = 14;
+/** Lateral offset of the habitat from the player spawn (m). */
+export const HABITAT_SPAWN_OFFSET_M = 8;
+/** Max drop distance for the tether ground-seat raymarch (m). */
+export const TETHER_GROUND_SEARCH_M = 6;

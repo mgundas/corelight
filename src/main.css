@@ -206,3 +206,64 @@ body {
   padding: 4px 12px;
   border-radius: 6px;
 }
+
+#hud-oxygen {
+  width: 220px;
+  height: 12px;
+  background: rgb(0 0 0 / 55%);
+  border: 1px solid rgb(255 255 255 / 25%);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+#hud-oxygen-fill {
+  height: 100%;
+  width: 100%;
+  background: #4fc3ff;
+  border-radius: 5px;
+}
+
+/* Low oxygen: red and pulsing (PROJECT.md tension). */
+#hud-oxygen.low #hud-oxygen-fill {
+  background: #ff4444;
+}
+
+#hud-oxygen.low {
+  animation: hud-oxygen-pulse 1s ease-in-out infinite;
+}
+
+@keyframes hud-oxygen-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+#hud-tether {
+  font-size: 13px;
+  font-weight: bold;
+  color: #ff6b6b;
+  background: rgb(0 0 0 / 55%);
+  padding: 3px 12px;
+  border-radius: 6px;
+}
+
+#hud-tether.live {
+  color: #39ff88;
+}
+
+#hud-nav {
+  font-size: 13px;
+  color: #ffe08a;
+  background: rgb(0 0 0 / 60%);
+  padding: 4px 12px;
+  border-radius: 6px;
+}
+
+#death-fade {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 40;
+}

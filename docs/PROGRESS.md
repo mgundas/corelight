@@ -14,7 +14,7 @@ The coding agent updates this file at the end of every milestone. Keep it short:
 | M05 Light, sky, day/night | done | Shared orbiting sun, depth darkness, headlamp, atmosphere shell, sky/stars/sun disc, matched fog, texel-snapped shadows |
 | M06 Save and load | done | Versioned IndexedDB saves (entities, clock, ID counter, base64 Float32 edits), autosave, main/pause menus, clean architecture checkpoint |
 | M07 Resources and backpack | done | Deterministic nodes, mining, Rapier item physics (single-step), 8-slot backpack + HUD, save v2; review fixes applied |
-| M08 Oxygen and tethers | not started | |
+| M08 Oxygen and tethers | done | Habitat dome, tether graph (LOS links, live/dark), oxygen drain/refill/canisters/death + lost-pack marker, HUD meters, ?dev=1 |
 | M09 Printing | not started | |
 | M10 Base and power | not started | |
 | M11 Research | not started | |
@@ -66,6 +66,14 @@ The coding agent updates this file at the end of every milestone. Keep it short:
 - M07 item physics: loose items are Rapier dynamic balls in the planet frame with hand-integrated spherical gravity (global gravity stays zero); stepping is centralized (see review fixes). Carried items own no body.
 - M07 save v2: adds `depleted` + `nodeCharges` with a v1 migration; `-0` is normalized at the serialize boundary (JSON turns `-0` into `0`) and at node creation so round trips compare exactly.
 - M07 review fixes: (1) single stepping authority — `PlayerBody.step` no longer steps; `makePhysicsSystem` steps every planet world once at tick end via `stepPlanetWorlds`, and the items system only integrates velocities + reads back (a fall-rate test pins ~12 m / 2 s, failing at ~24 m on double-step). Direct-`body.step` tests step their raw worlds explicitly. (2) Terrain edits evict affected chunks from the node settled set and re-seat their nodes the same tick (per-world dirty set fed by a WeakRef `terrainEdited` subscription, so dead sessions never leak). (3) Backpack queues always drain per tick; dispatches only when the player can act. (4) A chunk leaves settled only with its last live node. (5) `nodeCharges` only stores partial progress. (6) Slot range uses `BACKPACK_SLOTS`. (7) `items.json` also defines the M09 backpack-printer outputs (tether, light stick, oxygen canister) so the catalog is complete per PROJECT.md. (8) `post.jpg`/`opencode.json`/`vite.config.ts` were flagged against the wrong base — they belong to `c3c9be6`, not the m07 commit (verified via `git show --stat`). (9) Per-frame view/light allocations deferred: fine at current entity counts.
+
+- M08 habitat placement: `spawnHabitat` orients the dome with `quatFromTo(+Y, up)` sim-side so the door sits level anywhere; the pad is a direct `TerrainEdits.applySphere` flatten (radius 14 m) in setup (initialization, like the player spawn), and Game re-notifies the streamer + colliders after the boot prebuilt (which predates the pad) is adopted.
+- M08 tether graph cost: recompute only on topology change or nearby terrain edits (per-world WeakRef `terrainEdited` subscription like nodes). Nearby edits re-test only pairs whose tip segment passes an edited LOD0 box; other pairs keep cached adjacency, so holding dig with a chain around stays cheap. LOS marches the live edited field tip-to-tip; solid runs over 0.5 m block.
+- M08 E-flow: E picks up an aimed item first, else pulls an aimed tether (refunds the item, drops loose if the pack is full). T spends one backpack Tether item on a ground-seated post.
+- M08 old-save heal: Continue without a habitat seats one by the player (with its pad); oxygen/inventory lazily init on old players. No save version bump (components are free-form; 8-line round-trip test pins it).
+- M08 actions split: `actions.ts` passed 400 lines, so habitat/tether handlers + `baseFieldFor` moved to `src/sim/tetherActions.ts` (actions.ts 375, tetherActions.ts 191).
+- M08 cable sag uses the posts' own down vectors (from entity quaternions), not planet-center math, so origin shifts cannot bend cables.
+- M08 death markers reuse kind `marker` (shared with debug markers; all render as orange beacons) and clear when the player walks back within 3 m.
 
 ## Per-milestone notes
 
@@ -158,3 +166,8 @@ Manual acceptance still to verify in-browser: node density/feel on a real walk, 
 
 ### FIX M05 review minors (done)
 M05 review follow-up, headless-fixable items only: `isDaylight` documents that `planetId` is intentionally unused (one shared sun, static planets in v1; the parameter forces call sites to name the frame); module-level `noiseCache` in `terrain/density.ts` is capped FIFO at `NOISE_CACHE_BUDGET` (64) — evicted entries rebuild bit-identically, new test pins value stability across a 200-seed flood; `updateSun` requires `dt` (no `= 0` default) so direct calls cannot silently disagree with the system path. 198 tests pass. Browser-only items stay manual: four-view FPS before/after (closes M05 criterion 6), cave darkness/headlamp feel, shadow shimmer, space visuals.
+
+### M08 Oxygen and tethers (done)
+Built: habitat (`machine`/`habitat`, dome + lit door, flattened pad at spawn, oxygen root) via `spawnHabitat` action + setup seating; `src/sim/tetherActions.ts` (`placeTether` spends one Tether item and ground-seats, `removeTether` refunds, `baseFieldFor` cache); `src/sim/systems/tethers.ts` (12 m + LOS graph, BFS live from habitats, topology/nearby-edit-only recompute with selective pair re-tests); `src/sim/systems/oxygen.ts` (100/1/s drain, 20/s refill on-network, mantle 2x + Vorn-cold 1.5x hook, canister auto-fire at 20, death drops pack + marker and respawns at habitat with `playerDied` fade). Player: T places, E picks up else pulls tethered post (`game/pickup.ts` tether cone). Render: `views/tetherView.ts` (posts + green/red tips, sagging cables, dome, pack beacons), HUD oxygen bar (red pulse <25) + O₂ indicator + Habitat/Pack bearing hints + death fade, F1 o2/tethers line, `?dev=1` tether pack. 253 tests pass (26 new: graph/live/break/occlusion/far-edit/place/remove, drain/refill/chain/mantle/Vorn-hook/canister/death, tether aim, HUD status arrows, view sync, save round-trip, urlParams).
+Run: `npm run dev`, walk away from the dome (O₂ drains, habitat arrow appears), T drops a chain (tips green), E pulls one (tail goes red), suffocate to test the fade/respawn and the pack beacon; `?dev=1` skips printer-less tether hunting.
+Manual acceptance still to verify in-browser: chain feel on a real cave walk, dome readability at night, HUD legibility, cable/collider perf with a long chain.

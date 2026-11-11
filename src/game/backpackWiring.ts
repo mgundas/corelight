@@ -8,7 +8,7 @@ import { BACKPACK_SLOTS } from '../core/constants.js';
 import type { PlayerInput } from '../player/input.js';
 import type { EntityId } from '../sim/entities.js';
 import type { World } from '../sim/world.js';
-import { findAimedItem } from './pickup.js';
+import { findAimedItem, findAimedTether } from './pickup.js';
 
 /** Consume edge-triggered backpack keys into Actions (call once per tick).
  * Queues drain unconditionally so presses with no eligible player never fire
@@ -22,6 +22,7 @@ export function tickBackpackInput(
   const select = input.consumeSelect();
   const drop = input.consumeDrop();
   const interact = input.consumeInteract();
+  const tether = input.consumeTether();
   if (!canAct || !playerId) return;
   if (select !== null && select >= 0 && select < BACKPACK_SLOTS) {
     world.dispatch({ type: 'selectSlot', playerId, slot: select });
@@ -37,6 +38,15 @@ export function tickBackpackInput(
   if (interact) {
     const aimed = findAimedItem(world, playerId);
     if (aimed) world.dispatch({ type: 'pickUp', playerId, itemId: aimed });
+    else {
+      // No item under the crosshair: E on a tether post pulls it back up.
+      const post = findAimedTether(world, playerId);
+      if (post) world.dispatch({ type: 'removeTether', playerId, tetherId: post });
+    }
+  }
+  // T spends one backpack Tether item on a post under the player.
+  if (tether) {
+    world.dispatch({ type: 'placeTether', playerId });
   }
 }
 

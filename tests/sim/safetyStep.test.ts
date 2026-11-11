@@ -29,6 +29,7 @@ function makeEntity(x: number, y: number, z: number): Entity {
         toolHardness: 2,
         lastTooHard: -Infinity,
         headlampOn: true,
+        deathMarkerId: null,
       },
     },
   };

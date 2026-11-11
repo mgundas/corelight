@@ -25,6 +25,8 @@ export interface Components {
   player: PlayerComponent;
   item: ItemComponent;
   node: NodeComponent;
+  tether: TetherComponent;
+  machine: MachineComponent;
 }
 
 export interface OxygenComponent {
@@ -57,6 +59,18 @@ export interface ItemComponent {
   holder?: EntityId;
 }
 
+/** A tether post: oxygen relay when live (connected back to a habitat). */
+export interface TetherComponent {
+  /** True when a chain of links reaches a habitat (recomputed by the system). */
+  live: boolean;
+  /** Entity ids this tether draws cables to (habitats + tethers). */
+  links: EntityId[];
+}
+
+/** A base machine. M08 only spawns habitats (oxygen root, later power root). */
+export interface MachineComponent {
+  machineType: 'habitat';
+}
 /** A mineable resource deposit placed deterministically per LOD0 chunk. */
 export interface NodeComponent {
   /** Canonical resource id (item spawned per charge). */
@@ -100,6 +114,8 @@ export interface PlayerComponent {
   lastTooHard: number;
   /** Helmet lamp on/off (L key). Part of player state, renders a SpotLight. */
   headlampOn: boolean;
+  /** Lost-backpack marker entity from the last death (null when recovered). */
+  deathMarkerId: EntityId | null;
 }
 
 export interface Entity {

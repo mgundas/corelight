@@ -13,6 +13,7 @@ import { ChunkMeshes } from './chunkMeshes.js';
 import { getOrigin, toLocal } from './floatingOrigin.js';
 import { frustumPlanes } from './frustum.js';
 import { ItemLights } from './itemLights.js';
+import { HabitatViews, MarkerViews, TetherViews } from './views/tetherView.js';
 import { disposeItemCaches } from './views/itemGeometry.js';
 import { ItemViews, type ItemEmitter } from './views/itemView.js';
 import { NodeViews } from './views/nodeView.js';
@@ -65,6 +66,9 @@ export class Renderer {
   readonly playerView = new PlayerView();
   readonly itemViews = new ItemViews();
   readonly nodeViews = new NodeViews();
+  readonly tetherViews = new TetherViews();
+  readonly habitatViews = new HabitatViews();
+  readonly markerViews = new MarkerViews();
   private readonly itemLights = new ItemLights();
   private readonly lighting: LightingRig;
   private readonly sky: Sky;
@@ -107,6 +111,9 @@ export class Renderer {
     this.scene.add(this.playerView.group);
     this.scene.add(this.itemViews.group);
     this.scene.add(this.nodeViews.group);
+    this.scene.add(this.tetherViews.group);
+    this.scene.add(this.habitatViews.group);
+    this.scene.add(this.markerViews.group);
     this.scene.add(this.itemLights.group);
     // Translucent brush sphere for the terrain tool (M04). Positioned
     // absolutely from world doubles every frame, so it owns its origin
@@ -136,6 +143,9 @@ export class Renderer {
     this.playerView.dispose();
     this.itemViews.dispose();
     this.nodeViews.dispose();
+    this.tetherViews.dispose();
+    this.habitatViews.dispose();
+    this.markerViews.dispose();
     this.itemLights.dispose();
     disposeItemCaches();
     this.lighting.dispose();
@@ -255,14 +265,18 @@ export class Renderer {
   }
 
   /**
-   * Sync ground items, resource nodes and carried backpack items, then park
-   * the glow light pool on the nearest emitters. `carried` holds the 8
-   * resolved backpack slot definitions (null = empty) for the followed
-   * player. Unknown future item ids resolve to null (never crash the frame).
+   * Sync ground items, resource nodes, tethers, habitats, markers, carried
+   * backpack items, then park the glow light pool on the nearest emitters.
+   * `carried` holds the 8 resolved backpack slot definitions (null for empty)
+   * for the followed player. Unknown future item ids resolve to null (never
+   * crash the frame).
    */
   renderEntities(entities: Iterable<Entity>, focusWorld: Vec3d, carried: (string | null)[]): void {
     const itemEmitters: ItemEmitter[] = this.itemViews.sync(entities);
     const nodeEmitters: ItemEmitter[] = this.nodeViews.sync(entities);
+    this.tetherViews.sync(entities);
+    this.habitatViews.sync(entities);
+    this.markerViews.sync(entities);
     this.itemLights.update(focusWorld, [...itemEmitters, ...nodeEmitters]);
     this.playerView.renderBackpack(
       carried.map((id) => (id && isKnownItem(id) ? itemDef(id) : null) as ItemDef | null),

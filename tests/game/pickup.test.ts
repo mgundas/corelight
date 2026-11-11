@@ -5,7 +5,7 @@ import { World } from '../../src/sim/world.js';
 import { findSpawnPosition } from '../../src/sim/physics/spawn.js';
 import { moveBasis } from '../../src/sim/physics/frames.js';
 import { upAt } from '../../src/sim/physics/frames.js';
-import { findAimedItem } from '../../src/game/pickup.js';
+import { findAimedItem, findAimedTether } from '../../src/game/pickup.js';
 
 function spawnWorld(seed = 1337): { world: World; playerId: string } {
   const world = new World(seed, { planets: [SELA] });
@@ -63,5 +63,50 @@ describe('findAimedItem', () => {
     });
     addItem(world, { ...player.position }, playerId);
     expect(findAimedItem(world, playerId)).toBe(null);
+  });
+});
+
+describe('findAimedTether', () => {
+  function addTether(world: World, at: { x: number; y: number; z: number }): string {
+    const id = world.nextId('tether');
+    world.entities.set(id, {
+      id,
+      kind: 'tether',
+      planetId: SELA.id,
+      position: { ...at },
+      rotation: { ...IDENTITY_QUAT },
+      components: { tether: { live: false, links: [] } },
+    });
+    return id;
+  }
+
+  it('finds the post in front of the player', () => {
+    const { world, playerId } = spawnWorld();
+    const player = world.entities.get(playerId);
+    if (!player) throw new Error('missing player');
+    const up = upAt(SELA, player.position);
+    const { forward } = moveBasis(up, 0, 0);
+    const tetherId = addTether(world, {
+      x: player.position.x + forward.x * 2,
+      y: player.position.y + forward.y * 2,
+      z: player.position.z + forward.z * 2,
+    });
+    expect(findAimedTether(world, playerId)).toBe(tetherId);
+    // Items do not shadow tether queries and vice versa.
+    expect(findAimedItem(world, playerId)).toBe(null);
+  });
+
+  it('ignores posts behind the player', () => {
+    const { world, playerId } = spawnWorld();
+    const player = world.entities.get(playerId);
+    if (!player) throw new Error('missing player');
+    const up = upAt(SELA, player.position);
+    const { forward } = moveBasis(up, 0, 0);
+    addTether(world, {
+      x: player.position.x - forward.x * 2,
+      y: player.position.y - forward.y * 2,
+      z: player.position.z - forward.z * 2,
+    });
+    expect(findAimedTether(world, playerId)).toBe(null);
   });
 });
