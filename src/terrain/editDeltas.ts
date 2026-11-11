@@ -49,10 +49,14 @@ export function deltasForJob(
     y: Math.max(0, Math.round(origin.y - min.y - border)),
     z: Math.max(0, Math.round(origin.z - min.z - border)),
   };
+  // LOD1 samples average a 2-wide LOD0 cube: sample 34 covers lattice +66
+  // and +67, so the window must reach one past the border (+67, not +66),
+  // or the edge normals average half a cube. LOD0 needs no extra (+0).
+  const hiPad = border + (cell - 1);
   const hi = {
-    x: Math.min(perAxis * 32, Math.round(origin.x - min.x + 32 * cell + border)),
-    y: Math.min(perAxis * 32, Math.round(origin.y - min.y + 32 * cell + border)),
-    z: Math.min(perAxis * 32, Math.round(origin.z - min.z + 32 * cell + border)),
+    x: Math.min(perAxis * 32, Math.round(origin.x - min.x + 32 * cell + hiPad)),
+    y: Math.min(perAxis * 32, Math.round(origin.y - min.y + 32 * cell + hiPad)),
+    z: Math.min(perAxis * 32, Math.round(origin.z - min.z + 32 * cell + hiPad)),
   };
   const acc = new Map<number, number>();
   const ownerMin = {

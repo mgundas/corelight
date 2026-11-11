@@ -243,20 +243,52 @@ export class TerrainEdits {
     return outcome;
   }
 
-  /** Raw stored delta at a planet-local point (0 when unedited). */
+  /**
+   * Stored edit delta at a planet-local point (0 when unedited). Trilinear
+   * interpolation of the eight neighbouring lattice samples: meshes sample
+   * linearly between lattice points, so nearest-sample reads disagree with
+   * the meshed surface by up to ~0.3 density after a dig (aim, tethers,
+   * nodes and the burial safety all read this field).
+   */
   deltaAt(planet: PlanetConfig, planetId: string, x: number, y: number, z: number): number {
     const min = rootMin(planet);
     const perAxis = 2 ** planet.lodMaxLevel;
     const latticeMax = perAxis * 32;
-    const gx = Math.round(x - min.x);
-    const gy = Math.round(y - min.y);
-    const gz = Math.round(z - min.z);
-    if (gx < 0 || gy < 0 || gz < 0 || gx > latticeMax || gy > latticeMax || gz > latticeMax) {
+    const fx = x - min.x;
+    const fy = y - min.y;
+    const fz = z - min.z;
+    if (fx < 0 || fy < 0 || fz < 0 || fx > latticeMax || fy > latticeMax || fz > latticeMax) {
       return 0;
     }
-    const inner = this.chunks.get(this.ownerKey(planetId, perAxis, gx, gy, gz));
-    if (!inner) return 0;
-    return inner.get(this.localIndex(perAxis, gx, gy, gz)) ?? 0;
+    const x0 = Math.floor(fx);
+    const y0 = Math.floor(fy);
+    const z0 = Math.floor(fz);
+    const tx = fx - x0;
+    const ty = fy - y0;
+    const tz = fz - z0;
+    let acc = 0;
+    for (let dz = 0; dz <= 1; dz += 1) {
+      const gz = z0 + dz;
+      if (gz < 0 || gz > latticeMax) continue;
+      const wz = dz === 0 ? 1 - tz : tz;
+      for (let dy = 0; dy <= 1; dy += 1) {
+        const gy = y0 + dy;
+        if (gy < 0 || gy > latticeMax) continue;
+        const wy = dy === 0 ? 1 - ty : ty;
+        for (let dx = 0; dx <= 1; dx += 1) {
+          const gx = x0 + dx;
+          if (gx < 0 || gx > latticeMax) continue;
+          const wx = dx === 0 ? 1 - tx : tx;
+          const w = wx * wy * wz;
+          if (w === 0) continue;
+          const inner = this.chunks.get(this.ownerKey(planetId, perAxis, gx, gy, gz));
+          if (!inner) continue;
+          const v = inner.get(this.localIndex(perAxis, gx, gy, gz));
+          if (v !== undefined) acc += v * w;
+        }
+      }
+    }
+    return acc;
   }
 
   /** Stored deltas for one LOD0 chunk key (undefined when unedited). */

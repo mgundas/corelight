@@ -34,6 +34,19 @@ describe('TerrainEdits.applySphere', () => {
     expect(edits.deltaAt(SELA, SELA.id, center.x, center.y, center.z)).toBeCloseTo(1);
   });
 
+  it('interpolates between lattice samples instead of snapping', () => {
+    const edits = new TerrainEdits();
+    const min = rootMin(SELA);
+    const g = { x: 100, y: 200, z: 300 };
+    const center = { x: min.x + g.x, y: min.y + g.y, z: min.z + g.z };
+    edits.applySphere(SELA, solid2, center, 0.5, 2, 'dig');
+    // Exact sample holds the full delta; halfway to the (empty) neighbour
+    // reads half (trilinear). Nearest-sample would read -2 or 0 here.
+    expect(edits.deltaAt(SELA, SELA.id, center.x, center.y, center.z)).toBeCloseTo(-2);
+    expect(edits.deltaAt(SELA, SELA.id, center.x + 0.5, center.y, center.z)).toBeCloseTo(-1);
+    expect(edits.deltaAt(SELA, SELA.id, center.x + 1, center.y, center.z)).toBeCloseTo(0);
+  });
+
   it('clamps deltas to [-4, 4] no matter the strength', () => {
     const edits = new TerrainEdits();
     const min = rootMin(SELA);
@@ -184,6 +197,19 @@ describe('TerrainEdits.deltasForJob', () => {
     expect(at1!.indices.length).toBe(1);
     expect(at1!.values[0]).toBeCloseTo(-2 / 8);
     expect(edits.deltasForJob(SELA, 2, { x: 0, y: 0, z: 0 })).toBeNull();
+  });
+
+  it('includes the far LOD0 cube in the LOD1 border sample', () => {
+    // LOD1 border sample 34 averages lattice +66 and +67: clipping hi at
+    // +66 halves its cube. A single-sample dig at +67 must still land.
+    const edits = new TerrainEdits();
+    const min = rootMin(SELA);
+    const parent = { x: 2, y: 4, z: 4 };
+    const g = { x: parent.x * 64 + 67, y: parent.y * 64, z: parent.z * 64 };
+    edits.applySphere(SELA, solid2, { x: min.x + g.x, y: min.y + g.y, z: min.z + g.z }, 0.5, 2, 'dig');
+    const at1 = edits.deltasForJob(SELA, 1, parent);
+    expect(at1).not.toBeNull();
+    expect(at1!.values[0]).toBeCloseTo(-2 / 8);
   });
 
   it('returns null when the job window holds no edits', () => {
