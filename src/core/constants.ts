@@ -152,6 +152,14 @@ export const HEADLAMP_DECAY = 1.2;
  * New Game / Continue cycles before the oldest entry is rebuilt. */
 export const NOISE_CACHE_BUDGET = 64;
 
+/** Half-width of the cavern wrap guard: within this distance of a floor
+ * boundary the rooms pinch shut and the ground reads as slab. The room mask
+ * and anchor pockets are per-floor noise (indexed by roomIdx), so the raw
+ * term jumps at every wrap; the guard forces both sides strongly solid so
+ * the min() never selects it there and no phantom ceiling appears. Kept to
+ * 2 m so room interiors (14 m tall, anchors at mid-room) stay open. */
+export const CAVERN_WRAP_GUARD_M = 2;
+
 /** Backpack slots per player (PROJECT.md: 8, one item per slot in v1). */
 export const BACKPACK_SLOTS = 8;
 /** Pick-up range: E grabs the aimed item this close to the player. */

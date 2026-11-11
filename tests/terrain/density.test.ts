@@ -147,7 +147,8 @@ describe('cavern floors', () => {
     const lo = stack.start + stack.cavernHeight - 4;
     const hi = stack.start + stack.cavernHeight + 8;
     // 2 m grid over a 24x24 m patch inside floor 0's anchor pocket: first
-    // solid going down, starting inside room air (just under the room top).
+    // solid going down, starting inside room air (below the wrap guard that
+    // pinches room tops shut at floor boundaries).
     const anchor = (cavernAnchorPoints(SELA)[0] as { x: number; y: number; z: number });
     const step = 2;
     const half = 12;
@@ -160,7 +161,7 @@ describe('cavern floors', () => {
         const x = anchor.x - half + ix;
         const z = anchor.z - half + iz;
         let fy = -1;
-        for (let y = SELA.radius - 36; y >= SELA.radius - 90; y -= 0.5) {
+        for (let y = SELA.radius - 40; y >= SELA.radius - 90; y -= 0.5) {
           if (density(x, y, z) >= 0) { fy = y; break; }
         }
         row.push(fy);

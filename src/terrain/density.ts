@@ -4,7 +4,7 @@
 // Positive = solid, negative = air, surface at 0. Pure + deterministic.
 
 import type { LayerConfig, PlanetConfig, Rgb } from '../planets/PlanetConfig.js';
-import { NOISE_CACHE_BUDGET } from '../core/constants.js';
+import { NOISE_CACHE_BUDGET, CAVERN_WRAP_GUARD_M } from '../core/constants.js';
 import { smoothstep, type Vec3d } from '../core/math.js';
 import { createSeededNoise3D, fbm3, type NoiseFunction3D } from './noise.js';
 
@@ -130,6 +130,8 @@ export function createDensityField(
     let slabness = 0;
     let roomU = -1;
     let roomIdx = -1;
+    /** 0 mid-room, 1 at the wrap planes: pinches rooms shut at boundaries. */
+    let wrapGuard = 0;
     if (caverns.enabled && depth >= stack.start && r >= shellOuter) {
       const dd = depth - stack.start;
       const idx = Math.floor(dd / stack.pitch);
@@ -140,6 +142,15 @@ export function createDensityField(
         // 0 inside rooms, 1 inside slabs: worms widen where they cross slabs
         // so floors get irregular diggable openings, not pinholes.
         slabness = smoothstep(caverns.cavernHeight - 3, caverns.cavernHeight + 3, u);
+        // Wrap guard: u resets at every floor top while the mask/anchor are
+        // per-floor noise, so the raw room term jumps there (phantom
+        // ceilings). Within the guard the rooms pinch shut (mask -> 0) and
+        // the ground reads as slab (slabness -> 1): both sides strongly
+        // solid, so the min() never selects the seam. Continuous (linear in
+        // u), so no new jump at the guard edge.
+        const wrapDist = Math.min(u, stack.pitch - u);
+        wrapGuard = Math.min(1, Math.max(0, (CAVERN_WRAP_GUARD_M - wrapDist) / CAVERN_WRAP_GUARD_M));
+        if (wrapGuard > slabness) slabness = wrapGuard;
       }
     }
     // Cave worms: carve where both fields are near zero. min() keeps the
@@ -184,6 +195,9 @@ export function createDensityField(
       const anchorDist = Math.hypot(x - anchor.x, y - anchor.y, z - anchor.z);
       const anchorMask = 1 - smoothstep(caverns.roomAnchorSize * 0.45, caverns.roomAnchorSize, anchorDist);
       if (anchorMask > mask) mask = anchorMask;
+      // Wrap guard pinches the mask shut at floor boundaries (see above):
+      // the per-floor noise would otherwise jump at the wrap.
+      if (wrapGuard > 0) mask *= 1 - wrapGuard;
       if (mask > 0) {
         const fr = caverns.floorRoughFrequency;
         const rough = caverns.floorRoughness * fbm3(cavernRough, x * fr, y * fr, z * fr, 3);
