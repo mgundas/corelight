@@ -1,10 +1,11 @@
-// M05 atmosphere: a BackSide shell at 1.25 x planet radius with a gradient
+// M05 atmosphere: a BackSide shell above the planet with a gradient
 // shader. It is brighter on the sunlit side and reads as a rim glow from
 // space. Positions re-sync from world doubles every frame (cheap: one mesh
 // per planet), so origin shifts can never desync it.
 
 import * as THREE from 'three';
 import type { PlanetConfig } from '../planets/PlanetConfig.js';
+import { ATMOSPHERE_SHELL_MULT } from '../core/constants.js';
 import type { Vec3d } from '../core/math.js';
 import { toLocal } from './floatingOrigin.js';
 
@@ -67,7 +68,10 @@ export class Atmosphere {
       transparent: true,
       depthWrite: false,
     });
-    const mesh = new THREE.Mesh(new THREE.SphereGeometry(planet.radius * 1.25, 48, 32), material);
+    const mesh = new THREE.Mesh(
+      new THREE.SphereGeometry(planet.radius * ATMOSPHERE_SHELL_MULT, 48, 32),
+      material,
+    );
     mesh.userData['originManaged'] = true;
     mesh.renderOrder = 10;
     mesh.frustumCulled = false;

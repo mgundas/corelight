@@ -39,6 +39,28 @@ describe('skyStateFor', () => {
     expect(s.fogDensity).toBeCloseTo(0, 6);
   });
 
+  it('goes dark soon after leaving the planet (fade done by 2000 m)', () => {
+    const s = skyStateFor(1, 2000, -2000, DAY);
+    expect(s.bg[0]).toBeCloseTo(0, 6);
+    expect(s.bg[1]).toBeCloseTo(0, 6);
+    expect(s.bg[2]).toBeCloseTo(0, 6);
+    expect(s.stars).toBe(1);
+    expect(s.fogDensity).toBeCloseTo(0, 6);
+  });
+
+  it('keeps the day sky on low high-flights (below 400 m)', () => {
+    const s = skyStateFor(1, 300, -300, DAY);
+    expect(s.bg[0]).toBeCloseTo(DAY[0] as number, 2);
+    expect(s.bg[1]).toBeCloseTo(DAY[1] as number, 2);
+    expect(s.bg[2]).toBeCloseTo(DAY[2] as number, 2);
+    expect(s.stars).toBe(0);
+  });
+
+  it('night is near-black, not grey-blue', () => {
+    const s = skyStateFor(-1, 0, 0, DAY);
+    expect(s.bg[0] + s.bg[1] + s.bg[2]).toBeLessThan(0.03);
+  });
+
   it('makes cave fog darker and denser with depth', () => {
     const surface = skyStateFor(1, 0, 0, DAY);
     const deep = skyStateFor(1, 0, 100, DAY);

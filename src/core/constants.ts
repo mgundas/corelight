@@ -127,12 +127,17 @@ export const SHADOW_MAP_SIZE = 2048;
 /** FogExp2 density at the surface, deep underground, and in space. */
 export const FOG_SURFACE_DENSITY = 0.0011;
 export const FOG_CAVE_DENSITY = 0.028;
-/** Altitude above the surface where fog fades out toward space. */
-export const FOG_SPACE_START_M = 800;
-export const FOG_SPACE_END_M = 3000;
-/** Altitude where the sky background fades to black (stars take over). */
-export const SKY_SPACE_START_M = 800;
-export const SKY_SPACE_END_M = 3000;
+/** Altitude where fog starts fading out toward space. */
+export const FOG_SPACE_START_M = 400;
+/** Altitude where fog is gone (distant planet stays crisp). */
+export const FOG_SPACE_END_M = 2000;
+/** Altitude where the sky background starts fading to black (space). */
+export const SKY_SPACE_START_M = 400;
+/** Altitude where the fade to black is complete. */
+export const SKY_SPACE_END_M = 2000;
+
+/** Atmosphere shell radius as a multiple of the planet radius. */
+export const ATMOSPHERE_SHELL_MULT = 1.5;
 
 /** Headlamp spotlight tuning (SpotLight attached to the camera). */
 export const HEADLAMP_COLOR = 0xfff1d6;

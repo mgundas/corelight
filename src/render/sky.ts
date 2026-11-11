@@ -25,7 +25,7 @@ export const STAR_RADIUS = 60000;
 export const SUN_DISC_DISTANCE = 50000;
 export const SUN_DISC_RADIUS = 1400;
 
-const NIGHT: Rgb = [0.012, 0.018, 0.045];
+const NIGHT: Rgb = [0.004, 0.006, 0.014];
 const SUNSET: Rgb = [1.0, 0.42, 0.16];
 
 function mix3(a: Rgb, b: Rgb, t: number): Rgb {
