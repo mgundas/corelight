@@ -324,6 +324,9 @@ export class ChunkManager {
       }
       this.remesher.applied(item.key, this.inflight.has(item.key));
       if (item.result.empty) {
+        // An edit can empty a chunk (a small bump dug away): the old mesh
+        // must go, or it stays visible forever while the key is desired.
+        if (item.isEdit || this.sink.hasMesh(item.key)) this.sink.remove(item.key);
         this.sink.markEmpty(item.key);
       } else if (item.isEdit && !this.desiredKeys.has(item.key) && !this.sink.hasMesh(item.key)) {
         // The chunk left the visible set while its rebuild ran (or was

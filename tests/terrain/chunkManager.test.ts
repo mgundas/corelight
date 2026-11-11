@@ -331,6 +331,24 @@ describe('ChunkManager', () => {
     for (const key of l0Keys) expect(sink.has(key)).toBe(false);
   });
 
+  it('an edit that empties a meshed chunk removes the mesh', async () => {
+    const fakes = fakePool();
+    const sink = new FakeSink();
+    const manager = makeManager(fakes.pool, sink, 1000);
+    const camera = { x: 10, y: 402, z: 5 };
+    await settle(manager, fakes, camera);
+    const l0Key = [...sink.meshes].find((key) => parseChunkKey(key).level === 0);
+    if (!l0Key) throw new Error('no L0 mesh to empty');
+    manager.notifyEdited([l0Key]);
+    expect(fakes.pending.length).toBeGreaterThan(0);
+    const jobs = fakes.pending.splice(0);
+    for (const job of jobs) job.resolve(meshResult(SELA, job.level, job.coord, true));
+    await Promise.resolve();
+    manager.update(camera, null, 100000);
+    expect(sink.hasMesh(l0Key)).toBe(false);
+    expect(sink.has(l0Key)).toBe(true);
+  });
+
   it('keeps children visible until the merge parent arrives', async () => {
     const fakes = fakePool();
     const sink = new FakeSink();
