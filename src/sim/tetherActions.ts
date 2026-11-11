@@ -95,14 +95,16 @@ export function seatTetherOnGround(
   for (let t = top - step; t >= bottom; t -= step) {
     const d = live(local.x + up.x * t, local.y + up.y * t, local.z + up.z * t);
     if (prevD < 0 && d >= 0) {
-      // Bisect the crossing (surface at density 0).
+      // Bisect the crossing (surface at density 0). lo is the solid side
+      // (lower t), hi the air side (upper t): solid mids pull lo up, air
+      // mids pull hi down, so the interval always brackets the zero.
       let lo = t;
       let hi = prevT;
       for (let i = 0; i < 8; i += 1) {
         const mid = (lo + hi) / 2;
         const md = live(local.x + up.x * mid, local.y + up.y * mid, local.z + up.z * mid);
-        if (md >= 0) hi = mid;
-        else lo = mid;
+        if (md >= 0) lo = mid;
+        else hi = mid;
       }
       const hit = (lo + hi) / 2;
       return {

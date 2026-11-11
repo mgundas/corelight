@@ -160,13 +160,18 @@ function findSurfaceSpot(
       const d = density(dir.x * r, dir.y * r, dir.z * r);
       if (prevD < 0 && d >= 0) {
         // Bisect the crossing (surface at 0, midpoint of the bracket).
+        // lo is the solid side (lower r), hi the air side (upper r):
+        // solid mids pull lo up, air mids pull hi down, so the interval
+        // always brackets the zero. (An inverted update here converges to
+        // the far endpoint and plants nodes up to a full step off — found
+        // via the M08 tether audit, fixed in both places.)
         let lo = r;
         let hi = prevR;
         for (let i = 0; i < 8; i += 1) {
           const mid = (lo + hi) / 2;
           const md = density(dir.x * mid, dir.y * mid, dir.z * mid);
-          if (md >= 0) hi = mid;
-          else lo = mid;
+          if (md >= 0) lo = mid;
+          else hi = mid;
         }
         const cross = (lo + hi) / 2;
         const local = { x: dir.x * cross, y: dir.y * cross, z: dir.z * cross };
