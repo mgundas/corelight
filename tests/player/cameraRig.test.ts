@@ -10,6 +10,13 @@ describe('CameraRig', () => {
     expect(rig.distance).toBe(CAM_DISTANCE_MAX);
   });
 
+  it('ignores horizontal wheel (deltaY 0)', () => {
+    const rig = new CameraRig();
+    const before = rig.distance;
+    rig.zoom(0);
+    expect(rig.distance).toBe(before);
+  });
+
   it('sits 4 m behind the head when clear', () => {
     const rig = new CameraRig();
     rig.yaw = 0;

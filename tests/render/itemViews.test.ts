@@ -41,8 +41,7 @@ describe('item views', () => {
 });
 
 describe('node views', () => {
-  it('builds one deterministic cluster per node', () => {
-    const views = new NodeViews();
+  it('builds one deterministic cluster per node', () => {    const views = new NodeViews();
     const node = (id: string): Entity => ({
       id,
       kind: 'node',
@@ -61,6 +60,23 @@ describe('node views', () => {
     // Re-syncing the same node keeps the same cluster (no reshuffle).
     views.sync([a]);
     expect(views.group.children[0]?.children.length).toBe(shardCount);
+    views.dispose();
+  });
+
+  it('glows any deposit whose item emits light (data-driven)', () => {
+    const views = new NodeViews();
+    const node = (id: string, resourceId: string): Entity => ({
+      id,
+      kind: 'node',
+      planetId: 'sela',
+      position: { x: 4, y: 5, z: 6 },
+      rotation: { ...IDENTITY_QUAT },
+      components: { node: { resourceId, charges: 3, maxCharges: 3, chunkKey: 'sela:0:1:2:3' } },
+    });
+    // Voidstone emits light per items.json, so the deposit glows too.
+    expect(views.sync([node('n1', 'voidstone')]).length).toBe(1);
+    // Common ores stay dark until mined.
+    expect(views.sync([node('n2', 'ferrite_ore')]).length).toBe(0);
     views.dispose();
   });
 });

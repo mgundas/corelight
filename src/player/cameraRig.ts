@@ -30,6 +30,7 @@ export class CameraRig {
   }
 
   zoom(deltaY: number): void {
+    if (deltaY === 0) return;
     const factor = deltaY > 0 ? 1.15 : 1 / 1.15;
     this.distance = Math.min(CAM_DISTANCE_MAX, Math.max(CAM_DISTANCE_MIN, this.distance * factor));
   }

@@ -103,6 +103,7 @@ export class FreeFlyCamera {
 
   private handleWheel = (e: WheelEvent): void => {
     if (!this.enabled) return;
+    if (e.deltaY === 0) return;
     e.preventDefault();
     const factor = e.deltaY > 0 ? 0.85 : 1.18;
     this.speed = Math.max(1, Math.min(2000, this.speed * factor));

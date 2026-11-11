@@ -35,6 +35,13 @@ describe('TerrainTool', () => {
     expect(tool.radius).toBe(1);
   });
 
+  it('ignores horizontal wheel (deltaY 0)', () => {
+    const tool = new TerrainTool();
+    const before = tool.radius;
+    tool.adjustRadius(0);
+    expect(tool.radius).toBe(before);
+  });
+
   it('captures the flatten plane at stroke start and freezes it', () => {
     const tool = new TerrainTool();
     const buttons = { dig: false, add: false, flatten: true };

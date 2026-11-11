@@ -45,9 +45,10 @@ export class NodeViews {
         entity.rotation.w,
       );
       const glow = itemDef(resourceId).emitsLight;
-      // Only wall crystals and research pods glow from the deposit itself;
-      // common ores stay dark until mined (keeps the night readable).
-      if (glow && (resourceId === 'lumen_crystal' || resourceId === 'research_sample')) {
+      // Data-driven (items.json): any resource with an emitsLight entry
+      // glows from the deposit itself. Ores without one stay dark until
+      // mined, which keeps the night readable.
+      if (glow) {
         emitters.push({ position: entity.position, color: glow.color, intensity: glow.intensity });
       }
     }

@@ -52,6 +52,18 @@ export class ChunkBounds {
     }
   }
 
+  /** Release every helper's geometry and material (call from Renderer.dispose). */
+  dispose(): void {
+    for (let i = this.group.children.length - 1; i >= 0; i -= 1) {
+      const child = this.group.children[i] as THREE.Object3D;
+      this.group.remove(child);
+      const helper = child as THREE.Box3Helper;
+      helper.geometry.dispose();
+      (helper.material as THREE.Material).dispose();
+    }
+    this.signature = '';
+  }
+
   private rebuild(boxes: ChunkBox[]): void {
     for (let i = this.group.children.length - 1; i >= 0; i -= 1) {
       const child = this.group.children[i] as THREE.Object3D;

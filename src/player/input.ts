@@ -231,6 +231,9 @@ export class PlayerInput {
 
   private handleWheel = (e: WheelEvent): void => {
     if (!this.enabled) return;
+    // Horizontal scroll (trackpads) reports deltaX with deltaY == 0: it must
+    // not zoom, speed the fly camera or grow the brush.
+    if (e.deltaY === 0) return;
     e.preventDefault();
     // Ctrl+wheel resizes the terrain brush instead of zooming the camera.
     if (e.ctrlKey) {

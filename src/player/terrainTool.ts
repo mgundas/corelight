@@ -33,6 +33,7 @@ export class TerrainTool {
 
   /** Ctrl+wheel brush sizing (1 to 4 m in half-meter steps). */
   adjustRadius(deltaY: number): void {
+    if (deltaY === 0) return;
     const step = deltaY > 0 ? -0.5 : 0.5;
     this.radius = Math.min(TOOL_MAX_RADIUS, Math.max(TOOL_MIN_RADIUS, this.radius + step));
   }

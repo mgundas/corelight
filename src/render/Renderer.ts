@@ -149,6 +149,7 @@ export class Renderer {
     this.markerViews.dispose();
     this.itemLights.dispose();
     disposeItemCaches();
+    this.bounds.dispose();
     this.lighting.dispose();
     this.sky.dispose();
     this.atmosphere.dispose();
