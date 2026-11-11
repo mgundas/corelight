@@ -35,8 +35,10 @@ export class ColliderPool {
   private inFlight = new Map<Worker, Set<number>>();
   private nextId = 0;
   private closed = false;
+  private readonly createWorker?: () => Worker;
 
-  constructor(count: number = Math.min(3, poolSize())) {
+  constructor(count: number = Math.min(3, poolSize()), createWorker?: () => Worker) {
+    this.createWorker = createWorker;
     const n = Math.max(1, count);
     for (let i = 0; i < n; i += 1) {
       this.workers.push(this.spawnWorker());
@@ -72,9 +74,11 @@ export class ColliderPool {
   }
 
   private spawnWorker(): Worker {
-    const worker = new Worker(new URL('./workers/colliderWorker.ts', import.meta.url), {
-      type: 'module',
-    });
+    const worker = this.createWorker
+      ? this.createWorker()
+      : new Worker(new URL('./workers/colliderWorker.ts', import.meta.url), {
+          type: 'module',
+        });
     worker.onmessage = (event: MessageEvent<ColliderResult | ColliderError>): void => {
       this.handleMessage(worker, event.data);
     };
@@ -122,26 +126,37 @@ export class ColliderPool {
       const worker = this.idle.pop() as Worker;
       const entry = this.queue.shift() as { id: number; request: ColliderRequest };
       this.inFlight.get(worker)?.add(entry.id);
-      // Edit deltas transfer (zero-copy); the sender builds a fresh
-      // attachment per submit, so neutering is safe.
+      // Transfer copies, keeping the stored originals intact for retry (see
+      // MeshWorkerPool.pump for the detached-buffer failure this avoids).
+      let edits: ColliderRequest['edits'] | undefined;
       const transfer: Transferable[] = [];
       if (entry.request.edits) {
-        transfer.push(
-          entry.request.edits.indices.buffer as Transferable,
-          entry.request.edits.values.buffer as Transferable,
-        );
+        const indices = entry.request.edits.indices.slice();
+        const values = entry.request.edits.values.slice();
+        edits = { indices, values };
+        transfer.push(indices.buffer as Transferable, values.buffer as Transferable);
       }
-      worker.postMessage(
-        {
-          id: entry.id,
-          planetConfig: entry.request.planetConfig,
-          worldSeed: entry.request.worldSeed,
-          coord: entry.request.coord,
-          edits: entry.request.edits,
-          editVersion: entry.request.editVersion,
-        },
-        transfer,
-      );
+      try {
+        worker.postMessage(
+          {
+            id: entry.id,
+            planetConfig: entry.request.planetConfig,
+            worldSeed: entry.request.worldSeed,
+            coord: entry.request.coord,
+            edits,
+            editVersion: entry.request.editVersion,
+          },
+          transfer,
+        );
+      } catch (err) {
+        this.inFlight.get(worker)?.delete(entry.id);
+        if (!this.closed) this.idle.push(worker);
+        const pending = this.pending.get(entry.id);
+        this.pending.delete(entry.id);
+        this.requests.delete(entry.id);
+        this.retries.delete(entry.id);
+        pending?.reject(err instanceof Error ? err : new Error('collider worker postMessage failed'));
+      }
     }
   }
 
