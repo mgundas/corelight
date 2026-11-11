@@ -23,6 +23,8 @@ export interface Components {
   printer: PrinterComponent;
   furnace: FurnaceComponent;
   player: PlayerComponent;
+  item: ItemComponent;
+  node: NodeComponent;
 }
 
 export interface OxygenComponent {
@@ -31,6 +33,8 @@ export interface OxygenComponent {
 
 export interface InventoryComponent {
   slots: (EntityId | null)[];
+  /** Selected slot index (0-based, drives the Q drop + HUD highlight). */
+  selectedSlot: number;
 }
 
 export interface PowerComponent {
@@ -43,6 +47,25 @@ export interface PrinterComponent {
 
 export interface FurnaceComponent {
   progress: number;
+}
+
+/** A physical pickup in the world (ground) or carried in a backpack. */
+export interface ItemComponent {
+  /** Canonical id from src/data/items.json. */
+  itemId: string;
+  /** Player entity id holding this item, if any (carried items skip physics). */
+  holder?: EntityId;
+}
+
+/** A mineable resource deposit placed deterministically per LOD0 chunk. */
+export interface NodeComponent {
+  /** Canonical resource id (item spawned per charge). */
+  resourceId: string;
+  /** Remaining charges (2 to 5 at spawn; 0 depletes and removes the node). */
+  charges: number;
+  maxCharges: number;
+  /** LOD0 chunk key this node was placed from (respawn bookkeeping). */
+  chunkKey: string;
 }
 
 /** One-shot movement intent for the current tick (cleared when consumed). */

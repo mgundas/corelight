@@ -31,6 +31,10 @@ export class World {
   readonly terrainEdits = new TerrainEdits();
   /** Runtime planet configs (NOT serialized: static game data). */
   planets: PlanetConfig[] = [];
+  /** Deterministically-placed nodes already mined out (never respawned). */
+  readonly depletedNodes = new Set<string>();
+  /** Remaining charges of partially mined nodes (survives far despawns). */
+  readonly nodeCharges = new Map<string, number>();
   private queue: Action[] = [];
   private systems: System[] = [];
   private idCounter = 0;

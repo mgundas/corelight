@@ -15,15 +15,15 @@ import { PlayerInput } from '../player/input.js';
 import { TerrainTool, type ToolAim } from '../player/terrainTool.js';
 import { World } from '../sim/world.js';
 import type { EntityId } from '../sim/entities.js';
-import { updateSun } from '../sim/systems/sun.js';
 import { computeEnvironment, findFollowed } from './environment.js';
 import { upAt } from '../sim/physics/frames.js';
-import { disposePhysics, physicsWorldFor } from '../sim/physics/rapierWorld.js';
-import { findSpawnPosition } from '../sim/physics/spawn.js';
-import { makePhysicsSystem } from '../sim/physics/system.js';
+import { disposePhysics } from '../sim/physics/rapierWorld.js';
 import { TerrainColliders } from '../sim/physics/terrainColliders.js';
 import { serializeWorld, type SaveData } from '../save/serialize.js';
 import { DebugOverlay } from '../ui/debugOverlay.js';
+import { Hud } from '../ui/hud.js';
+import { backpackFrame, tickBackpackInput } from './backpackWiring.js';
+import { setupWorldSystems } from './worldSetup.js';
 import { updateDebugOverlay } from './debugStats.js';
 
 // Game owns World + Renderer and wires the fixed-timestep loop:
@@ -39,6 +39,7 @@ export class Game {
   readonly input = new PlayerInput();
   readonly tool = new TerrainTool();
   readonly overlay = new DebugOverlay();
+  private readonly hud = new Hud();
 
   private playerId: EntityId | null = null;
   private readonly colliders: TerrainColliders;
@@ -87,51 +88,14 @@ export class Game {
       this.world = new World(seed, { planets, time: initialTimeS });
     }
 
-    // Physics first: collider ring (worker-backed, edit-aware) + movement
-    // system, then the spawn so the very first tick already
+    // Physics, items, node streaming and sun (see worldSetup for the tick
+    // order); then the spawn so the very first tick already
     // freezes/requests correctly. All seeds derive from the world (a
     // restored save brings its own), never from boot/URL params.
     const worldSeed = this.world.seed;
-    this.colliders = new TerrainColliders(
-      {
-        request: (planet, worldSeed, coord, editVersion) =>
-          this.colliderPool.request({
-            planetConfig: planet,
-            worldSeed,
-            coord,
-            edits: this.world.terrainEdits.deltasForJob(planet, 0, coord) ?? undefined,
-            editVersion,
-          }),
-      },
-      physicsWorldFor,
-    );
-    this.world.addSystem(
-      makePhysicsSystem({ planets, worldSeed, colliders: this.colliders, edits: this.world.terrainEdits }),
-    );
-    // Environment clock (order-free: only re-derives sunDirection from time).
-    this.world.addSystem(updateSun);
-    const home = planets[0] as PlanetConfig;
-    if (existingWorld) {
-      for (const entity of this.world.entities.values()) {
-        if (entity.kind === 'player') {
-          this.playerId = entity.id;
-          break;
-        }
-      }
-    } else {
-      this.world.dispatch({
-        type: 'spawnPlayer',
-        planetId: home.id,
-        position: findSpawnPosition(home, seed),
-      });
-      this.world.tick(SIM_DT);
-      for (const entity of this.world.entities.values()) {
-        if (entity.kind === 'player') {
-          this.playerId = entity.id;
-          break;
-        }
-      }
-    }
+    const setup = setupWorldSystems(this.world, planets, this.colliderPool, seed, existingWorld);
+    this.colliders = setup.colliders;
+    this.playerId = setup.playerId;
 
     this.renderer = new Renderer(canvas, worldSeed, planets, prebuilt);
     const wiring = wireTerrainEdits(this.world, planets, this.colliders, this.renderer.streamer);
@@ -243,6 +207,7 @@ export class Game {
     this.colliders.dispose();
     disposePhysics();
     this.overlay.dispose();
+    this.hud.dispose();
     this.renderer.dispose();
   }
 
@@ -289,6 +254,9 @@ export class Game {
           lookYaw: this.rig.yaw,
           lookPitch: this.rig.pitch,
         });
+        // Backpack keys (M07): digits select a slot immediately, Q drops
+        // the selected slot, E picks up the aimed item in range.
+        tickBackpackInput(this.world, this.playerId, this.input);
         if (toolActive) {
           const edit = this.tool.update(performance.now(), this.playerId, toolButtons, this.toolAim);
           if (edit) this.world.dispatch(edit);
@@ -359,6 +327,17 @@ export class Game {
     // origin shifts only.
     this.renderer.updateStreaming(activePos);
     this.renderer.renderPlayer(alpha);
+    // Items, nodes, backpack and glow lights (M07) + the HUD slot bar.
+    {
+      const frame = backpackFrame(this.world, flying ? null : this.playerId, flying);
+      this.renderer.renderEntities(this.world.entities.values(), focusWorld, frame.carriedItemIds);
+      this.hud.update({
+        slots: frame.slotDefs,
+        selectedSlot: frame.selectedSlot,
+        soil: frame.soil,
+        prompt: frame.prompt,
+      });
+    }
     // Terrain brush preview: translucent sphere at the aim point (hidden in
     // fly mode or when nothing is in range). Re-set every frame from world
     // doubles, so origin shifts can never desync it.

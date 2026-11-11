@@ -7,6 +7,8 @@
 import * as THREE from 'three';
 import { toLocal } from '../floatingOrigin.js';
 import type { Quat, Vec3d } from '../../core/math.js';
+import type { ItemDef } from '../../data/loadData.js';
+import { makeItemMesh } from './itemGeometry.js';
 
 interface Sample {
   pos: Vec3d;
@@ -45,6 +47,9 @@ export class PlayerView {
   private prev: Sample | null = null;
   private curr: Sample | null = null;
   private visible = false;
+  /** Backpack slot meshes (8): reconciled by renderBackpack. */
+  private readonly packSlots: (THREE.Mesh | null)[] = Array<THREE.Mesh | null>(8).fill(null);
+  private readonly packItemIds: (string | null)[] = Array<string | null>(8).fill(null);
 
   constructor() {
     this.group.name = 'player';
@@ -122,12 +127,45 @@ export class PlayerView {
     this.group.quaternion.set(curr.quat.x, curr.quat.y, curr.quat.z, curr.quat.w);
   }
 
+  /**
+   * Show carried items on the backpack (call every frame with the player's
+   * 8 resolved slot definitions, null for empty). Meshes share the item
+   * geometry cache, so reconcile by id and never dispose them here.
+   */
+  renderBackpack(carried: (ItemDef | null)[]): void {
+    for (let i = 0; i < 8; i += 1) {
+      const def = carried[i] ?? null;
+      if ((this.packItemIds[i] ?? null) === (def?.id ?? null)) continue;
+      const old = this.packSlots[i];
+      if (old) {
+        this.group.remove(old);
+        this.packSlots[i] = null;
+      }
+      this.packItemIds[i] = def?.id ?? null;
+      if (!def) continue;
+      const mesh = makeItemMesh(def);
+      const col = i % 4;
+      const row = Math.floor(i / 4);
+      mesh.position.set(-0.15 + col * 0.1, 0.2 - row * 0.24, -0.5);
+      mesh.scale.multiplyScalar(0.45);
+      mesh.matrixAutoUpdate = false;
+      mesh.updateMatrix();
+      this.packSlots[i] = mesh;
+      this.group.add(mesh);
+    }
+  }
+
   dispose(): void {
     for (const child of [...this.group.children]) {
-      const mesh = child as THREE.Mesh;
-      mesh.geometry.dispose();
       this.group.remove(child);
+      // Backpack/item meshes share cached geometry/materials (owned by
+      // itemGeometry.ts): only the astronaut's own meshes dispose theirs.
+      if (!this.packSlots.includes(child as THREE.Mesh)) {
+        const mesh = child as THREE.Mesh;
+        mesh.geometry.dispose();
+      }
     }
+    for (let i = 0; i < this.packSlots.length; i += 1) this.packSlots[i] = null;
     this.bodyMat.dispose();
     this.helmetMat.dispose();
     this.visorMat.dispose();

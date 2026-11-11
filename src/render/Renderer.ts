@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { SELA } from '../planets/configs/sela.js';
 import type { PlanetConfig, Rgb } from '../planets/PlanetConfig.js';
 import type { Quat, Vec3d } from '../core/math.js';
+import { isKnownItem, itemDef, type ItemDef } from '../data/loadData.js';
+import type { Entity } from '../sim/entities.js';
 import { ChunkManager } from '../terrain/chunkManager.js';
 import { toWorldPlanes, type StreamStats } from '../terrain/streaming.js';
 import { MeshWorkerPool, type MeshResult } from '../terrain/workerPool.js';
@@ -10,6 +12,10 @@ import { ChunkBounds } from './chunkBounds.js';
 import { ChunkMeshes } from './chunkMeshes.js';
 import { getOrigin, toLocal } from './floatingOrigin.js';
 import { frustumPlanes } from './frustum.js';
+import { ItemLights } from './itemLights.js';
+import { disposeItemCaches } from './views/itemGeometry.js';
+import { ItemViews, type ItemEmitter } from './views/itemView.js';
+import { NodeViews } from './views/nodeView.js';
 import { LightingRig } from './lighting.js';
 import { Sky } from './sky.js';
 import { PlayerView } from './views/playerView.js';
@@ -57,6 +63,9 @@ export class Renderer {
   readonly streamer: ChunkManager;
   readonly bounds = new ChunkBounds();
   readonly playerView = new PlayerView();
+  readonly itemViews = new ItemViews();
+  readonly nodeViews = new NodeViews();
+  private readonly itemLights = new ItemLights();
   private readonly lighting: LightingRig;
   private readonly sky: Sky;
   private readonly atmosphere: Atmosphere;
@@ -96,6 +105,9 @@ export class Renderer {
     this.scene.add(this.chunks.group);
     this.scene.add(this.bounds.group);
     this.scene.add(this.playerView.group);
+    this.scene.add(this.itemViews.group);
+    this.scene.add(this.nodeViews.group);
+    this.scene.add(this.itemLights.group);
     // Translucent brush sphere for the terrain tool (M04). Positioned
     // absolutely from world doubles every frame, so it owns its origin
     // shifts (like the chunk and player groups).
@@ -122,6 +134,10 @@ export class Renderer {
     this.pool.dispose();
     this.chunks.dispose();
     this.playerView.dispose();
+    this.itemViews.dispose();
+    this.nodeViews.dispose();
+    this.itemLights.dispose();
+    disposeItemCaches();
     this.lighting.dispose();
     this.sky.dispose();
     this.atmosphere.dispose();
@@ -236,6 +252,21 @@ export class Renderer {
   /** Place the astronaut view between the last two tick samples. */
   renderPlayer(alpha: number): void {
     this.playerView.render(alpha);
+  }
+
+  /**
+   * Sync ground items, resource nodes and carried backpack items, then park
+   * the glow light pool on the nearest emitters. `carried` holds the 8
+   * resolved backpack slot definitions (null = empty) for the followed
+   * player. Unknown future item ids resolve to null (never crash the frame).
+   */
+  renderEntities(entities: Iterable<Entity>, focusWorld: Vec3d, carried: (string | null)[]): void {
+    const itemEmitters: ItemEmitter[] = this.itemViews.sync(entities);
+    const nodeEmitters: ItemEmitter[] = this.nodeViews.sync(entities);
+    this.itemLights.update(focusWorld, [...itemEmitters, ...nodeEmitters]);
+    this.playerView.renderBackpack(
+      carried.map((id) => (id && isKnownItem(id) ? itemDef(id) : null) as ItemDef | null),
+    );
   }
 
   render(): void {

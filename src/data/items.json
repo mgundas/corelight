@@ -1,0 +1,16 @@
+[
+  { "id": "resin", "name": "Resin", "color": "#e8b93b", "shape": "cube", "size": "small", "stackable": false },
+  { "id": "silicate", "name": "Silicate", "color": "#cfd4d9", "shape": "cube", "size": "small", "stackable": false },
+  { "id": "ferrite_ore", "name": "Ferrite ore", "color": "#a34a2e", "shape": "cube", "size": "small", "stackable": false },
+  { "id": "cuprite_ore", "name": "Cuprite ore", "color": "#d9703b", "shape": "cube", "size": "small", "stackable": false },
+  { "id": "lumen_crystal", "name": "Lumen crystal", "color": "#59e6d2", "shape": "crystal", "size": "small", "stackable": false, "emitsLight": { "color": "#59e6d2", "intensity": 20 } },
+  { "id": "biomass", "name": "Biomass", "color": "#5fae4a", "shape": "capsule", "size": "small", "stackable": false },
+  { "id": "hydrite", "name": "Hydrite", "color": "#bfe3ff", "shape": "crystal", "size": "small", "stackable": false, "emitsLight": { "color": "#bfe3ff", "intensity": 8 } },
+  { "id": "voidstone", "name": "Voidstone", "color": "#8a4fff", "shape": "crystal", "size": "medium", "stackable": false, "emitsLight": { "color": "#8a4fff", "intensity": 24 } },
+  { "id": "heartglass", "name": "Heartglass", "color": "#ff7ab8", "shape": "crystal", "size": "medium", "stackable": false, "emitsLight": { "color": "#ff7ab8", "intensity": 24 } },
+  { "id": "iron", "name": "Iron", "color": "#9aa1a8", "shape": "cube", "size": "small", "stackable": false },
+  { "id": "copper", "name": "Copper", "color": "#c87f4a", "shape": "cube", "size": "small", "stackable": false },
+  { "id": "polymer", "name": "Polymer", "color": "#f2f2f2", "shape": "capsule", "size": "small", "stackable": false },
+  { "id": "research_sample", "name": "Research sample", "color": "#7dff6a", "shape": "sphere", "size": "small", "stackable": false, "emitsLight": { "color": "#7dff6a", "intensity": 12 } },
+  { "id": "fuel_cell", "name": "Fuel cell", "color": "#ff9a3c", "shape": "canister", "size": "small", "stackable": false }
+]

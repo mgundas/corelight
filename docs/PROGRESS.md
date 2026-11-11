@@ -13,7 +13,7 @@ The coding agent updates this file at the end of every milestone. Keep it short:
 | M04 Terrain tool | done | Dig/add/flatten via sparse TerrainEdits, worker edit deltas, priority remesh, soil + hardness, tool preview |
 | M05 Light, sky, day/night | done | Shared orbiting sun, depth darkness, headlamp, atmosphere shell, sky/stars/sun disc, matched fog, texel-snapped shadows |
 | M06 Save and load | done | Versioned IndexedDB saves (entities, clock, ID counter, base64 Float32 edits), autosave, main/pause menus, clean architecture checkpoint |
-| M07 Resources and backpack | not started | |
+| M07 Resources and backpack | done | Deterministic resource nodes, mining, Rapier item physics, 8-slot backpack + HUD, save v2 |
 | M08 Oxygen and tethers | not started | |
 | M09 Printing | not started | |
 | M10 Base and power | not started | |
@@ -59,6 +59,12 @@ The coding agent updates this file at the end of every milestone. Keep it short:
 - M06 save format: one base64 little-endian Float32 blob per edited chunk (`[index, delta, ...]`; indices < 2^24 round-trip exactly). Base64 lives in `save/serialize.ts`, not `TerrainEdits` (terrain stays free of encoding APIs; edits re-enter through the validated `TerrainEdits.deserialize`). Player `lastTooHard: -Infinity` normalizes to JSON null at the boundary and back. Float32 quantizes deltas ~1e-9, so density equality is asserted to 1e-6, and re-saves are bit-stable.
 - M06 boot/seed deviation: the menu appears after the boot screen per the prompt, but boot pre-generation is seed-dependent — on Continue with a different seed the coarse prebuilt is dropped (streamer rebuilds live) rather than flashing wrong terrain. `?time=` applies to fresh games only; Continue keeps the stored clock.
 - M06 pause: `Game.setPaused` freezes tick accumulation (rendering continues behind the menu). Esc while pointer-locked exits the lock instead of reaching the page (browser behavior), so the menu needs a second press — noted in the hint bar.
+
+- M07 deterministic nodes vs stable IDs: node ids are derived (`node_<planet>_0_x_y_z_i`), not from `World.nextId`, so the same seed + chunk always addresses the same deposit (required for `depletedNodes` to mean anything). Documented deviation from the `newId` convention; item drops still use `nextId('item')`.
+- M07 node streaming cost: placement marches run once per chunk per visit (per-world settled set in the node system), never per tick; far despawns leave the set so returns recompute. Partial charges persist in `World.nodeCharges` (saved); only depletion is permanent.
+- M07 mining gate: a dig stroke mines overlapping nodes only when it actually moved terrain (`outcome.keys.length > 0`), so too-hard rock yields nothing. Add/flatten never mine.
+- M07 item physics: loose items are Rapier dynamic balls in the planet frame with hand-integrated spherical gravity (global gravity stays zero); the item system steps each touched world once per tick after applying all velocities. Carried items own no body.
+- M07 save v2: adds `depleted` + `nodeCharges` with a v1 migration; `-0` is normalized at the serialize boundary (JSON turns `-0` into `0`) and at node creation so round trips compare exactly.
 
 ## Per-milestone notes
 
@@ -143,6 +149,11 @@ Built: `src/save/serialize.ts` (`SAVE_VERSION = 1`, empty `migrations`, `seriali
 Run: `npm run dev`, dig/add, Esc → Save now (or wait 60 s / hide the tab), reload, Continue — player, clock and holes intact; New game resets; Esc pauses/resumes.
 Architecture checkpoint (all zero violations): `from 'three'` in `src/sim`/`src/terrain` — none; gameplay mutations outside dispatch/systems — none (one fix: `Game` assigned `world.planets`/`world.time` directly, now via `WorldOptions` constructor); files >400 lines — none (max `Game.ts` 392); `: any`/`as any` — none (one comment false positive, "any steady direction").
 Manual acceptance still to verify in-browser: full dig/reload/Continue cycle with time-of-day match (covered headless by the round-trip test; no GPU here).
+
+### M07 Resources and backpack (done)
+Built: `src/data/items.json` (14 items: all PROJECT.md resources + research sample + fuel cell) + `src/data/loadData.ts` (shape/size/hex validation, `itemDef` lookup). `src/sim/nodes.ts` (deterministic LOD0 placement: radial-march surface spots + near-wall cave spots, layer-based resource table, 2-5 charges, normal-oriented rotations). Sim: `pickUp`/`drop`/`selectSlot` actions + `inventory { slots[8], selectedSlot }` on spawn (lazy init for pre-M07 saves), terrainEdit mining hook, `World.depletedNodes` + `World.nodeCharges`, `systems/nodes.ts` streaming (96 m spawn, 140 m despawn, once-per-visit settled cache), `systems/items.ts` (Rapier dynamic balls, hand-integrated spherical gravity, one step per planet). Save v2 (`depleted` + `nodeCharges`, v1 migration). Render: `views/itemGeometry.ts` shared caches, `views/itemView.ts` ground items, `views/nodeView.ts` deterministic shard clusters, `itemLights.ts` 12-light nearest pool, backpack slot meshes on `PlayerView`, `Renderer.renderEntities`. Player: E/Q/1-8 in `input.ts`, `game/pickup.ts` 25° look-cone query, `game/backpackWiring.ts` tick/frame split, `game/worldSetup.ts` extraction (Game 371 lines). `src/ui/hud.ts` slot bar + soil + prompt with CSS. 224 tests pass (26 new: catalog, placement determinism/siting, streaming, backpack, mining, depletion, items fall/rest, pickup cone, views, light budget).
+Run: `npm run dev`, walk to surface nodes (resin/silicate/biomass), dig a node for pop-out items, E to pick up (prompt shows name), Q drops in front, 1-8 selects, cave walls hold lumen crystals + research pods with real point lights; reload keeps everything.
+Manual acceptance still to verify in-browser: node density/feel on a real walk, item rest behavior on slopes, night glow readability, HUD legibility.
 
 ### FIX M05 review minors (done)
 M05 review follow-up, headless-fixable items only: `isDaylight` documents that `planetId` is intentionally unused (one shared sun, static planets in v1; the parameter forces call sites to name the frame); module-level `noiseCache` in `terrain/density.ts` is capped FIFO at `NOISE_CACHE_BUDGET` (64) — evicted entries rebuild bit-identically, new test pins value stability across a 200-seed flood; `updateSun` requires `dt` (no `= 0` default) so direct calls cannot silently disagree with the system path. 198 tests pass. Browser-only items stay manual: four-view FPS before/after (closes M05 criterion 6), cave darkness/headlamp feel, shadow shimmer, space visuals.

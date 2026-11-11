@@ -7,6 +7,9 @@ export class PlayerInput {
   private mouseButtons = new Set<number>();
   private jumpQueued = false;
   private headlampQueued = false;
+  private interactQueued = false;
+  private dropQueued = false;
+  private selectQueued: number | null = null;
   private enabled = true;
   private canvas: HTMLCanvasElement | null = null;
   private lookTarget: { addLook: (dx: number, dy: number) => void } | null = null;
@@ -57,6 +60,9 @@ export class PlayerInput {
     this.mouseButtons.clear();
     this.jumpQueued = false;
     this.headlampQueued = false;
+    this.interactQueued = false;
+    this.dropQueued = false;
+    this.selectQueued = null;
     this.dragging = false;
   }
 
@@ -89,6 +95,27 @@ export class PlayerInput {
     return toggle;
   }
 
+  /** Edge-triggered: true once per E keydown (pick up the aimed item). */
+  consumeInteract(): boolean {
+    const interact = this.interactQueued;
+    this.interactQueued = false;
+    return interact;
+  }
+
+  /** Edge-triggered: true once per Q keydown (drop the selected slot). */
+  consumeDrop(): boolean {
+    const drop = this.dropQueued;
+    this.dropQueued = false;
+    return drop;
+  }
+
+  /** Edge-triggered: slot index once per Digit1..8 keydown. */
+  consumeSelect(): number | null {
+    const select = this.selectQueued;
+    this.selectQueued = null;
+    return select;
+  }
+
   /** Terrain tool buttons: left = dig, right = add, F or middle = flatten. */
   toolButtons(): { dig: boolean; add: boolean; flatten: boolean } {
     return {
@@ -113,6 +140,19 @@ export class PlayerInput {
     }
     if (!this.enabled) return;
     if (e.code.startsWith('F')) return;
+    if (e.code === 'KeyE') {
+      if (!e.repeat) this.interactQueued = true;
+      return;
+    }
+    if (e.code === 'KeyQ') {
+      if (!e.repeat) this.dropQueued = true;
+      return;
+    }
+    if (e.code.startsWith('Digit')) {
+      const slot = Number(e.code.slice(5)) - 1;
+      if (Number.isInteger(slot) && slot >= 0 && slot < 8 && !e.repeat) this.selectQueued = slot;
+      return;
+    }
     if (e.code === 'Space') {
       e.preventDefault();
       if (!e.repeat) this.jumpQueued = true;

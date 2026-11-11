@@ -151,3 +151,19 @@ export const HEADLAMP_DECAY = 1.2;
  * One session holds ~7 per world-seed x planet; 64 covers several
  * New Game / Continue cycles before the oldest entry is rebuilt. */
 export const NOISE_CACHE_BUDGET = 64;
+
+/** Backpack slots per player (PROJECT.md: 8, one item per slot in v1). */
+export const BACKPACK_SLOTS = 8;
+/** Pick-up range: E grabs the aimed item this close to the player. */
+export const PICKUP_RANGE_M = 3;
+/** Node streaming: spawn deterministic nodes in LOD0 chunks this near. */
+export const NODE_SPAWN_RANGE_M = 96;
+/** Nodes past this distance are removed (re-spawned on return, unless depleted). */
+export const NODE_DESPAWN_RANGE_M = 140;
+/** Charges per fresh node (deterministic 2 to 5 per chunk + seed). */
+export const NODE_MIN_CHARGES = 2;
+export const NODE_MAX_CHARGES = 5;
+/** Item physics body radius (Rapier ball, spherical gravity). */
+export const ITEM_BODY_RADIUS = 0.25;
+/** Max active point lights for glowing items (ARCHITECTURE.md budget). */
+export const ITEM_LIGHT_BUDGET = 12;

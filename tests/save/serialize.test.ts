@@ -129,8 +129,14 @@ describe('save round trip', () => {
     expect(() => deserializeWorld({ ...good, edits: { bogus: '!!!' } }, [SELA])).toThrow();
   });
 
-  it('ships version 1 with no migrations yet', () => {
-    expect(SAVE_VERSION).toBe(1);
-    expect(Object.keys(migrations)).toHaveLength(0);
+  it('ships version 2 with a v1 migration for depleted nodes', () => {
+    expect(SAVE_VERSION).toBe(2);
+    expect(Object.keys(migrations)).toEqual(['1']);
+    const v1 = { ...serializeWorld(makeEditedWorld(5)), version: 1 } as unknown as Record<string, unknown>;
+    delete v1['depleted'];
+    delete v1['nodeCharges'];
+    const revived = deserializeWorld(v1, [SELA]);
+    expect(revived.depletedNodes.size).toBe(0);
+    expect(revived.nodeCharges.size).toBe(0);
   });
 });

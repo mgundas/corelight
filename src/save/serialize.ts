@@ -12,10 +12,12 @@ import { TerrainEdits, type SerializedEdits } from '../terrain/edits.js';
 import { parseChunkKey } from '../terrain/chunkKey.js';
 import { World } from '../sim/world.js';
 
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 
-/** Version -> migration. Empty for now; M07+ adds entries when fields change. */
-export const migrations: Record<number, (data: unknown) => unknown> = {};
+/** Version -> migration. M07 added depleted nodes and partial charges. */
+export const migrations: Record<number, (data: unknown) => unknown> = {
+  1: (data: unknown) => ({ ...(data as Record<string, unknown>), version: 2, depleted: [], nodeCharges: {} }),
+};
 
 const ENTITY_KINDS: ReadonlySet<string> = new Set<string>([
   'player',
@@ -41,7 +43,7 @@ export interface SerializedEntity {
 }
 
 export interface SaveData {
-  version: 1;
+  version: 2;
   seed: number;
   /** Seconds of simulated time. */
   time: number;
@@ -50,6 +52,10 @@ export interface SaveData {
   entities: SerializedEntity[];
   /** LOD0 chunk key -> base64 little-endian Float32 [index, delta, ...]. */
   edits: Record<string, string>;
+  /** Deterministic node ids mined out (never respawned). */
+  depleted: string[];
+  /** Node id -> remaining charges for partially mined nodes. */
+  nodeCharges: Record<string, number>;
 }
 
 function isFiniteNumber(v: unknown): v is number {
@@ -134,12 +140,16 @@ function serializeEntity(entity: Entity): SerializedEntity {
   if (player && !Number.isFinite(player.lastTooHard)) {
     player.lastTooHard = null;
   }
+  // JSON.stringify(-0) is "0": normalize negative zero at the boundary so
+  // re-saves are bit-stable and round trips compare exactly.
+  const normZero = (v: Vec3d): Vec3d => ({ x: v.x + 0, y: v.y + 0, z: v.z + 0 });
+  const normQuat = (q: Quat): Quat => ({ x: q.x + 0, y: q.y + 0, z: q.z + 0, w: q.w + 0 });
   return {
     id: entity.id,
     kind: entity.kind,
     planetId: entity.planetId,
-    position: structuredClone(entity.position),
-    rotation: structuredClone(entity.rotation),
+    position: normZero(structuredClone(entity.position)),
+    rotation: normQuat(structuredClone(entity.rotation)),
     components,
   };
 }
@@ -188,6 +198,8 @@ export function serializeWorld(world: World): SaveData {
     idCounter: world.getIdCounter(),
     entities: [...world.entities.values()].map(serializeEntity),
     edits,
+    depleted: [...world.depletedNodes],
+    nodeCharges: Object.fromEntries(world.nodeCharges),
   };
 }
 
@@ -204,6 +216,11 @@ export function deserializeWorld(data: unknown, planets: PlanetConfig[]): World 
   if (!isFiniteNumber(root['time'])) throw new Error('bad save: time missing');
   if (!Number.isInteger(root['idCounter'])) throw new Error('bad save: idCounter missing');
   if (!Array.isArray(root['entities'])) throw new Error('bad save: entities missing');
+  if (!Array.isArray(root['depleted'])) throw new Error('bad save: depleted missing');
+  const depleted = root['depleted'] as unknown[];
+  for (const id of depleted) {
+    if (typeof id !== 'string') throw new Error('bad save: depleted entry is not a string');
+  }
   if (typeof root['edits'] !== 'object' || root['edits'] === null) {
     throw new Error('bad save: edits missing');
   }
@@ -219,6 +236,14 @@ export function deserializeWorld(data: unknown, planets: PlanetConfig[]): World 
     const entity = deserializeEntity(raw);
     if (world.entities.has(entity.id)) throw new Error(`bad save: duplicate entity ${entity.id}`);
     world.entities.set(entity.id, entity);
+  }
+  for (const id of depleted as string[]) world.depletedNodes.add(id);
+  if (typeof root['nodeCharges'] !== 'object' || root['nodeCharges'] === null) {
+    throw new Error('bad save: nodeCharges missing');
+  }
+  for (const [id, charges] of Object.entries(root['nodeCharges'] as Record<string, unknown>)) {
+    if (!Number.isInteger(charges)) throw new Error(`bad save: nodeCharges for ${id} is not an integer`);
+    world.nodeCharges.set(id, charges as number);
   }
   // Edits ride the validated TerrainEdits path: base64 -> pairs -> the same
   // deserialize() the live game uses, so a corrupt blob fails loudly here
