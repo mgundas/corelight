@@ -25,7 +25,7 @@ import { DebugOverlay } from '../ui/debugOverlay.js';
 import { Hud } from '../ui/hud.js';
 import { tickBackpackInput } from './backpackWiring.js';
 import { updateFrameHud, updateToolPreview } from './frameHud.js';
-import { installDebugHandle } from './debugHandle.js';
+import { installDebugHandle, uninstallDebugHandle } from './debugHandle.js';
 import { setupWorldSystems } from './worldSetup.js';
 import { updateDebugOverlay } from './debugStats.js';
 
@@ -240,6 +240,7 @@ export class Game {
     this.overlay.dispose();
     this.hud.dispose();
     this.renderer.dispose();
+    uninstallDebugHandle();
   }
 
   private frame(now: number): void {

@@ -50,7 +50,7 @@ function statGroup(group: ViewGroupLike): ViewGroupStat {
 
 export interface DebugHandle {
   version: string;
-  /** Random id per Game construction (detects double sessions in one tab). */
+  /** Sequential id per Game construction (detects double sessions in one tab). */
   gameId: number;
   flying: () => boolean;
   player: () => EntityId | null;
@@ -73,8 +73,7 @@ declare global {
 let nextGameId = 1;
 
 /** Install `window.__corelight` for the live session (browser only). */
-export function installDebugHandle(
-  world: World,
+export function installDebugHandle(  world: World,
   playerId: () => EntityId | null,
   extra: {
     flying: () => boolean;
@@ -127,5 +126,14 @@ export function installDebugHandle(
     },
   };
   window.__corelight = handle;
-  window.__corelight_all = [...(window.__corelight_all ?? []), handle];
+  // Only the live session is kept: past sessions' Worlds would otherwise
+  // stay alive forever after Quit to menu -> New game.
+  window.__corelight_all = [handle];
+}
+
+/** Drop the debug handle (call from Game.stop so dead sessions release). */
+export function uninstallDebugHandle(): void {
+  if (typeof window === 'undefined') return;
+  if (window.__corelight) window.__corelight = undefined;
+  window.__corelight_all = [];
 }
