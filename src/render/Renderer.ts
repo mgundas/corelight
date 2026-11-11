@@ -15,7 +15,8 @@ import { frustumPlanes } from './frustum.js';
 import { ItemLights } from './itemLights.js';
 import { HabitatViews, MarkerViews, TetherViews } from './views/tetherView.js';
 import { disposeItemCaches } from './views/itemGeometry.js';
-import { ItemViews, type ItemEmitter } from './views/itemView.js';
+import { syncEntityViews } from './views/syncViews.js';
+import { ItemViews } from './views/itemView.js';
 import { NodeViews } from './views/nodeView.js';
 import { LightingRig } from './lighting.js';
 import { Sky } from './sky.js';
@@ -272,11 +273,7 @@ export class Renderer {
    * crash the frame).
    */
   renderEntities(entities: Iterable<Entity>, focusWorld: Vec3d, carried: (string | null)[]): void {
-    const itemEmitters: ItemEmitter[] = this.itemViews.sync(entities);
-    const nodeEmitters: ItemEmitter[] = this.nodeViews.sync(entities);
-    this.tetherViews.sync(entities);
-    this.habitatViews.sync(entities);
-    this.markerViews.sync(entities);
+    const { itemEmitters, nodeEmitters } = syncEntityViews(this, entities);
     this.itemLights.update(focusWorld, [...itemEmitters, ...nodeEmitters]);
     this.playerView.renderBackpack(
       carried.map((id) => (id && isKnownItem(id) ? itemDef(id) : null) as ItemDef | null),

@@ -14,6 +14,9 @@ export class ItemLights {
 
   constructor() {
     this.group.name = 'itemLights';
+    // Positions are set absolutely from world doubles every frame (same as
+    // the other originManaged groups), so origin shifts must skip this one.
+    this.group.userData['originManaged'] = true;
     for (let i = 0; i < ITEM_LIGHT_BUDGET; i += 1) {
       // Intensity 0 = parked (three.js still pays a draw-free uniform slot;
       // 12 fixed lights is the ARCH budget).
