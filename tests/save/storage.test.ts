@@ -20,4 +20,27 @@ describe('storeSave', () => {
     });
     expect(typeof result).toBe('boolean');
   });
+
+  it('refuses snapshots with non-finite positions', async () => {
+    const result = await storeSave({
+      version: 2,
+      seed: 1,
+      time: 0,
+      idCounter: 1,
+      entities: [
+        {
+          id: 'player_1',
+          kind: 'player',
+          planetId: 'sela',
+          position: { x: NaN, y: 0, z: 0 },
+          rotation: { x: 0, y: 0, z: 0, w: 1 },
+          components: {},
+        },
+      ],
+      edits: {},
+      depleted: [],
+      nodeCharges: {},
+    });
+    expect(result).toBe(false);
+  });
 });

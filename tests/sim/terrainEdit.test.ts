@@ -29,6 +29,35 @@ function makeWorld(): { world: World; playerId: string } {
 }
 
 describe('terrainEdit action', () => {
+  it('rejects NaN center/radius without touching edits', () => {
+    const { world, playerId } = makeWorld();
+    const player = world.entities.get(playerId);
+    if (!player) throw new Error('missing player');
+    const before = world.terrainEdits.sampleCount;
+    world.dispatch({
+      type: 'terrainEdit',
+      playerId,
+      planetId: SELA.id,
+      mode: 'dig',
+      center: { x: NaN, y: 0, z: 0 },
+      radius: 2,
+      strength: 0.5,
+    });
+    world.tick();
+    world.dispatch({
+      type: 'terrainEdit',
+      playerId,
+      planetId: SELA.id,
+      mode: 'dig',
+      center: { ...player.position },
+      radius: NaN,
+      strength: 0.5,
+    });
+    world.tick();
+    expect(world.terrainEdits.sampleCount).toBe(before);
+    expect(player.components.player?.soil).toBe(0);
+  });
+
   it('digs below the surface, earns soil, and emits terrainEdited', () => {
     const { world, playerId } = makeWorld();
     const player = world.entities.get(playerId);

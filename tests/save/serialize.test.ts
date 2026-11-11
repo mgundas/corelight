@@ -127,6 +127,10 @@ describe('save round trip', () => {
     const good = serializeWorld(makeEditedWorld(5));
     expect(() => deserializeWorld({ ...good, entities: [{ id: 'x' }] }, [SELA])).toThrow();
     expect(() => deserializeWorld({ ...good, edits: { bogus: '!!!' } }, [SELA])).toThrow();
+    // Components must be a record of objects, not primitives or arrays.
+    const badComponents = JSON.parse(JSON.stringify(good)) as typeof good;
+    (badComponents.entities[0] as unknown as Record<string, unknown>)['components'] = { player: 5 };
+    expect(() => deserializeWorld(badComponents, [SELA])).toThrow();
   });
 
   it('ships version 2 with a v1 migration for depleted nodes', () => {

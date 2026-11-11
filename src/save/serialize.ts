@@ -166,8 +166,16 @@ function deserializeEntity(data: unknown): Entity {
   }
   if (!isVec3d(r['position'])) throw new Error('bad save: entity position malformed');
   if (!isQuat(r['rotation'])) throw new Error('bad save: entity rotation malformed');
-  if (typeof r['components'] !== 'object' || r['components'] === null) {
+  if (typeof r['components'] !== 'object' || r['components'] === null || Array.isArray(r['components'])) {
     throw new Error('bad save: entity components missing');
+  }
+  // Components are a flat record of component objects: reject arrays and
+  // primitives smuggled in by a hand-edited save before they reach the sim.
+  for (const value of Object.values(r['components'] as Record<string, unknown>)) {
+    if (value === undefined) continue;
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+      throw new Error('bad save: entity component malformed');
+    }
   }
   const components = structuredClone(r['components']) as Entity['components'];
   // Inverse of the serialize normalization: null JSON "never" -> -Infinity.

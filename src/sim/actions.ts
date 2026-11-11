@@ -1,6 +1,15 @@
 import type { Vec3d } from '../core/math.js';
 import { distance, IDENTITY_QUAT, rotateVector } from '../core/math.js';
-import { BACKPACK_SLOTS, OXYGEN_MAX, PICKUP_RANGE_M, SOIL_MAX, TOOL_RANGE_M, TOOL_RANGE_SLACK_M } from '../core/constants.js';
+import {
+  BACKPACK_SLOTS,
+  OXYGEN_MAX,
+  PICKUP_RANGE_M,
+  SOIL_MAX,
+  TOOL_MAX_RADIUS,
+  TOOL_MIN_RADIUS,
+  TOOL_RANGE_M,
+  TOOL_RANGE_SLACK_M,
+} from '../core/constants.js';
 import { events } from '../core/events.js';
 import { isKnownItem } from '../data/loadData.js';
 import { layerAt } from '../terrain/density.js';
@@ -106,6 +115,24 @@ export function applyAction(world: World, action: Action): void {
       const entity = world.entities.get(action.playerId);
       const player = entity?.components.player;
       if (!entity || entity.kind !== 'player' || !player) return;
+      // Crafted actions must not smuggle NaN/Infinity into the sim (a NaN
+      // position serializes as null and corrupts the save): reject anything
+      // non-finite before it touches state.
+      if (
+        typeof action.move?.x !== 'number' ||
+        typeof action.move?.z !== 'number' ||
+        !Number.isFinite(action.move.x) ||
+        !Number.isFinite(action.move.z) ||
+        typeof action.jump !== 'boolean' ||
+        typeof action.sprint !== 'boolean' ||
+        typeof action.lookYaw !== 'number' ||
+        typeof action.lookPitch !== 'number' ||
+        !Number.isFinite(action.lookYaw) ||
+        !Number.isFinite(action.lookPitch)
+      ) {
+        events.emit('actionApplied', { type: action.type });
+        return;
+      }
       player.yaw = action.lookYaw;
       player.pitch = Math.min(Math.PI / 2, Math.max(-Math.PI / 2, action.lookPitch));
       player.input = {
@@ -151,15 +178,54 @@ export function applyAction(world: World, action: Action): void {
       // and planet was processed, even when rejected (debug/UI counting
       // depends on it). Unknown players/planets stay silent (unprocessable).
       // The sim trusts no crafted action: the stroke must belong to the
-      // player's planet and start within tool range of the player.
+      // player's planet and start within tool range of the player. NaN
+      // centers/radii would corrupt soil accounting and saves, so they are
+      // rejected; out-of-range radii clamp to the tool's brush limits.
       if (
-        entity.planetId !== planet.id ||
+        !Number.isFinite(action.radius) ||
         action.radius <= 0 ||
-        action.strength <= 0 ||
-        distance(entity.position, action.center) > TOOL_RANGE_M + TOOL_RANGE_SLACK_M + action.radius
+        !Number.isFinite(action.strength) ||
+        typeof action.center?.x !== 'number' ||
+        typeof action.center?.y !== 'number' ||
+        typeof action.center?.z !== 'number' ||
+        !Number.isFinite(action.center.x) ||
+        !Number.isFinite(action.center.y) ||
+        !Number.isFinite(action.center.z)
       ) {
         events.emit('actionApplied', { type: action.type });
         return;
+      }
+      const radius = Math.min(TOOL_MAX_RADIUS, Math.max(TOOL_MIN_RADIUS, action.radius));
+      if (
+        entity.planetId !== planet.id ||
+        action.strength <= 0 ||
+        !Number.isFinite(action.strength) ||
+        distance(entity.position, action.center) > TOOL_RANGE_M + TOOL_RANGE_SLACK_M + radius
+      ) {
+        events.emit('actionApplied', { type: action.type });
+        return;
+      }
+      // A non-finite flatten plane would smear NaN deltas into the edit
+      // store (and then into saves): reject the stroke instead.
+      if (action.flattenPlane) {
+        const fp = action.flattenPlane;
+        if (
+          typeof fp.point?.x !== 'number' ||
+          typeof fp.point?.y !== 'number' ||
+          typeof fp.point?.z !== 'number' ||
+          typeof fp.normal?.x !== 'number' ||
+          typeof fp.normal?.y !== 'number' ||
+          typeof fp.normal?.z !== 'number' ||
+          !Number.isFinite(fp.point.x) ||
+          !Number.isFinite(fp.point.y) ||
+          !Number.isFinite(fp.point.z) ||
+          !Number.isFinite(fp.normal.x) ||
+          !Number.isFinite(fp.normal.y) ||
+          !Number.isFinite(fp.normal.z)
+        ) {
+          events.emit('actionApplied', { type: action.type });
+          return;
+        }
       }
       // Add mode consumes soil; an empty counter fails the whole stroke bit.
       if (action.mode === 'add' && player.soil <= 0) {
@@ -186,7 +252,7 @@ export function applyAction(world: World, action: Action): void {
         planet,
         field.density,
         local,
-        action.radius,
+        radius,
         action.strength,
         action.mode,
         {
@@ -204,7 +270,7 @@ export function applyAction(world: World, action: Action): void {
       // shakes one charge loose as a physical item beside it. Fully blocked
       // (too-hard) strokes mine nothing. Add/flatten never mine.
       if (action.mode === 'dig' && outcome.keys.length > 0) {
-        mineNodes(world, planet.id, action.center, action.radius);
+        mineNodes(world, planet.id, action.center, radius);
       }
       if (outcome.keys.length > 0) {
         events.emit('terrainEdited', { planetId: planet.id, keys: outcome.keys });

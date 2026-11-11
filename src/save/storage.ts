@@ -32,7 +32,26 @@ export async function loadSave(): Promise<SaveData | null> {
 }
 
 export async function storeSave(data: SaveData): Promise<boolean> {
+  // Refuse snapshots with non-finite positions: a NaN serializes as null
+  // in JSON and would load back as a "corrupt" save. The sim's action
+  // validation keeps NaN out; this is the backstop at the IDB boundary.
   try {
+    for (const entity of data.entities) {
+      const p = entity.position;
+      const q = entity.rotation;
+      if (
+        !Number.isFinite(p.x) ||
+        !Number.isFinite(p.y) ||
+        !Number.isFinite(p.z) ||
+        !Number.isFinite(q.x) ||
+        !Number.isFinite(q.y) ||
+        !Number.isFinite(q.z) ||
+        !Number.isFinite(q.w)
+      ) {
+        console.warn('save store refused: non-finite transform');
+        return false;
+      }
+    }
     await set(SAVE_KEY, data);
     return true;
   } catch (err) {

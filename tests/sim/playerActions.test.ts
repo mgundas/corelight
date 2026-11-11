@@ -58,6 +58,25 @@ describe('player actions', () => {
     expect(world.entities.size).toBe(0);
   });
 
+  it('playerInput with NaN values is rejected without touching state', () => {
+    const world = new World(9);
+    world.dispatch({ type: 'spawnPlayer', planetId: 'sela', position: { x: 0, y: 410, z: 0 } });
+    world.tick();
+    const id = [...world.entities.keys()][0] as string;
+    world.dispatch({
+      type: 'playerInput',
+      playerId: id,
+      move: { x: NaN, z: 0 },
+      jump: false,
+      sprint: false,
+      lookYaw: 0,
+      lookPitch: 0,
+    });
+    world.tick();
+    expect(world.entities.get(id)?.components.player?.input).toBeNull();
+    expect(world.entities.get(id)?.components.player?.yaw).toBe(0);
+  });
+
   it('playerTeleport moves the player and zeroes velocity', () => {
     const world = new World(9);
     world.dispatch({ type: 'spawnPlayer', planetId: 'sela', position: { x: 0, y: 410, z: 0 } });
