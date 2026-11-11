@@ -136,4 +136,27 @@ describe('item physics', () => {
     expect(world.entities.get(itemId)?.position).toEqual(at);
     colliders.dispose();
   }, 60000);
+
+  it('items with unloaded ground stay frozen instead of falling to the core', async () => {
+    const colliders = new TerrainColliders(directSource(), physicsWorldFor);
+    const world = new World(1337, { planets: [SELA] });
+    world.addSystem(makePhysicsSystem({ planets: [SELA], worldSeed: 1337, colliders }));
+    // Ground never ready: mirrors a dropped item whose chunk unloaded.
+    world.addSystem(makeItemsSystem({ planets: [SELA], worldFor: physicsWorldFor, groundReady: () => false }));
+    world.dispatch({ type: 'spawnPlayer', planetId: SELA.id, position: findSpawnPosition(SELA, 1337) });
+    world.tick();
+    const start = { x: SELA.center.x, y: SELA.center.y + SELA.radius + 20, z: SELA.center.z };
+    const itemId = world.nextId('item');
+    world.entities.set(itemId, {
+      id: itemId,
+      kind: 'item',
+      planetId: SELA.id,
+      position: { ...start },
+      rotation: { ...IDENTITY_QUAT },
+      components: { item: { itemId: 'resin' } },
+    });
+    await tickFlushed(world, 60);
+    expect(world.entities.get(itemId)?.position).toEqual(start);
+    colliders.dispose();
+  }, 60000);
 });

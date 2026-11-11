@@ -157,7 +157,16 @@ export function setupWorldSystems(
     makePhysicsSystem({ planets, worldSeed, colliders, edits: world.terrainEdits }),
   );
   // Loose items are Rapier dynamic bodies (ARCH order: right after physics).
-  world.addSystem(makeItemsSystem({ planets, worldFor: physicsWorldFor }));
+  // Items freeze where their ground chunk is not loaded: without this a
+  // dropped item (or a death-drop) falls toward the core once the player
+  // walks away and its colliders unload.
+  world.addSystem(
+    makeItemsSystem({
+      planets,
+      worldFor: physicsWorldFor,
+      groundReady: (pos) => colliders.groundState(pos, planets) === 'ready',
+    }),
+  );
   // Deterministic resource nodes stream in around each player.
   world.addSystem((tickWorld) => updateNodes(tickWorld, planets));
   // Tether graph (recomputed only on topology/nearby-edit changes).

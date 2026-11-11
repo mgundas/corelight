@@ -10,6 +10,7 @@
 
 import RAPIER from '@dimforge/rapier3d-compat';
 import { ITEM_BODY_RADIUS } from '../../core/constants.js';
+import type { Vec3d } from '../../core/math.js';
 import type { PlanetConfig } from '../../planets/PlanetConfig.js';
 import type { EntityId } from '../entities.js';
 import { toLocalFrame, toWorldFrame } from '../physics/frames.js';
@@ -19,6 +20,12 @@ import type { World } from '../world.js';
 export interface ItemsOptions {
   planets: PlanetConfig[];
   worldFor: (planetId: string) => RAPIER.World;
+  /**
+   * True when the chunk under `position` is simulated (colliders loaded).
+   * While false the item freezes (no gravity, zero velocity), mirroring how
+   * the physics system freezes the player on 'pending' ground.
+   */
+  groundReady?: (position: Vec3d) => boolean;
 }
 
 interface ItemBody {
@@ -53,9 +60,22 @@ export function makeItemsSystem(opts: ItemsOptions): (world: World, dt: number) 
       entity.position = toWorldFrame(planet, { x: t.x, y: t.y, z: t.z });
     }
     // Integrate custom gravity into velocities (the central step applies
-    // them). Rapier global gravity stays zero.
+    // them). Rapier global gravity stays zero. Items whose ground chunk is
+    // not loaded freeze instead of falling toward the core (same rule as
+    // the player controller's 'pending' ground state).
     for (const entity of world.entities.values()) {
       if (entity.kind !== 'item' || entity.components.item?.holder !== undefined) continue;
+      if (opts.groundReady && !opts.groundReady(entity.position)) {
+        const frozen = bodies.get(entity.id);
+        if (frozen) {
+          try {
+            frozen.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+          } catch {
+            // Body already removed; nothing to do.
+          }
+        }
+        continue;
+      }
       const sample = gravityAt(opts.planets, entity.position);
       if (!sample.planet) continue;
       const planet = sample.planet;
