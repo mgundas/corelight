@@ -1,5 +1,5 @@
 import type { Vec3d } from '../core/math.js';
-import { distance, IDENTITY_QUAT } from '../core/math.js';
+import { distance, IDENTITY_QUAT, rotateVector } from '../core/math.js';
 import { BACKPACK_SLOTS, OXYGEN_MAX, PICKUP_RANGE_M, SOIL_MAX, TOOL_RANGE_M, TOOL_RANGE_SLACK_M } from '../core/constants.js';
 import { events } from '../core/events.js';
 import { isKnownItem } from '../data/loadData.js';
@@ -319,9 +319,11 @@ function dropItem(world: World, playerId: EntityId, slot: number): void {
     events.emit('actionApplied', { type: 'drop' });
     return;
   }
-  // Drop in front of the player (full look direction, at chest height).
+  // Drop in front of the player at chest height, yaw-leveled: pitching the
+  // look straight down must not plant the item underground (full look
+  // direction would put it ~1 m below the surface).
   const up = upAt(planet, playerEntity.position);
-  const { forward } = moveBasis(up, player.yaw, player.pitch);
+  const { forward } = moveBasis(up, player.yaw, 0);
   item.position = {
     x: playerEntity.position.x + forward.x * 1.5 + up.x * 0.5,
     y: playerEntity.position.y + forward.y * 1.5 + up.y * 0.5,
@@ -340,8 +342,7 @@ function dropItem(world: World, playerId: EntityId, slot: number): void {
  * depletedNodes so the deterministic placer never brings them back.
  */
 function mineNodes(world: World, planetId: string, center: Vec3d, radius: number): void {
-  const planet = world.planets.find((p) => p.id === planetId);
-  if (!planet) return;
+  if (!world.planets.some((p) => p.id === planetId)) return;
   for (const [id, entity] of [...world.entities]) {
     if (entity.kind !== 'node' || entity.planetId !== planetId) continue;
     const node = entity.components.node;
@@ -352,16 +353,19 @@ function mineNodes(world: World, planetId: string, center: Vec3d, radius: number
     // Full-charge nodes need no record (placement already derives them).
     if (node.charges !== node.maxCharges) world.nodeCharges.set(id, node.charges);
     else world.nodeCharges.delete(id);
-    const up = upAt(planet, entity.position);
+    // Pop the item out along the node's own surface normal (its rotation's
+    // +Y): ceiling nodes hang overhead, so radial up would bury the drop in
+    // rock. Falls back to radial up when the rotation is missing.
+    const normal = rotateVector({ x: 0, y: 1, z: 0 }, entity.rotation);
     const itemId = world.nextId('item');
     world.entities.set(itemId, {
       id: itemId,
       kind: 'item',
       planetId,
       position: {
-        x: entity.position.x + up.x * 1.0,
-        y: entity.position.y + up.y * 1.0,
-        z: entity.position.z + up.z * 1.0,
+        x: entity.position.x + normal.x * 1.0,
+        y: entity.position.y + normal.y * 1.0,
+        z: entity.position.z + normal.z * 1.0,
       },
       rotation: { ...IDENTITY_QUAT },
       components: { item: { itemId: node.resourceId } },

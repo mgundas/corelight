@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { SELA } from '../../src/planets/configs/sela.js';
 import { BACKPACK_SLOTS } from '../../src/core/constants.js';
-import { IDENTITY_QUAT } from '../../src/core/math.js';
+import { IDENTITY_QUAT, quatFromTo } from '../../src/core/math.js';
 import { World } from '../../src/sim/world.js';
 import { updateNodes } from '../../src/sim/systems/nodes.js';
 import { findSpawnPosition } from '../../src/sim/physics/spawn.js';
@@ -84,8 +84,7 @@ describe('backpack pick up / drop / select', () => {
     expect(world.entities.get(playerId)?.components.inventory?.slots[0]).toBe(null);
   });
 
-  it('drop puts the item in front of the player', () => {
-    const { world, playerId } = spawnWorld();
+  it('drop puts the item in front of the player', () => {    const { world, playerId } = spawnWorld();
     const player = world.entities.get(playerId);
     if (!player) throw new Error('missing player');
     const itemId = spawnItem(world, player.position);
@@ -104,6 +103,38 @@ describe('backpack pick up / drop / select', () => {
     );
     expect(dist).toBeGreaterThan(0.5);
     expect(dist).toBeLessThan(3);
+  });
+
+  it('drop while looking straight down stays level instead of burying', () => {
+    const { world, playerId } = spawnWorld();
+    const player = world.entities.get(playerId);
+    if (!player) throw new Error('missing player');
+    // Pitch straight down: the old full-look drop put the item ~1 m under.
+    world.dispatch({
+      type: 'playerInput',
+      playerId,
+      move: { x: 0, z: 0 },
+      jump: false,
+      sprint: false,
+      lookYaw: 0,
+      lookPitch: -Math.PI / 2,
+    });
+    world.tick();
+    const itemId = spawnItem(world, player.position);
+    world.dispatch({ type: 'pickUp', playerId, itemId });
+    world.tick();
+    world.dispatch({ type: 'drop', playerId, slot: 0 });
+    world.tick();
+    const item = world.entities.get(itemId);
+    const after = world.entities.get(playerId);
+    if (!item || !after) throw new Error('missing entities');
+    const up = upAt(SELA, after.position);
+    const dx = item.position.x - after.position.x;
+    const dy = item.position.y - after.position.y;
+    const dz = item.position.z - after.position.z;
+    // Yaw-leveled: 0.5 m above the feet plane, never below it.
+    const alongUp = dx * up.x + dy * up.y + dz * up.z;
+    expect(alongUp).toBeCloseTo(0.5, 6);
   });
 
   it('selectSlot switches the selected slot', () => {
@@ -190,6 +221,52 @@ describe('mining nodes with the terrain tool', () => {
     world.tick();
     updateNodes(world, [SELA]);
     expect(world.entities.get(node.id)?.components.node?.charges).toBe(full - 1);
+  });
+
+  it('mined items pop along the node normal, not radial up', () => {
+    const { world, playerId } = spawnWorld();
+    const player = world.entities.get(playerId);
+    if (!player) throw new Error('missing player');
+    const up = upAt(SELA, player.position);
+    // A ceiling node: surface normal points planet-in (-up).
+    const down = { x: -up.x, y: -up.y, z: -up.z };
+    const nodeId = 'node_ceiling_probe';
+    const nodePos = {
+      x: player.position.x + up.x * 2,
+      y: player.position.y + up.y * 2,
+      z: player.position.z + up.z * 2,
+    };
+    world.entities.set(nodeId, {
+      id: nodeId,
+      kind: 'node',
+      planetId: SELA.id,
+      position: { ...nodePos },
+      rotation: { ...quatFromTo({ x: 0, y: 1, z: 0 }, down) },
+      components: { node: { resourceId: 'resin', charges: 2, maxCharges: 2, chunkKey: 'probe' } },
+    });
+    world.dispatch({ type: 'playerTeleport', playerId, position: { ...nodePos } });
+    world.tick();
+    world.dispatch({
+      type: 'terrainEdit',
+      playerId,
+      planetId: SELA.id,
+      mode: 'dig',
+      center: { ...nodePos },
+      radius: 2,
+      strength: 0.5,
+    });
+    world.tick();
+    const drops = [...world.entities.values()].filter(
+      (e) => e.kind === 'item' && e.components.item?.itemId === 'resin',
+    );
+    expect(drops.length).toBeGreaterThan(0);
+    const drop = drops[drops.length - 1] as (typeof drops)[number];
+    const dx = drop.position.x - nodePos.x;
+    const dy = drop.position.y - nodePos.y;
+    const dz = drop.position.z - nodePos.z;
+    // Along the node normal (down), not radial up.
+    const alongDown = dx * down.x + dy * down.y + dz * down.z;
+    expect(alongDown).toBeCloseTo(1.0, 6);
   });
 
   it('reloading keeps depleted nodes depleted and items where left', async () => {
