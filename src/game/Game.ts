@@ -24,6 +24,7 @@ import { serializeWorld, type SaveData } from '../save/serialize.js';
 import { DebugOverlay } from '../ui/debugOverlay.js';
 import { Hud } from '../ui/hud.js';
 import { backpackFrame, tickBackpackInput } from './backpackWiring.js';
+import { installDebugHandle } from './debugHandle.js';
 import { oxygenStatusFor } from './oxygenStatus.js';
 import { setupWorldSystems } from './worldSetup.js';
 import { updateDebugOverlay } from './debugStats.js';
@@ -132,6 +133,9 @@ export class Game {
     this.unsubscribePlayerDied = events.on('playerDied', ({ playerId }) => {
       if (playerId === this.playerId) this.hud.showDeathFade();
     });
+    // Console debug handle: lets a blank screen be diagnosed with facts
+    // (entity positions) instead of theories. Read-only, browser only.
+    installDebugHandle(this.world, () => this.playerId);
   }
 
   private handleGlobalKey = (e: KeyboardEvent): void => {
