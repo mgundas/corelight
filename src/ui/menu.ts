@@ -10,7 +10,7 @@ export interface MainMenuOptions {
 
 export interface PauseMenuOptions {
   onResume(): void;
-  onSaveNow(): void;
+  onSaveNow(): Promise<boolean>;
   onQuitToMenu(): void;
 }
 
@@ -71,15 +71,14 @@ export function showPauseMenu(opts: PauseMenuOptions): () => void {
   const saveButton = makeButton('Save now', () => {
     saveButton.disabled = true;
     saveButton.textContent = 'Saving…';
-    opts.onSaveNow();
-    // storeSave is async in the session; show confirmation briefly.
-    window.setTimeout(() => {
-      saveButton.textContent = 'Saved!';
+    void opts.onSaveNow().then((ok) => {
+      // Honest confirmation: storeSave reports failure instead of swallowing it.
+      saveButton.textContent = ok ? 'Saved!' : 'Save failed';
       window.setTimeout(() => {
         saveButton.disabled = false;
         saveButton.textContent = 'Save now';
       }, 1200);
-    }, 150);
+    });
   });
   body.appendChild(saveButton);
   body.appendChild(makeButton('Quit to menu', opts.onQuitToMenu));

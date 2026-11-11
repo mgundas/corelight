@@ -43,13 +43,16 @@ function launchSession(
       game.setPaused(true);
       disposePauseMenu = showPauseMenu({
         onResume: closePauseMenu,
-        onSaveNow: () => {
-          void storeSave(game.snapshot());
-        },
+        onSaveNow: () => storeSave(game.snapshot()),
         onQuitToMenu: () => {
-          closePauseMenu();
-          stopSession();
-          void showMenu();
+          // Quit must not lose up to 60 s of progress: persist before the
+          // session (and its autosave) is torn down.
+          void (async () => {
+            await storeSave(game.snapshot());
+            closePauseMenu();
+            stopSession();
+            await showMenu();
+          })();
         },
       });
     }

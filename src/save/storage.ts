@@ -31,11 +31,13 @@ export async function loadSave(): Promise<SaveData | null> {
   }
 }
 
-export async function storeSave(data: SaveData): Promise<void> {
+export async function storeSave(data: SaveData): Promise<boolean> {
   try {
     await set(SAVE_KEY, data);
+    return true;
   } catch (err) {
     console.warn('save store failed', err);
+    return false;
   }
 }
 
