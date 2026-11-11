@@ -131,3 +131,4 @@ Root cause: pure tuning, no wiring bug. The shell was at 1.25x planet radius (10
 Fix: shell multiplier 1.25 → 1.5 (new `ATMOSPHERE_SHELL_MULT` constant; deliberate deviation from ARCH/M05's 1.25, per direct visual feedback — noted here). Space fade now 400–2000 m (starts one radius up, done by five), fog fade aligned to the same band, night base darkened to `[0.004, 0.006, 0.014]`. Low high-flights (<400 m) keep the full day sky.
 Tests: fade-complete-by-2000 m, day-sky-preserved at 300 m, near-black night. 193 tests pass.
 Run: `npm run dev`, F3-fly to ~600 m — shell clearly separated above the terrain; keep climbing past ~2 km — sky goes black with stars while the planet stays lit.
+Follow-up: 1.5x read as a detached glass "cell" from far away, so the shell is now 1.35x (140 m over Sela) — between the too-low 1.25x and the too-bubbly 1.5x — with a test pinning the radius wiring.

@@ -137,7 +137,7 @@ export const SKY_SPACE_START_M = 400;
 export const SKY_SPACE_END_M = 2000;
 
 /** Atmosphere shell radius as a multiple of the planet radius. */
-export const ATMOSPHERE_SHELL_MULT = 1.5;
+export const ATMOSPHERE_SHELL_MULT = 1.35;
 
 /** Headlamp spotlight tuning (SpotLight attached to the camera). */
 export const HEADLAMP_COLOR = 0xfff1d6;

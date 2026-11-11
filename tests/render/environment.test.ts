@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { SELA } from '../../src/planets/configs/sela.js';
+import { ATMOSPHERE_SHELL_MULT } from '../../src/core/constants.js';
 import { FOG_CAVE_DENSITY, FOG_SURFACE_DENSITY } from '../../src/core/constants.js';
 import { nodeKey, nodeOrigin } from '../../src/terrain/octree.js';
 import type { MeshResult } from '../../src/terrain/workerPool.js';
@@ -93,6 +94,12 @@ describe('Atmosphere', () => {
     atmosphere.update({ x: 0, y: 1, z: 0 });
     const mesh = scene.children[0] as THREE.Mesh;
     expect(mesh.position.length()).toBe(0);
+    // Shell sits just off the surface (multiplier, not a loose bubble).
+    mesh.geometry.computeBoundingSphere();
+    expect(mesh.geometry.boundingSphere?.radius).toBeCloseTo(
+      SELA.radius * ATMOSPHERE_SHELL_MULT,
+      0,
+    );
     const mat = mesh.material as THREE.ShaderMaterial;
     const sun = mat.uniforms['sunDirection'] as { value: THREE.Vector3 };
     expect(sun.value.y).toBeCloseTo(1, 10);
