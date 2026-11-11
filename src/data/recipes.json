@@ -1,0 +1,207 @@
+[
+  {
+    "id": "tether",
+    "station": "backpack",
+    "output": "tether",
+    "inputs": [{ "item": "resin", "count": 1 }],
+    "time": 0,
+    "power": 0,
+    "unlockedByDefault": true
+  },
+  {
+    "id": "light_stick",
+    "station": "backpack",
+    "output": "light_stick",
+    "inputs": [{ "item": "lumen_crystal", "count": 1 }],
+    "time": 0,
+    "power": 0,
+    "unlockedByDefault": true
+  },
+  {
+    "id": "oxygen_canister",
+    "station": "backpack",
+    "output": "oxygen_canister",
+    "inputs": [
+      { "item": "resin", "count": 1 },
+      { "item": "silicate", "count": 1 }
+    ],
+    "time": 0,
+    "power": 0,
+    "unlockedByDefault": true
+  },
+  {
+    "id": "platform",
+    "station": "small_printer",
+    "output": "platform",
+    "inputs": [{ "item": "silicate", "count": 2 }],
+    "time": 2,
+    "power": 1,
+    "unlockedByDefault": true
+  },
+  {
+    "id": "solar_panel",
+    "station": "small_printer",
+    "output": "solar_panel",
+    "inputs": [
+      { "item": "silicate", "count": 1 },
+      { "item": "copper", "count": 1 }
+    ],
+    "time": 2,
+    "power": 1,
+    "unlockedByDefault": false
+  },
+  {
+    "id": "battery",
+    "station": "small_printer",
+    "output": "battery",
+    "inputs": [
+      { "item": "copper", "count": 1 },
+      { "item": "silicate", "count": 1 }
+    ],
+    "time": 2,
+    "power": 1,
+    "unlockedByDefault": false
+  },
+  {
+    "id": "furnace",
+    "station": "small_printer",
+    "output": "furnace",
+    "inputs": [
+      { "item": "silicate", "count": 2 },
+      { "item": "ferrite_ore", "count": 1 }
+    ],
+    "time": 3,
+    "power": 1,
+    "unlockedByDefault": false
+  },
+  {
+    "id": "research_station",
+    "station": "small_printer",
+    "output": "research_station",
+    "inputs": [
+      { "item": "silicate", "count": 2 },
+      { "item": "lumen_crystal", "count": 1 }
+    ],
+    "time": 3,
+    "power": 1,
+    "unlockedByDefault": false
+  },
+  {
+    "id": "medium_printer",
+    "station": "small_printer",
+    "output": "medium_printer",
+    "inputs": [
+      { "item": "iron", "count": 2 },
+      { "item": "silicate", "count": 1 }
+    ],
+    "time": 4,
+    "power": 1,
+    "unlockedByDefault": false
+  },
+  {
+    "id": "drill_mk2",
+    "station": "small_printer",
+    "output": "drill_mk2",
+    "inputs": [
+      { "item": "iron", "count": 1 },
+      { "item": "copper", "count": 1 }
+    ],
+    "time": 3,
+    "power": 1,
+    "unlockedByDefault": false
+  },
+  {
+    "id": "smelt_iron",
+    "station": "furnace",
+    "output": "iron",
+    "inputs": [{ "item": "ferrite_ore", "count": 1 }],
+    "time": 2,
+    "power": 2,
+    "unlockedByDefault": false
+  },
+  {
+    "id": "smelt_copper",
+    "station": "furnace",
+    "output": "copper",
+    "inputs": [{ "item": "cuprite_ore", "count": 1 }],
+    "time": 2,
+    "power": 2,
+    "unlockedByDefault": false
+  },
+  {
+    "id": "polymer",
+    "station": "furnace",
+    "output": "polymer",
+    "inputs": [{ "item": "resin", "count": 1 }],
+    "time": 2,
+    "power": 2,
+    "unlockedByDefault": false
+  },
+  {
+    "id": "drill_mk3",
+    "station": "medium_printer",
+    "output": "drill_mk3",
+    "inputs": [
+      { "item": "iron", "count": 2 },
+      { "item": "copper", "count": 2 }
+    ],
+    "time": 4,
+    "power": 2,
+    "unlockedByDefault": false
+  },
+  {
+    "id": "refinery",
+    "station": "medium_printer",
+    "output": "refinery",
+    "inputs": [
+      { "item": "iron", "count": 2 },
+      { "item": "copper", "count": 1 }
+    ],
+    "time": 4,
+    "power": 2,
+    "unlockedByDefault": false
+  },
+  {
+    "id": "shuttle",
+    "station": "medium_printer",
+    "output": "shuttle",
+    "inputs": [
+      { "item": "iron", "count": 4 },
+      { "item": "copper", "count": 2 },
+      { "item": "polymer", "count": 2 }
+    ],
+    "time": 6,
+    "power": 2,
+    "unlockedByDefault": false
+  },
+  {
+    "id": "habitat_kit",
+    "station": "medium_printer",
+    "output": "habitat_kit",
+    "inputs": [
+      { "item": "iron", "count": 3 },
+      { "item": "polymer", "count": 2 }
+    ],
+    "time": 5,
+    "power": 2,
+    "unlockedByDefault": false
+  },
+  {
+    "id": "fuel_cell_biomass",
+    "station": "refinery",
+    "output": "fuel_cell",
+    "inputs": [{ "item": "biomass", "count": 2 }],
+    "time": 3,
+    "power": 3,
+    "unlockedByDefault": false
+  },
+  {
+    "id": "fuel_cell_hydrite",
+    "station": "refinery",
+    "output": "fuel_cell",
+    "inputs": [{ "item": "hydrite", "count": 1 }],
+    "time": 3,
+    "power": 3,
+    "unlockedByDefault": false
+  }
+]

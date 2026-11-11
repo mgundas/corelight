@@ -205,6 +205,42 @@ describe('oxygen system', () => {
     ).toBe(true);
   });
 
+  it('drops a front-carried large package on death', () => {
+    const { world, playerId } = oxygenWorld();
+    const player = world.entities.get(playerId);
+    if (!player) throw new Error('no player');
+    const up = upAt(SELA, player.position);
+    const deathSpot = {
+      x: player.position.x + up.x * 100,
+      y: player.position.y + up.y * 100,
+      z: player.position.z + up.z * 100,
+    };
+    world.dispatch({ type: 'playerTeleport', playerId, position: deathSpot });
+    world.tick(SIM_DT);
+    const id = world.nextId('item');
+    const dying = world.entities.get(playerId);
+    if (!dying) throw new Error('player lost');
+    world.entities.set(id, {
+      id,
+      kind: 'item',
+      planetId: dying.planetId,
+      position: { ...deathSpot },
+      rotation: { ...IDENTITY_QUAT },
+      components: { item: { itemId: 'platform_package', holder: playerId } },
+    });
+    if (!dying.components.player) throw new Error('no player comp');
+    dying.components.player.carryingLarge = id;
+    setOxygen(world, playerId, 0);
+    world.tick(SIM_DT);
+    expect(world.entities.get(playerId)?.components.player?.carryingLarge).toBe(null);
+    const dropped = world.entities.get(id);
+    expect(dropped?.components.item?.holder).toBeUndefined();
+    // Dropped at the death spot (the player then respawns at the habitat).
+    if (!dropped) throw new Error('missing drop');
+    expect(dropped.position.x).toBeCloseTo(deathSpot.x, 3);
+    expect(dropped.position.z).toBeCloseTo(deathSpot.z, 3);
+  });
+
   it('death drops the pack, leaves a marker and respawns at the habitat', () => {
     const { world, playerId, habitatId } = oxygenWorld();
     const player = world.entities.get(playerId);

@@ -27,6 +27,7 @@ export interface Components {
   node: NodeComponent;
   tether: TetherComponent;
   machine: MachineComponent;
+  placeable: PlaceableComponent;
 }
 
 export interface OxygenComponent {
@@ -43,8 +44,16 @@ export interface PowerComponent {
   stored: number;
 }
 
+/** Printing job state for a station machine (M09). */
 export interface PrinterComponent {
+  /** Active recipe id, or null when idle. */
   recipeId: string | null;
+  /** Seconds of progress into the active recipe. */
+  progressS: number;
+  /** Item entity ids loaded into the station's input slots. */
+  inputs: EntityId[];
+  /** Finished output waiting for pickup (recipe output id), or null. */
+  outputReady: string | null;
 }
 
 export interface FurnaceComponent {
@@ -67,9 +76,24 @@ export interface TetherComponent {
   links: EntityId[];
 }
 
-/** A base machine. M08 only spawns habitats (oxygen root, later power root). */
+/** A base machine. Habitats are oxygen roots; the rest are M09 stations. */
+export type MachineType =
+  | 'habitat'
+  | 'small_printer'
+  | 'medium_printer'
+  | 'solar_panel'
+  | 'battery'
+  | 'furnace'
+  | 'research_station'
+  | 'refinery';
+
 export interface MachineComponent {
-  machineType: 'habitat';
+  machineType: MachineType;
+}
+
+/** Places an entity back to its data catalog entry (M09 placeables). */
+export interface PlaceableComponent {
+  placeableId: string;
 }
 /** A mineable resource deposit placed deterministically per LOD0 chunk. */
 export interface NodeComponent {
@@ -116,6 +140,11 @@ export interface PlayerComponent {
   headlampOn: boolean;
   /** Lost-backpack marker entity from the last death (null when recovered). */
   deathMarkerId: EntityId | null;
+  /**
+   * Large packaged placeable carried in front of the player (null = none).
+   * Optional so pre-M09 saves (and their lazy component heals) stay valid.
+   */
+  carryingLarge?: EntityId | null;
 }
 
 export interface Entity {

@@ -12,6 +12,7 @@ import type { Entity, EntityId } from '../../src/sim/entities.js';
 import { ItemViews } from '../../src/render/views/itemView.js';
 import { NodeViews } from '../../src/render/views/nodeView.js';
 import { HabitatViews, MarkerViews, TetherViews } from '../../src/render/views/tetherView.js';
+import { PlaceableViews } from '../../src/render/views/placeableView.js';
 import { syncEntityViews } from '../../src/render/views/syncViews.js';
 
 function makeWorld(): Map<EntityId, Entity> {
@@ -73,6 +74,22 @@ function makeWorld(): Map<EntityId, Entity> {
     rotation: { ...IDENTITY_QUAT },
     components: {},
   });
+  add({
+    id: 'platform_1',
+    kind: 'platform',
+    planetId: SELA.id,
+    position: at(4, 0, 4),
+    rotation: { ...IDENTITY_QUAT },
+    components: { placeable: { placeableId: 'platform' } },
+  });
+  add({
+    id: 'lightstick_1',
+    kind: 'lightstick',
+    planetId: SELA.id,
+    position: at(5, 0, -2),
+    rotation: { ...IDENTITY_QUAT },
+    components: { item: { itemId: 'light_stick' } },
+  });
   return entities;
 }
 
@@ -82,23 +99,28 @@ describe('syncEntityViews', () => {
     const views = {
       itemViews: new ItemViews(),
       nodeViews: new NodeViews(),
+      placeableViews: new PlaceableViews(),
       tetherViews: new TetherViews(),
       habitatViews: new HabitatViews(),
       markerViews: new MarkerViews(),
     };
     // Exactly the production shape: a single map.values() iterator shared
     // by every view. Pre-fix this left 4 of 5 groups empty.
-    const { itemEmitters, nodeEmitters } = syncEntityViews(views, entities.values());
+    const { itemEmitters, nodeEmitters, placeableEmitters } = syncEntityViews(views, entities.values());
     expect(views.itemViews.group.children.length).toBe(1);
     expect(views.nodeViews.group.children.length).toBe(1);
+    expect(views.placeableViews.group.children.length).toBe(2);
     expect(views.tetherViews.group.children.length).toBe(1);
     expect(views.habitatViews.group.children.length).toBe(1);
     expect(views.markerViews.group.children.length).toBe(1);
-    // The glowing crystal still reports its light through the same path.
+    // The glowing crystal still reports its light through the same path,
+    // and the placed light stick joins the same emitter list.
     expect(itemEmitters.length).toBe(1);
     expect(nodeEmitters.length).toBe(0);
+    expect(placeableEmitters.length).toBe(1);
     views.itemViews.dispose();
     views.nodeViews.dispose();
+    views.placeableViews.dispose();
     views.tetherViews.dispose();
     views.habitatViews.dispose();
     views.markerViews.dispose();

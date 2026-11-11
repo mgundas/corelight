@@ -9,7 +9,7 @@ import type { EntityId } from '../sim/entities.js';
 import type { World } from '../sim/world.js';
 
 /** Bump on every user-visible fix so stale tabs are instantly detectable. */
-export const DEBUG_BUILD = 'm08-fix6-multi';
+export const DEBUG_BUILD = 'm09-print';
 
 export interface ViewItemStat {
   type: string;
@@ -35,6 +35,7 @@ export interface SceneStat {
   tethers: ViewGroupStat;
   habitats: ViewGroupStat;
   markers: ViewGroupStat;
+  placeables: ViewGroupStat;
 }
 
 function statGroup(group: ViewGroupLike): ViewGroupStat {
@@ -77,7 +78,12 @@ export function installDebugHandle(  world: World,
   playerId: () => EntityId | null,
   extra: {
     flying: () => boolean;
-    views?: () => { tethers: ViewGroupLike; habitats: ViewGroupLike; markers: ViewGroupLike };
+    views?: () => {
+      tethers: ViewGroupLike;
+      habitats: ViewGroupLike;
+      markers: ViewGroupLike;
+      placeables: ViewGroupLike;
+    };
   },
 ): void {
   if (typeof window === 'undefined') return;
@@ -113,7 +119,7 @@ export function installDebugHandle(  world: World,
         })),
     habitats: () =>
       [...world.entities.values()]
-        .filter((e) => e.kind === 'machine')
+        .filter((e) => e.kind === 'machine' && e.components.machine?.machineType === 'habitat')
         .map((e) => ({ id: e.id, pos: { ...e.position } })),
     scene: () => {
       const v = extra.views?.();
@@ -122,6 +128,7 @@ export function installDebugHandle(  world: World,
         tethers: v ? statGroup(v.tethers) : empty,
         habitats: v ? statGroup(v.habitats) : empty,
         markers: v ? statGroup(v.markers) : empty,
+        placeables: v ? statGroup(v.placeables) : empty,
       };
     },
   };

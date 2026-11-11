@@ -74,9 +74,24 @@ describe('PlayerBody on a flat floor', () => {
     const walked = Math.hypot(entity.position.x - startX, entity.position.z - startZ);
     expect(walked).toBeGreaterThan(3);
     expect(walked).toBeLessThan(7);
-    // Jump: must leave the ground.
+    // Large front-carried package: 30% slower (3.5 m in 1 s at walk speed).
     const player = entity.components.player;
-    if (player) player.input = { moveX: 0, moveZ: 0, jump: true, sprint: false };
+    if (!player) return;
+    player.carryingLarge = 'probe_package';
+    const carryStartX = entity.position.x;
+    const carryStartZ = entity.position.z;
+    for (let i = 0; i < 30; i += 1) {
+      player.input = { moveX: 0, moveZ: 1, jump: false, sprint: false };
+      body.step(entity, [SELA], SIM_DT);
+      rapierWorld.timestep = SIM_DT;
+      rapierWorld.step();
+    }
+    const carriedWalk = Math.hypot(entity.position.x - carryStartX, entity.position.z - carryStartZ);
+    expect(carriedWalk).toBeGreaterThan(2.5);
+    expect(carriedWalk).toBeLessThan(4.5);
+    player.carryingLarge = null;
+    // Jump: must leave the ground.
+    player.input = { moveX: 0, moveZ: 0, jump: true, sprint: false };
     body.step(entity, [SELA], SIM_DT);
     rapierWorld.timestep = SIM_DT;
     rapierWorld.step();

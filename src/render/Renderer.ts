@@ -14,6 +14,7 @@ import { getOrigin, toLocal } from './floatingOrigin.js';
 import { frustumPlanes } from './frustum.js';
 import { ItemLights } from './itemLights.js';
 import { HabitatViews, MarkerViews, TetherViews } from './views/tetherView.js';
+import { PlaceableViews, PlacementGhost } from './views/placeableView.js';
 import { disposeItemCaches } from './views/itemGeometry.js';
 import { syncEntityViews } from './views/syncViews.js';
 import { ItemViews } from './views/itemView.js';
@@ -70,6 +71,8 @@ export class Renderer {
   readonly tetherViews = new TetherViews();
   readonly habitatViews = new HabitatViews();
   readonly markerViews = new MarkerViews();
+  readonly placeableViews = new PlaceableViews();
+  readonly placementGhost = new PlacementGhost();
   private readonly itemLights = new ItemLights();
   private readonly lighting: LightingRig;
   private readonly sky: Sky;
@@ -115,6 +118,8 @@ export class Renderer {
     this.scene.add(this.tetherViews.group);
     this.scene.add(this.habitatViews.group);
     this.scene.add(this.markerViews.group);
+    this.scene.add(this.placeableViews.group);
+    this.scene.add(this.placementGhost.group);
     this.scene.add(this.itemLights.group);
     // Translucent brush sphere for the terrain tool (M04). Positioned
     // absolutely from world doubles every frame, so it owns its origin
@@ -147,6 +152,8 @@ export class Renderer {
     this.tetherViews.dispose();
     this.habitatViews.dispose();
     this.markerViews.dispose();
+    this.placeableViews.dispose();
+    this.placementGhost.dispose();
     this.itemLights.dispose();
     disposeItemCaches();
     this.bounds.dispose();
@@ -267,18 +274,38 @@ export class Renderer {
   }
 
   /**
-   * Sync ground items, resource nodes, tethers, habitats, markers, carried
-   * backpack items, then park the glow light pool on the nearest emitters.
-   * `carried` holds the 8 resolved backpack slot definitions (null for empty)
-   * for the followed player. Unknown future item ids resolve to null (never
-   * crash the frame).
+   * Show the translucent placement ghost at a world-space point (null hides).
+   * Oriented to local up; green when checkPlacement says ok, red otherwise.
    */
-  renderEntities(entities: Iterable<Entity>, focusWorld: Vec3d, carried: (string | null)[]): void {
-    const { itemEmitters, nodeEmitters } = syncEntityViews(this, entities);
-    this.itemLights.update(focusWorld, [...itemEmitters, ...nodeEmitters]);
+  setPlacementGhost(
+    placeableId: string | null,
+    positionWorld: Vec3d | null,
+    upWorld: Vec3d | null,
+    valid: boolean,
+  ): void {
+    this.placementGhost.set(placeableId, positionWorld, upWorld, valid);
+  }
+
+  /**
+   * Sync ground items, resource nodes, placeables/light sticks, tethers,
+   * habitats, markers, carried backpack items, then park the glow light pool
+   * on the nearest emitters. `carried` holds the 8 resolved backpack slot
+   * definitions (null for empty); `frontCarry` is the large packaged item in
+   * front of the player. Unknown future item ids resolve to null (never crash
+   * the frame).
+   */
+  renderEntities(
+    entities: Iterable<Entity>,
+    focusWorld: Vec3d,
+    carried: (string | null)[],
+    frontCarry: string | null,
+  ): void {
+    const { itemEmitters, nodeEmitters, placeableEmitters } = syncEntityViews(this, entities);
+    this.itemLights.update(focusWorld, [...itemEmitters, ...nodeEmitters, ...placeableEmitters]);
     this.playerView.renderBackpack(
       carried.map((id) => (id && isKnownItem(id) ? itemDef(id) : null) as ItemDef | null),
     );
+    this.playerView.renderFrontCarry(frontCarry && isKnownItem(frontCarry) ? itemDef(frontCarry) : null);
   }
 
   render(): void {

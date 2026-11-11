@@ -12,6 +12,7 @@ import type { ItemEmitter } from './itemView.js';
 export interface EntityViews {
   itemViews: { sync(entities: Iterable<Entity>): ItemEmitter[] };
   nodeViews: { sync(entities: Iterable<Entity>): ItemEmitter[] };
+  placeableViews: { sync(entities: Iterable<Entity>): ItemEmitter[] };
   tetherViews: { sync(entities: Iterable<Entity>): void };
   habitatViews: { sync(entities: Iterable<Entity>): void };
   markerViews: { sync(entities: Iterable<Entity>): void };
@@ -20,17 +21,19 @@ export interface EntityViews {
 export interface SyncedEmitters {
   itemEmitters: ItemEmitter[];
   nodeEmitters: ItemEmitter[];
+  placeableEmitters: ItemEmitter[];
 }
 
-/** Sync all five entity views from one shared snapshot of the world. */
+/** Sync all six entity views from one shared snapshot of the world. */
 export function syncEntityViews(views: EntityViews, entities: Iterable<Entity>): SyncedEmitters {
   // Materialize once: the caller typically passes a single-use iterator
-  // (e.g. map.values()), which cannot be re-iterated by five syncs.
+  // (e.g. map.values()), which cannot be re-iterated by six syncs.
   const snapshot = [...entities];
   const itemEmitters = views.itemViews.sync(snapshot);
   const nodeEmitters = views.nodeViews.sync(snapshot);
+  const placeableEmitters = views.placeableViews.sync(snapshot);
   views.tetherViews.sync(snapshot);
   views.habitatViews.sync(snapshot);
   views.markerViews.sync(snapshot);
-  return { itemEmitters, nodeEmitters };
+  return { itemEmitters, nodeEmitters, placeableEmitters };
 }

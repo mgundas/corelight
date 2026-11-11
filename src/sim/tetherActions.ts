@@ -3,23 +3,16 @@
 // backpack spend/refund) lives here, dispatch stays in applyAction.
 
 import { distance, dot, IDENTITY_QUAT, normalize, quatFromTo, sub } from '../core/math.js';
-import { BACKPACK_SLOTS, PICKUP_RANGE_M, TETHER_GROUND_SEARCH_M, TETHER_PLACE_AHEAD_M, TETHER_SEAT_TOP_M } from '../core/constants.js';
+import { PICKUP_RANGE_M, TETHER_GROUND_SEARCH_M, TETHER_PLACE_AHEAD_M, TETHER_SEAT_TOP_M } from '../core/constants.js';
 import { events } from '../core/events.js';
+import type { PlanetConfig } from '../planets/PlanetConfig.js';
 import { createDensityField, type DensityField } from '../terrain/density.js';
-import type { Entity, EntityId } from './entities.js';
+import type { EntityId } from './entities.js';
+import { inventoryFor } from './inventoryActions.js';
 import { moveBasis, upAt } from './physics/frames.js';
 import type { World } from './world.js';
 
 /** Backpack, lazily created (old M06 saves predate inventory). */
-function backpackFor(playerEntity: Entity): { slots: (EntityId | null)[]; selectedSlot: number } | null {
-  if (playerEntity.kind !== 'player' || !playerEntity.components.player) return null;
-  let inventory = playerEntity.components.inventory;
-  if (!inventory) {
-    inventory = { slots: Array<EntityId | null>(BACKPACK_SLOTS).fill(null), selectedSlot: 0 };
-    playerEntity.components.inventory = inventory;
-  }
-  return inventory;
-}
 
 /**
  * Base (unedited) density fields per world, cached so every stroke bit does
@@ -119,12 +112,38 @@ export function seatTetherOnGround(
   return { x: playerPos.x - up.x, y: playerPos.y - up.y, z: playerPos.z - up.z };
 }
 
+/**
+ * Seat a point `aheadM` in front of the player (yaw-leveled look) on the
+ * ground. Shared by tethers and light sticks so both are placed visibly in
+ * front of the astronaut instead of inside the capsule.
+ */
+export function seatAheadOnGround(
+  world: World,
+  planet: PlanetConfig,
+  playerPos: { x: number; y: number; z: number },
+  yaw: number,
+  aheadM = TETHER_PLACE_AHEAD_M,
+): { x: number; y: number; z: number } {
+  const up = upAt(planet, playerPos);
+  // Level the look direction (yaw only): pitching up must not skydrop the
+  // post, pitching down must not plant it inside the boots.
+  const { forward } = moveBasis(up, yaw, 0);
+  const flat = sub(forward, { x: up.x * dot(forward, up), y: up.y * dot(forward, up), z: up.z * dot(forward, up) });
+  const ahead = dot(flat, flat) > 1e-6 ? normalize(flat) : forward;
+  const anchor = {
+    x: playerPos.x + ahead.x * aheadM,
+    y: playerPos.y + ahead.y * aheadM,
+    z: playerPos.z + ahead.z * aheadM,
+  };
+  return seatTetherOnGround(world, planet.id, anchor);
+}
+
 /** Spend one backpack Tether item on a post ahead of the player. The post
  * lands TETHER_PLACE_AHEAD_M in front (level with the look yaw): seating it
  * under the feet buries it inside the astronaut where no camera can see it. */
 export function placeTether(world: World, playerId: EntityId): void {
   const playerEntity = world.entities.get(playerId);
-  const inventory = playerEntity ? backpackFor(playerEntity) : null;
+  const inventory = playerEntity ? inventoryFor(world, playerId) : null;
   const player = playerEntity?.components.player;
   if (!playerEntity || playerEntity.kind !== 'player' || !inventory || !player || !playerEntity.planetId) {
     events.emit('actionApplied', { type: 'placeTether' });
@@ -138,22 +157,16 @@ export function placeTether(world: World, playerId: EntityId): void {
     events.emit('actionApplied', { type: 'placeTether' });
     return;
   }
+  const planet = world.planets.find((p) => p.id === playerEntity.planetId);
+  if (!planet) {
+    events.emit('actionApplied', { type: 'placeTether' });
+    return;
+  }
   const spentId = inventory.slots[slot] as EntityId;
   world.entities.delete(spentId);
   inventory.slots[slot] = null;
-  const planet = world.planets.find((p) => p.id === playerEntity.planetId);
-  const up = planet ? upAt(planet, playerEntity.position) : { x: 0, y: 1, z: 0 };
-  // Level the look direction (yaw only): pitching up must not skydrop the
-  // post, pitching down must not plant it inside the boots.
-  const { forward } = moveBasis(up, player.yaw, 0);
-  const flat = sub(forward, { x: up.x * dot(forward, up), y: up.y * dot(forward, up), z: up.z * dot(forward, up) });
-  const ahead = dot(flat, flat) > 1e-6 ? normalize(flat) : forward;
-  const anchor = {
-    x: playerEntity.position.x + ahead.x * TETHER_PLACE_AHEAD_M,
-    y: playerEntity.position.y + ahead.y * TETHER_PLACE_AHEAD_M,
-    z: playerEntity.position.z + ahead.z * TETHER_PLACE_AHEAD_M,
-  };
-  const position = seatTetherOnGround(world, playerEntity.planetId, anchor);
+  const up = upAt(planet, playerEntity.position);
+  const position = seatAheadOnGround(world, planet, playerEntity.position, player.yaw);
   const id = world.nextId('tether');
   world.entities.set(id, {
     id,
@@ -172,7 +185,7 @@ export function placeTether(world: World, playerId: EntityId): void {
  */
 export function removeTether(world: World, playerId: EntityId, tetherId: EntityId): void {
   const playerEntity = world.entities.get(playerId);
-  const inventory = playerEntity ? backpackFor(playerEntity) : null;
+  const inventory = playerEntity ? inventoryFor(world, playerId) : null;
   if (!playerEntity || !inventory) {
     events.emit('actionApplied', { type: 'removeTether' });
     return;

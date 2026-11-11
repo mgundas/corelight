@@ -11,11 +11,13 @@ import {
   SIM_DT,
 } from '../core/constants.js';
 import { cross, IDENTITY_QUAT, normalize, sub } from '../core/math.js';
+import { placeableDef } from '../data/loadPlaceables.js';
 import type { PlanetConfig } from '../planets/PlanetConfig.js';
 import { physicsWorldFor } from '../sim/physics/rapierWorld.js';
 import { findSpawnPosition } from '../sim/physics/spawn.js';
 import { makePhysicsSystem } from '../sim/physics/system.js';
 import { makeItemsSystem } from '../sim/systems/items.js';
+import { updateCrafting } from '../sim/systems/crafting.js';
 import { updateNodes } from '../sim/systems/nodes.js';
 import { updateOxygen } from '../sim/systems/oxygen.js';
 import { updateTethers } from '../sim/systems/tethers.js';
@@ -25,6 +27,7 @@ import type { ColliderPool } from '../terrain/colliderPool.js';
 import { createDensityField } from '../terrain/density.js';
 import type { Entity, EntityId } from '../sim/entities.js';
 import type { World } from '../sim/world.js';
+import { upAt } from '../sim/physics/frames.js';
 
 export interface WorldSetup {
   colliders: TerrainColliders;
@@ -44,6 +47,64 @@ function lateralOffset(planet: PlanetConfig, pos: { x: number; y: number; z: num
   const ref = Math.abs(up.y) < 0.99 ? { x: 0, y: 1, z: 0 } : { x: 1, y: 0, z: 0 };
   const east = normalize(cross(up, ref));
   return { x: pos.x + east.x * dist, y: pos.y + east.y * dist, z: pos.z + east.z * dist };
+}
+
+/**
+ * Seat a world-space anchor on the live (edited) surface by marching radially
+ * inward from above and bisecting the air->solid crossing. Returns the input
+ * when no crossing is found (e.g. a cave mouth).
+ */
+function seatOnSurface(
+  field: ReturnType<typeof createDensityField>,
+  planet: PlanetConfig,
+  anchor: { x: number; y: number; z: number },
+): { x: number; y: number; z: number } {
+  const dir = normalize(sub(anchor, planet.center));
+  let r = planet.radius + 80;
+  let prevD = field.density(dir.x * (r + 20), dir.y * (r + 20), dir.z * (r + 20));
+  for (let rr = r + 19; rr > planet.radius - 60; rr -= 1) {
+    const d = field.density(dir.x * rr, dir.y * rr, dir.z * rr);
+    if (prevD < 0 && d >= 0) {
+      return {
+        x: planet.center.x + dir.x * rr,
+        y: planet.center.y + dir.y * rr,
+        z: planet.center.z + dir.z * rr,
+      };
+    }
+    prevD = d;
+  }
+  return { ...anchor };
+}
+
+/**
+ * Starting base (M09): a platform with the pre-placed small printer, on the
+ * opposite side of the pad from the habitat. Setup-only wiring: the entities
+ * are created through the spawnPlaceable Action.
+ */
+function spawnStarterBase(world: World, planet: PlanetConfig, anchor: { x: number; y: number; z: number }): void {
+  const field = createDensityField(planet, world.seed, (x, y, z) =>
+    world.terrainEdits.deltaAt(planet, planet.id, x, y, z),
+  );
+  const platformAnchor = lateralOffset(planet, anchor, -3.5);
+  const platformPos = seatOnSurface(field, planet, platformAnchor);
+  world.dispatch({
+    type: 'spawnPlaceable',
+    planetId: planet.id,
+    placeableId: 'platform',
+    position: platformPos,
+  });
+  const up = upAt(planet, platformPos);
+  const top = placeableDef('platform').heightM;
+  world.dispatch({
+    type: 'spawnPlaceable',
+    planetId: planet.id,
+    placeableId: 'small_printer',
+    position: {
+      x: platformPos.x + up.x * top,
+      y: platformPos.y + up.y * top,
+      z: platformPos.z + up.z * top,
+    },
+  });
 }
 
 /**
@@ -72,7 +133,11 @@ function spawnHabitatNear(world: World, planet: PlanetConfig, anchor: { x: numbe
     base.density,
     local,
     HABITAT_FLATTEN_RADIUS_M,
-    1,
+    // Strength 4 snaps the inner ~7 m fully to the plane (strength*falloff
+    // >= 1): a real flat base pad for the starter platform/printer and M10
+    // construction. Strength 1 left the noisy surface sloping >20° almost
+    // everywhere, so M09 placement could not be tested at the base.
+    4,
     'flatten',
     {
       flattenPlane: {
@@ -87,23 +152,9 @@ function spawnHabitatNear(world: World, planet: PlanetConfig, anchor: { x: numbe
   const field = createDensityField(planet, world.seed, (x, y, z) =>
     world.terrainEdits.deltaAt(planet, planet.id, x, y, z),
   );
-  const dir = normalize(sub(habitatPos, planet.center));
-  let r = planet.radius + 80;
-  let seated = { ...habitatPos };
-  let prevD = field.density(dir.x * (r + 20), dir.y * (r + 20), dir.z * (r + 20));
-  for (let rr = r + 19; rr > planet.radius - 60; rr -= 1) {
-    const d = field.density(dir.x * rr, dir.y * rr, dir.z * rr);
-    if (prevD < 0 && d >= 0) {
-      seated = {
-        x: planet.center.x + dir.x * rr,
-        y: planet.center.y + dir.y * rr,
-        z: planet.center.z + dir.z * rr,
-      };
-      break;
-    }
-    prevD = d;
-  }
+  const seated = seatOnSurface(field, planet, habitatPos);
   world.dispatch({ type: 'spawnHabitat', planetId: planet.id, position: seated });
+  spawnStarterBase(world, planet, ground);
   return outcome.keys;
 }
 
@@ -173,6 +224,8 @@ export function setupWorldSystems(
   world.addSystem((tickWorld) => updateTethers(tickWorld, planets));
   // Oxygen breathing, canisters and death/respawn (reads the tether graph).
   world.addSystem((tickWorld, dt) => updateOxygen(tickWorld, planets, dt));
+  // Station print jobs (M09): advances timers, exposes finished outputs.
+  world.addSystem((tickWorld, dt) => updateCrafting(tickWorld, dt));
   // Environment clock (order-free: only re-derives sunDirection from time).
   world.addSystem(updateSun);
   let playerId: EntityId | null = null;
@@ -187,14 +240,21 @@ export function setupWorldSystems(
     }
     // Old saves predate habitats (M06/M07): heal by seating one by the player.
     const player = playerById(world, playerId);
-    const hasHabitat =
-      player?.planetId !== undefined &&
-      [...world.entities.values()].some(
-        (e) => e.kind === 'machine' && e.planetId === player?.planetId,
-      );
-    if (player && !hasHabitat) {
-      const planet = planets.find((p) => p.id === player.planetId) ?? home;
+    const planetId = player?.planetId ?? undefined;
+    const machines = [...world.entities.values()].filter(
+      (e) => e.kind === 'machine' && e.planetId === planetId,
+    );
+    const hasHabitat = machines.some((e) => e.components.machine?.machineType === 'habitat');
+    const hasPrinter = machines.some((e) => e.components.machine?.machineType === 'small_printer');
+    if (player && planetId !== undefined && !hasHabitat) {
+      const planet = planets.find((p) => p.id === planetId) ?? home;
       editedKeys = spawnHabitatNear(world, planet, player.position);
+      world.tick(SIM_DT);
+    } else if (player && planetId !== undefined && !hasPrinter) {
+      // M08 saves predate the M09 starting printer: seat one by the player
+      // (the starting pad / habitat area in practice).
+      const planet = planets.find((p) => p.id === planetId) ?? home;
+      spawnStarterBase(world, planet, player.position);
       world.tick(SIM_DT);
     }
   } else {

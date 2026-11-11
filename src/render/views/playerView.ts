@@ -50,6 +50,9 @@ export class PlayerView {
   /** Backpack slot meshes (8): reconciled by renderBackpack. */
   private readonly packSlots: (THREE.Mesh | null)[] = Array<THREE.Mesh | null>(8).fill(null);
   private readonly packItemIds: (string | null)[] = Array<string | null>(8).fill(null);
+  /** Large packaged placeable carried in front (M09), reconciled by id. */
+  private frontCarry: THREE.Mesh | null = null;
+  private frontCarryId: string | null = null;
 
   constructor() {
     this.group.name = 'player';
@@ -155,17 +158,42 @@ export class PlayerView {
     }
   }
 
+  /**
+   * Show (or clear) the large package carried in front. Uses the shared item
+   * mesh cache; position is in the astronaut's local frame, so it follows the
+   * body and never fights the interpolation.
+   */
+  renderFrontCarry(def: ItemDef | null): void {
+    if ((this.frontCarryId ?? null) === (def?.id ?? null)) return;
+    if (this.frontCarry) {
+      this.group.remove(this.frontCarry);
+      this.frontCarry = null;
+    }
+    this.frontCarryId = def?.id ?? null;
+    if (!def) return;
+    const mesh = makeItemMesh(def);
+    mesh.position.set(0, 0.2, 0.78);
+    mesh.rotation.set(0.12, 0, 0);
+    mesh.scale.setScalar(1.15);
+    mesh.matrixAutoUpdate = false;
+    mesh.updateMatrix();
+    this.frontCarry = mesh;
+    this.group.add(mesh);
+  }
+
   dispose(): void {
     for (const child of [...this.group.children]) {
       this.group.remove(child);
-      // Backpack/item meshes share cached geometry/materials (owned by
+      // Backpack/package meshes share cached geometry/materials (owned by
       // itemGeometry.ts): only the astronaut's own meshes dispose theirs.
-      if (!this.packSlots.includes(child as THREE.Mesh)) {
+      if (!this.packSlots.includes(child as THREE.Mesh) && child !== this.frontCarry) {
         const mesh = child as THREE.Mesh;
         mesh.geometry.dispose();
       }
     }
     for (let i = 0; i < this.packSlots.length; i += 1) this.packSlots[i] = null;
+    this.frontCarry = null;
+    this.frontCarryId = null;
     this.bodyMat.dispose();
     this.helmetMat.dispose();
     this.visorMat.dispose();

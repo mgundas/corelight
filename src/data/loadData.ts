@@ -4,7 +4,7 @@
 
 import rawItems from './items.json' with { type: 'json' };
 
-export type ItemShape = 'cube' | 'sphere' | 'crystal' | 'capsule' | 'canister';
+export type ItemShape = 'cube' | 'sphere' | 'crystal' | 'capsule' | 'canister' | 'crate';
 export type ItemSize = 'small' | 'medium' | 'large';
 
 export interface ItemLight {
@@ -22,7 +22,7 @@ export interface ItemDef {
   emitsLight?: ItemLight;
 }
 
-const SHAPES: ReadonlySet<string> = new Set(['cube', 'sphere', 'crystal', 'capsule', 'canister']);
+const SHAPES: ReadonlySet<string> = new Set(['cube', 'sphere', 'crystal', 'capsule', 'canister', 'crate']);
 const SIZES: ReadonlySet<string> = new Set(['small', 'medium', 'large']);
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 

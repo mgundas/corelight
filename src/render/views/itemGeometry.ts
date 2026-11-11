@@ -27,7 +27,10 @@ export function geometryFor(shape: ItemDef['shape']): THREE.BufferGeometry {
     geo = new THREE.OctahedronGeometry(0.3);
     geo.scale(1, 1.6, 1);
   } else if (shape === 'capsule') geo = new THREE.CapsuleGeometry(0.16, 0.26, 4, 8);
-  else geo = new THREE.CylinderGeometry(0.18, 0.18, 0.46, 10);
+  else if (shape === 'crate') {
+    // Packaged placeables: a boxy crate with a visible lid ridge.
+    geo = new THREE.BoxGeometry(0.62, 0.55, 0.62);
+  } else geo = new THREE.CylinderGeometry(0.18, 0.18, 0.46, 10);
   geometries.set(shape, geo);
   return geo;
 }

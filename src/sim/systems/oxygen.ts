@@ -88,8 +88,8 @@ function die(world: World, player: Entity, planets: PlanetConfig[]): void {
   const up = planet ? upAt(planet, player.position) : { x: 0, y: 1, z: 0 };
   const inventory = player.components.inventory;
   const deathPos = { ...player.position };
+  let dropped = 0;
   if (inventory) {
-    let dropped = 0;
     for (let i = 0; i < inventory.slots.length; i += 1) {
       const carriedId = inventory.slots[i];
       if (!carriedId) continue;
@@ -112,8 +112,21 @@ function die(world: World, player: Entity, planets: PlanetConfig[]): void {
       dropped += 1;
     }
   }
-  // A second death supersedes the first: the old marker goes with it.
+  // A front-carried large package drops with the rest of the pack.
   const playerComp = player.components.player;
+  const largeId = playerComp?.carryingLarge;
+  if (largeId) {
+    const large = world.entities.get(largeId);
+    if (large) {
+      large.position = { ...deathPos };
+      large.planetId = player.planetId;
+      large.rotation = { ...IDENTITY_QUAT };
+      const largeComp = large.components.item;
+      if (largeComp) delete largeComp.holder;
+    }
+    playerComp.carryingLarge = null;
+  }
+  // A second death supersedes the first: the old marker goes with it.
   if (playerComp?.deathMarkerId) {
     world.entities.delete(playerComp.deathMarkerId);
     playerComp.deathMarkerId = null;

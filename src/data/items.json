@@ -15,5 +15,17 @@
   { "id": "fuel_cell", "name": "Fuel cell", "color": "#ff9a3c", "shape": "canister", "size": "small", "stackable": false },
   { "id": "tether", "name": "Tether", "color": "#4fc3ff", "shape": "capsule", "size": "small", "stackable": false },
   { "id": "light_stick", "name": "Light stick", "color": "#ffe08a", "shape": "capsule", "size": "small", "stackable": false, "emitsLight": { "color": "#ffe08a", "intensity": 16 } },
-  { "id": "oxygen_canister", "name": "Oxygen canister", "color": "#9fd8ff", "shape": "canister", "size": "small", "stackable": false }
+  { "id": "oxygen_canister", "name": "Oxygen canister", "color": "#9fd8ff", "shape": "canister", "size": "small", "stackable": false },
+  { "id": "drill_mk2", "name": "Drill Mk2", "color": "#b8c2cc", "shape": "capsule", "size": "medium", "stackable": false },
+  { "id": "drill_mk3", "name": "Drill Mk3", "color": "#e08a4a", "shape": "capsule", "size": "medium", "stackable": false },
+  { "id": "platform_package", "name": "Platform (packaged)", "color": "#d9dee3", "shape": "crate", "size": "large", "stackable": false },
+  { "id": "small_printer_package", "name": "Small printer (packaged)", "color": "#dde2e7", "shape": "crate", "size": "small", "stackable": false },
+  { "id": "solar_panel_package", "name": "Solar panel (packaged)", "color": "#c9d3dd", "shape": "crate", "size": "small", "stackable": false },
+  { "id": "battery_package", "name": "Battery (packaged)", "color": "#d5dbe1", "shape": "crate", "size": "small", "stackable": false },
+  { "id": "furnace_package", "name": "Furnace (packaged)", "color": "#cfd5da", "shape": "crate", "size": "medium", "stackable": false },
+  { "id": "research_station_package", "name": "Research station (packaged)", "color": "#d3dadf", "shape": "crate", "size": "medium", "stackable": false },
+  { "id": "medium_printer_package", "name": "Medium printer (packaged)", "color": "#d9dee3", "shape": "crate", "size": "large", "stackable": false },
+  { "id": "refinery_package", "name": "Fuel refinery (packaged)", "color": "#d6dce1", "shape": "crate", "size": "large", "stackable": false },
+  { "id": "shuttle_package", "name": "Shuttle (packaged)", "color": "#dfe4e8", "shape": "crate", "size": "large", "stackable": false },
+  { "id": "habitat_kit_package", "name": "Habitat kit (packaged)", "color": "#e2e6e9", "shape": "crate", "size": "large", "stackable": false }
 ]

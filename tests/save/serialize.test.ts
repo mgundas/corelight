@@ -189,4 +189,64 @@ describe('save round trip', () => {
       expect(revived.entities.get(id)).toEqual(entity);
     }
   });
+
+  it('round-trips M09 printer jobs and front-carried packages', () => {
+    events.clear();
+    const world = new World(1337, { planets: [SELA] });
+    world.dispatch({
+      type: 'spawnPlayer',
+      planetId: SELA.id,
+      position: findSpawnPosition(SELA, 1337),
+    });
+    world.tick();
+    const playerId = [...world.entities.values()].find((e) => e.kind === 'player')?.id ?? '';
+    if (!playerId) throw new Error('no player');
+    const player = world.entities.get(playerId);
+    if (!player) throw new Error('missing player');
+    const stationId = world.nextId('machine');
+    world.entities.set(stationId, {
+      id: stationId,
+      kind: 'machine',
+      planetId: SELA.id,
+      position: { ...player.position },
+      rotation: { x: 0, y: 0, z: 0, w: 1 },
+      components: {
+        machine: { machineType: 'small_printer' },
+        placeable: { placeableId: 'small_printer' },
+        printer: {
+          recipeId: 'platform',
+          progressS: 0.75,
+          inputs: [],
+          outputReady: 'platform',
+        },
+      },
+    });
+    const inputId = world.nextId('item');
+    world.entities.set(inputId, {
+      id: inputId,
+      kind: 'item',
+      planetId: SELA.id,
+      position: { ...player.position },
+      rotation: { x: 0, y: 0, z: 0, w: 1 },
+      components: { item: { itemId: 'silicate', holder: stationId } },
+    });
+    const printer = world.entities.get(stationId)?.components.printer;
+    if (printer) printer.inputs.push(inputId);
+    const packageId = world.nextId('item');
+    world.entities.set(packageId, {
+      id: packageId,
+      kind: 'item',
+      planetId: SELA.id,
+      position: { ...player.position },
+      rotation: { x: 0, y: 0, z: 0, w: 1 },
+      components: { item: { itemId: 'platform_package', holder: playerId } },
+    });
+    const playerComp = player.components.player;
+    if (playerComp) playerComp.carryingLarge = packageId;
+    const revived = deserializeWorld(JSON.parse(JSON.stringify(serializeWorld(world))) as unknown, [SELA]);
+    expect(SAVE_VERSION).toBe(2);
+    expect(revived.entities.get(stationId)).toEqual(world.entities.get(stationId));
+    expect(revived.entities.get(playerId)?.components.player?.carryingLarge).toBe(packageId);
+    expect(revived.entities.get(inputId)?.components.item?.holder).toBe(stationId);
+  });
 });

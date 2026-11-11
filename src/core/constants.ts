@@ -204,3 +204,19 @@ export const TETHER_SEAT_TOP_M = 6;
  * feet hides it inside the astronaut; ahead keeps it visible and out of
  * the capsule. Deviation from the prompt's "under the player", documented. */
 export const TETHER_PLACE_AHEAD_M = 1.5;
+
+/** Station interaction range: E opens/deposits/collects within this (m). */
+export const STATION_RANGE_M = 4.5;
+/** Station input slots: the largest recipe (shuttle) needs 8 item units. */
+export const STATION_INPUT_SLOTS = 8;
+/** M09 temporary power flag: stations run without a power network until M10
+ * wires the real system. M10 deletes this constant and the `if` it guards. */
+export const CRAFTING_REQUIRE_POWER = false;
+/** Large front-carried items slow movement to this multiplier (30% slower). */
+export const CARRY_SLOW_MULT = 0.7;
+/** Placement rejects ground whose normal is more than this off local up. */
+export const PLACE_MAX_SLOPE_DEG = 20;
+/** Placement must be within tool reach of the player (m). */
+export const PLACE_RANGE_M = TOOL_RANGE_M + TOOL_RANGE_SLACK_M;
+/** Live density at the ghost must be near the surface (abs density <= this). */
+export const PLACE_SURFACE_TOLERANCE = 0.6;

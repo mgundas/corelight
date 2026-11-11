@@ -1,12 +1,10 @@
 import { MAX_TICKS_PER_FRAME, SIM_DT } from '../core/constants.js';
 import { events } from '../core/events.js';
-import { type Vec3d } from '../core/math.js';
 import type { PlanetConfig } from '../planets/PlanetConfig.js';
 import { PLANETS } from '../planets/solarSystem.js';
 import { type DensityField } from '../terrain/density.js';
 import { ColliderPool } from '../terrain/colliderPool.js';
 import { getUrlParams } from '../core/urlParams.js';
-import { maybeShiftOrigin, toLocal } from '../render/floatingOrigin.js';
 import { Renderer, type PrebuiltTerrain } from '../render/Renderer.js';
 import { CameraRig } from '../player/cameraRig.js';
 import { wireTerrainEdits } from './editWiring.js';
@@ -16,18 +14,21 @@ import { PlayerInput } from '../player/input.js';
 import { TerrainTool, type ToolAim } from '../player/terrainTool.js';
 import { World } from '../sim/world.js';
 import type { EntityId } from '../sim/entities.js';
-import { computeEnvironment, findFollowed } from './environment.js';
-import { upAt } from '../sim/physics/frames.js';
+import { findFollowed } from './environment.js';
 import { disposePhysics } from '../sim/physics/rapierWorld.js';
 import { TerrainColliders } from '../sim/physics/terrainColliders.js';
 import { serializeWorld, type SaveData } from '../save/serialize.js';
 import { DebugOverlay } from '../ui/debugOverlay.js';
 import { Hud } from '../ui/hud.js';
-import { tickBackpackInput } from './backpackWiring.js';
-import { updateFrameHud, updateToolPreview } from './frameHud.js';
+import { updateFrameHud, updatePlacementGhost, updateToolPreview } from './frameHud.js';
 import { installDebugHandle, uninstallDebugHandle } from './debugHandle.js';
 import { setupWorldSystems } from './worldSetup.js';
 import { updateDebugOverlay } from './debugStats.js';
+import { PlacementMode } from './placement.js';
+import { dispatchTickInput } from './tickInput.js';
+import { createPrinterUi, updatePrinterUi } from './printerWiring.js';
+import type { PrinterUi } from '../ui/printerUi.js';
+import { updateCameraAndEnvironment } from './frameCamera.js';
 
 // Game owns World + Renderer and wires the fixed-timestep loop:
 // sim advances at 30 Hz with an accumulator; rendering interpolates
@@ -42,7 +43,9 @@ export class Game {
   readonly input = new PlayerInput();
   readonly tool = new TerrainTool();
   readonly overlay = new DebugOverlay();
+  readonly placement = new PlacementMode();
   private readonly hud = new Hud();
+  private readonly printerUi: PrinterUi;
 
   private playerId: EntityId | null = null;
   private readonly colliders: TerrainColliders;
@@ -104,6 +107,7 @@ export class Game {
     });
     this.colliders = setup.colliders;
     this.playerId = setup.playerId;
+    this.printerUi = createPrinterUi(this.world, () => this.playerId);
 
     this.renderer = new Renderer(canvas, worldSeed, planets, prebuilt);
     const wiring = wireTerrainEdits(this.world, planets, this.colliders, this.renderer.streamer);
@@ -141,6 +145,7 @@ export class Game {
         tethers: this.renderer.tetherViews.group,
         habitats: this.renderer.habitatViews.group,
         markers: this.renderer.markerViews.group,
+        placeables: this.renderer.placeableViews.group,
       }),
     });
   }
@@ -191,6 +196,7 @@ export class Game {
     if (this.flyCamera.enabled) {
       if (player) this.flyCamera.position = { ...player.position };
       this.input.setEnabled(false);
+      this.printerUi.close();
     } else {
       this.input.setEnabled(true);
       if (player && this.playerId) {
@@ -207,6 +213,7 @@ export class Game {
     // drains anything queued by the menu itself (including the L bypass).
     if (paused) {
       this.input.setEnabled(false);
+      this.printerUi.close();
     } else {
       this.input.setEnabled(!this.flyCamera.enabled);
     }
@@ -242,6 +249,7 @@ export class Game {
     this.flyCamera.detach();
     this.input.detach();
     this.unsubscribePlayerDied();
+    this.printerUi.dispose();
     this.colliderPool.dispose();
     this.colliders.dispose();
     disposePhysics();
@@ -272,103 +280,73 @@ export class Game {
     // only runs while a brush button is actually held.
     const toolButtons = this.input.toolButtons();
     const toolActive = toolButtons.dig || toolButtons.add || toolButtons.flatten;
-    this.computeToolAim(Math.min(1, Math.max(0, this.accumulator / SIM_DT)), toolActive);
+    this.computeToolAim(
+      Math.min(1, Math.max(0, this.accumulator / SIM_DT)),
+      toolActive || this.placement.isActive(),
+    );
     const flying = this.flyCamera.enabled;
     if (!this.paused) {
       this.accumulator += frameDt;
       let ticks = 0;
       while (this.accumulator >= SIM_DT && ticks < MAX_TICKS_PER_FRAME) {
-      // Headlamp toggle is consumed every tick, in fly mode too (the lamp
-      // rides the camera): gating it on third-person would swallow presses.
-      if (this.input.consumeHeadlampToggle() && this.playerId) {
-        this.world.dispatch({ type: 'toggleHeadlamp', playerId: this.playerId });
-      }
-      // Backpack keys drain every tick (E/Q/digits never fire late); they
-      // only dispatch when the player can act.
-      tickBackpackInput(this.world, this.playerId, this.input, !flying && this.playerId !== null);
-      if (!flying && this.playerId) {
-        const move = this.input.move();
-        this.world.dispatch({
-          type: 'playerInput',
+        // All input queues drain per tick (headlamp works in fly mode too);
+        // dispatchTickInput owns the E/Tab/placement/tool priority chain.
+        dispatchTickInput({
+          world: this.world,
           playerId: this.playerId,
-          move,
-          jump: this.input.consumeJump(),
-          sprint: this.input.sprint(),
-          lookYaw: this.rig.yaw,
-          lookPitch: this.rig.pitch,
+          input: this.input,
+          rig: this.rig,
+          tool: this.tool,
+          toolAim: this.toolAim,
+          toolButtons,
+          toolActive,
+          nowMs: performance.now(),
+          flying,
+          uiOpen: this.printerUi.isOpen(),
+          placement: this.placement,
+          openStation: (stationId) => this.printerUi.openStation(stationId),
+          togglePrinter: () => {
+            if (this.printerUi.isOpen()) this.printerUi.close();
+            else if (!this.flyCamera.enabled) this.printerUi.openBackpack();
+          },
         });
-        // Backpack dispatches already happened above (drained every tick).
-        if (toolActive) {
-          const edit = this.tool.update(performance.now(), this.playerId, toolButtons, this.toolAim);
-          if (edit) this.world.dispatch(edit);
-        }
-      }
-      const t0 = performance.now();
-      this.world.tick(SIM_DT);
-      this.lastTickMs = performance.now() - t0;
-      this.accumulator -= SIM_DT;
-      ticks += 1;
-      const player = this.playerId ? this.world.entities.get(this.playerId) : undefined;
-      if (player) this.renderer.pushPlayerSample(player.position, player.rotation);
+        const t0 = performance.now();
+        this.world.tick(SIM_DT);
+        this.lastTickMs = performance.now() - t0;
+        this.accumulator -= SIM_DT;
+        ticks += 1;
+        const player = this.playerId ? this.world.entities.get(this.playerId) : undefined;
+        if (player) this.renderer.pushPlayerSample(player.position, player.rotation);
       }
       if (ticks === MAX_TICKS_PER_FRAME) {
         this.accumulator = 0;
       }
     }
 
-    // Active camera: fly cam in F3 mode, orbit rig otherwise (streaming and
-    // the origin shift follow whichever the player sees through).
-    // The orbit camera and the avatar share one interpolated render
-    // transform: driving the camera from raw post-tick sim state while the
-    // mesh renders lagged prev/curr samples made them disagree every frame.
+    // Active camera + day/night environment (frameCamera.ts): fly cam in F3
+    // mode, orbit rig otherwise; origin shifts and lighting follow whichever
+    // the player sees through.
     const alpha = this.accumulator / SIM_DT;
-    let activePos: Vec3d;
-    if (flying) {
-      // Frozen while paused: the debug camera must not drift behind the menu.
-      if (!this.paused) this.flyCamera.update(frameDt);
-      activePos = this.flyCamera.position;
-      const local = toLocal(activePos);
-      this.flyCamera.applyToCamera(this.renderer.camera, local);
-    } else {
-      const followed = findFollowed(this.world, this.planets, this.playerId);
-      if (followed) {
-        const renderPos =
-          this.renderer.playerView.interpolatedWorld(alpha) ?? followed.position;
-        const up = upAt(followed.planet, renderPos);
-        this.rig.update(renderPos, up, (origin, dir, maxDist) =>
-          this.colliders.castTerrainRay(origin, dir, this.planets, maxDist),
-        );
-        this.renderer.applyRigCamera(renderPos, this.rig.position, up);
-      }
-      activePos = this.rig.position;
-    }
-    const shift = maybeShiftOrigin(activePos);
-    if (shift) {
-      this.renderer.applyOriginShift(shift);
-    }
-
-    // Day/night environment (M05): sun, sky, atmosphere and fog follow the
-    // sim clock. The shadow cascade stays near the player (third-person) or
-    // the camera (fly mode); the sky uses the camera position.
-    const lampPlayer = this.playerId ? this.world.entities.get(this.playerId) : undefined;
-    const focusWorld = flying
-      ? activePos
-      : (this.renderer.playerView.interpolatedWorld(alpha) ?? lampPlayer?.position ?? activePos);
-    const env = computeEnvironment(
-      this.world,
-      this.planets,
-      activePos,
-      focusWorld,
-      lampPlayer?.components.player?.headlampOn ?? true,
-    );
-    this.renderer.updateEnvironment(env);
-    const depthBelowM = env.depthBelowM;
+    const { activePos, focusWorld, depthBelowM } = updateCameraAndEnvironment({
+      world: this.world,
+      planets: this.planets,
+      renderer: this.renderer,
+      rig: this.rig,
+      colliders: this.colliders,
+      flyCamera: this.flyCamera,
+      playerId: this.playerId,
+      flying,
+      paused: this.paused,
+      frameDt,
+      alpha,
+    });
 
     // LOD streaming around the active camera (priority queue + 4 ms apply
     // budget). Chunk meshes are positioned when added and re-synced on
     // origin shifts only.
     this.renderer.updateStreaming(activePos);
     this.renderer.renderPlayer(alpha);
+    updatePrinterUi(this.world, this.playerId, this.printerUi);
     updateFrameHud({
       renderer: this.renderer,
       hud: this.hud,
@@ -376,6 +354,16 @@ export class Game {
       playerId: this.playerId,
       flying,
       focusWorld,
+      aim: this.toolAim,
+      placement: this.placement,
+    });
+    updatePlacementGhost({
+      renderer: this.renderer,
+      world: this.world,
+      playerId: this.playerId,
+      flying,
+      aim: this.toolAim,
+      placement: this.placement,
     });
     // Terrain brush preview: translucent sphere at the aim point (hidden in
     // fly mode or when nothing is in range). Re-set every frame from world

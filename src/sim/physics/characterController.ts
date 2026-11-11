@@ -7,6 +7,7 @@
 
 import RAPIER from '@dimforge/rapier3d-compat';
 import {
+  CARRY_SLOW_MULT,
   PLAYER_CONTROLLER_OFFSET,
   PLAYER_HALF_HEIGHT,
   PLAYER_JUMP_SPEED,
@@ -107,7 +108,10 @@ export class PlayerBody {
     const flatFwd = normalize(sub(forward, scale(up, dot(forward, up))));
     let wish = add(scale(flatFwd, intent.moveZ), scale(right, intent.moveX));
     if (dot(wish, wish) > 1) wish = normalize(wish);
-    const speed = intent.sprint ? PLAYER_SPRINT_SPEED : PLAYER_WALK_SPEED;
+    // Carrying a large packaged placeable in front slows movement 30%
+    // (PROJECT.md/M09). Sim state drives it, so replays and saves agree.
+    const carryMult = player.carryingLarge ? CARRY_SLOW_MULT : 1;
+    const speed = (intent.sprint ? PLAYER_SPRINT_SPEED : PLAYER_WALK_SPEED) * carryMult;
 
     // Vertical: integrate spherical gravity along up. While grounded the
     // vertical velocity resets to a small stick-down value (no accumulation:

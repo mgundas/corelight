@@ -6,8 +6,11 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { SELA } from '../../src/planets/configs/sela.js';
 import type { PlayerInput } from '../../src/player/input.js';
 import { tickBackpackInput } from '../../src/game/backpackWiring.js';
+import { tickInteraction } from '../../src/game/interactWiring.js';
+import { PlacementMode } from '../../src/game/placement.js';
 import { setupWorldSystems } from '../../src/game/worldSetup.js';
 import { initPhysics } from '../../src/sim/physics/rapierWorld.js';
+import { findSpawnPosition } from '../../src/sim/physics/spawn.js';
 import { buildColliderData } from '../../src/terrain/colliders.js';
 import type { ColliderPool, ColliderRequest, ColliderResult } from '../../src/terrain/colliderPool.js';
 import type { EntityId } from '../../src/sim/entities.js';
@@ -38,6 +41,7 @@ function stubInput(overrides: Partial<Record<'select' | 'drop' | 'interact' | 't
     consumeDrop: () => overrides.drop === true,
     consumeInteract: () => overrides.interact === true,
     consumeTether: () => overrides.tether === true,
+    consumePrinter: () => false,
   } as unknown as PlayerInput;
 }
 
@@ -66,6 +70,45 @@ describe('fresh-game setup', () => {
     expect(player?.planetId).toBe(SELA.id);
   });
 
+  it('pre-places the starting platform and small printer', () => {
+    const { world } = freshWorld(false);
+    const platforms = [...world.entities.values()].filter((e) => e.kind === 'platform');
+    const printers = [...world.entities.values()].filter(
+      (e) => e.kind === 'machine' && e.components.machine?.machineType === 'small_printer',
+    );
+    expect(platforms).toHaveLength(1);
+    expect(printers).toHaveLength(1);
+    const printer = printers[0];
+    expect(printer?.components.printer?.recipeId).toBe(null);
+    expect(printer?.components.printer?.inputs).toEqual([]);
+    expect(printer?.components.printer?.outputReady).toBe(null);
+  });
+
+  it('heals an M08 save with a habitat but no printer', () => {
+    const world = new World(1337, { planets: [SELA] });
+    world.dispatch({ type: 'spawnPlayer', planetId: SELA.id, position: findSpawnPosition(SELA, 1337) });
+    world.tick();
+    const playerId = [...world.entities.values()].find((e) => e.kind === 'player')?.id ?? '';
+    if (!playerId) throw new Error('no player');
+    const player = world.entities.get(playerId);
+    if (!player) throw new Error('missing player');
+    world.dispatch({ type: 'spawnHabitat', planetId: SELA.id, position: { ...player.position } });
+    world.tick();
+    setupWorldSystems(world, [SELA], stubPool(), 1337, world);
+    const platforms = [...world.entities.values()].filter((e) => e.kind === 'platform');
+    const printers = [...world.entities.values()].filter(
+      (e) => e.kind === 'machine' && e.components.machine?.machineType === 'small_printer',
+    );
+    expect(platforms).toHaveLength(1);
+    expect(printers).toHaveLength(1);
+    // The heal must not spawn a second habitat.
+    expect(
+      [...world.entities.values()].filter(
+        (e) => e.kind === 'machine' && e.components.machine?.machineType === 'habitat',
+      ),
+    ).toHaveLength(1);
+  });
+
   it('?dev=1 fills the backpack with tethers; without it the pack is empty', () => {
     const withDev = freshWorld(true);
     expect(tetherItems(withDev.world, withDev.playerId)).toHaveLength(8);
@@ -90,7 +133,16 @@ describe('fresh-game setup', () => {
     // Face the post point-blank (dist ~0 always counts as aimed).
     world.dispatch({ type: 'playerTeleport', playerId, position: { ...post.position } });
     world.tick();
-    tickBackpackInput(world, playerId, stubInput({ interact: true }), true);
+    tickInteraction({
+      world,
+      playerId,
+      input: stubInput({ interact: true }),
+      canAct: true,
+      aim: { hit: null, normal: null, planet: null },
+      placement: new PlacementMode(),
+      openStation: () => undefined,
+      togglePrinter: () => undefined,
+    });
     world.tick();
     expect(world.entities.has(post.id)).toBe(false);
     expect(tetherItems(world, playerId)).toHaveLength(8);

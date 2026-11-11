@@ -12,6 +12,7 @@ export class PlayerInput {
   private interactQueued = false;
   private dropQueued = false;
   private tetherQueued = false;
+  private printerQueued = false;
   private selectQueued: number | null = null;
   private enabled = true;
   private canvas: HTMLCanvasElement | null = null;
@@ -66,6 +67,7 @@ export class PlayerInput {
     this.interactQueued = false;
     this.dropQueued = false;
     this.tetherQueued = false;
+    this.printerQueued = false;
     this.selectQueued = null;
     this.dragging = false;
   }
@@ -120,6 +122,13 @@ export class PlayerInput {
     return tether;
   }
 
+  /** Edge-triggered: true once per Tab keydown (backpack printer panel). */
+  consumePrinter(): boolean {
+    const printer = this.printerQueued;
+    this.printerQueued = false;
+    return printer;
+  }
+
   /** Edge-triggered: slot index once per Digit1..8 keydown. */
   consumeSelect(): number | null {
     const select = this.selectQueued;
@@ -161,6 +170,12 @@ export class PlayerInput {
     }
     if (e.code === 'KeyT') {
       if (!e.repeat) this.tetherQueued = true;
+      return;
+    }
+    if (e.code === 'Tab') {
+      // Tab must not move browser focus while playing.
+      e.preventDefault();
+      if (!e.repeat) this.printerQueued = true;
       return;
     }
     if (e.code.startsWith('Digit')) {

@@ -3,7 +3,6 @@ import { distance, IDENTITY_QUAT, rotateVector } from '../core/math.js';
 import {
   BACKPACK_SLOTS,
   OXYGEN_MAX,
-  PICKUP_RANGE_M,
   SOIL_MAX,
   TOOL_MAX_RADIUS,
   TOOL_MIN_RADIUS,
@@ -15,8 +14,14 @@ import { isKnownItem } from '../data/loadData.js';
 import { layerAt } from '../terrain/density.js';
 import type { EditMode, FlattenPlane } from '../terrain/edits.js';
 import type { EntityId } from './entities.js';
-import { moveBasis } from './physics/frames.js';
-import { upAt } from './physics/frames.js';
+import {
+  collectStation,
+  depositToStation,
+  printAtStation,
+  printBackpack,
+} from './craftingActions.js';
+import { dropItem, pickUpItem } from './inventoryActions.js';
+import { placeLightstick, placePlaceable, spawnPlaceable } from './placeActions.js';
 import { baseFieldFor, placeTether, removeTether, spawnHabitatEntity } from './tetherActions.js';
 import type { World } from './world.js';
 
@@ -55,7 +60,14 @@ export type Action =
   | { type: 'selectSlot'; playerId: EntityId; slot: number }
   | { type: 'spawnHabitat'; planetId: string; position: Vec3d }
   | { type: 'placeTether'; playerId: EntityId }
-  | { type: 'removeTether'; playerId: EntityId; tetherId: EntityId };
+  | { type: 'removeTether'; playerId: EntityId; tetherId: EntityId }
+  | { type: 'printBackpack'; playerId: EntityId; recipeId: string }
+  | { type: 'depositToStation'; playerId: EntityId; stationId: EntityId }
+  | { type: 'printAtStation'; playerId: EntityId; stationId: EntityId; recipeId: string }
+  | { type: 'collectStation'; playerId: EntityId; stationId: EntityId }
+  | { type: 'placePlaceable'; playerId: EntityId; placeableId: string; position: Vec3d }
+  | { type: 'placeLightstick'; playerId: EntityId }
+  | { type: 'spawnPlaceable'; planetId: string; placeableId: string; position: Vec3d };
 
 function clampAxis(v: number): number {
   return Math.min(1, Math.max(-1, v));
@@ -100,6 +112,7 @@ export function applyAction(world: World, action: Action): void {
             lastTooHard: -Infinity,
             headlampOn: true,
             deathMarkerId: null,
+            carryingLarge: null,
           },
           inventory: {
             slots: Array<EntityId | null>(BACKPACK_SLOTS).fill(null),
@@ -311,95 +324,35 @@ export function applyAction(world: World, action: Action): void {
       removeTether(world, action.playerId, action.tetherId);
       return;
     }
+    case 'printBackpack': {
+      printBackpack(world, action.playerId, action.recipeId);
+      return;
+    }
+    case 'depositToStation': {
+      depositToStation(world, action.playerId, action.stationId);
+      return;
+    }
+    case 'printAtStation': {
+      printAtStation(world, action.playerId, action.stationId, action.recipeId);
+      return;
+    }
+    case 'collectStation': {
+      collectStation(world, action.playerId, action.stationId);
+      return;
+    }
+    case 'placePlaceable': {
+      placePlaceable(world, action.playerId, action.placeableId, action.position);
+      return;
+    }
+    case 'placeLightstick': {
+      placeLightstick(world, action.playerId);
+      return;
+    }
+    case 'spawnPlaceable': {
+      spawnPlaceable(world, action.planetId, action.placeableId, action.position);
+      return;
+    }
   }
-}
-
-/** Ensure the player has a backpack (old M06 saves predate inventory). */
-function inventoryFor(world: World, playerId: EntityId): { slots: (EntityId | null)[]; selectedSlot: number } | null {
-  const entity = world.entities.get(playerId);
-  const player = entity?.components.player;
-  if (!entity || entity.kind !== 'player' || !player) return null;
-  let inventory = entity.components.inventory;
-  if (!inventory) {
-    inventory = { slots: Array<EntityId | null>(BACKPACK_SLOTS).fill(null), selectedSlot: 0 };
-    entity.components.inventory = inventory;
-  }
-  return inventory;
-}
-
-function pickUpItem(world: World, playerId: EntityId, itemId: EntityId): void {
-  const playerEntity = world.entities.get(playerId);
-  const inventory = inventoryFor(world, playerId);
-  if (!playerEntity || !inventory) return;
-  const item = world.entities.get(itemId);
-  const itemComp = item?.components.item;
-  if (!item || item.kind !== 'item' || !itemComp || !isKnownItem(itemComp.itemId)) {
-    events.emit('actionApplied', { type: 'pickUp' });
-    return;
-  }
-  if (itemComp.holder === playerId) {
-    events.emit('actionApplied', { type: 'pickUp' });
-    return;
-  }
-  // One item per slot (v1): a full backpack refuses the pickup.
-  if (item.planetId !== playerEntity.planetId || distance(item.position, playerEntity.position) > PICKUP_RANGE_M) {
-    events.emit('actionApplied', { type: 'pickUp' });
-    return;
-  }
-  const free = inventory.slots.indexOf(null);
-  if (free === -1) {
-    events.emit('actionApplied', { type: 'pickUp' });
-    return;
-  }
-  // Take over foreign-held items (drop-then-grab races resolve deterministically).
-  const prevHolder = itemComp.holder ? world.entities.get(itemComp.holder) : undefined;
-  const prevInventory = prevHolder?.components.inventory;
-  if (prevInventory) {
-    const at = prevInventory.slots.indexOf(itemId);
-    if (at !== -1) prevInventory.slots[at] = null;
-  }
-  inventory.slots[free] = itemId;
-  itemComp.holder = playerId;
-  events.emit('actionApplied', { type: 'pickUp' });
-}
-
-function dropItem(world: World, playerId: EntityId, slot: number): void {
-  const playerEntity = world.entities.get(playerId);
-  const inventory = inventoryFor(world, playerId);
-  if (!playerEntity || !inventory) return;
-  if (!Number.isInteger(slot) || slot < 0 || slot >= BACKPACK_SLOTS) {
-    events.emit('actionApplied', { type: 'drop' });
-    return;
-  }
-  const carriedId = inventory.slots[slot] as EntityId | null;
-  if (!carriedId) {
-    events.emit('actionApplied', { type: 'drop' });
-    return;
-  }
-  const planet = world.planets.find((p) => p.id === playerEntity.planetId);
-  const player = playerEntity.components.player;
-  const item = world.entities.get(carriedId);
-  const itemComp = item?.components.item;
-  if (!planet || !player || !item || item.kind !== 'item' || !itemComp) {
-    inventory.slots[slot] = null;
-    events.emit('actionApplied', { type: 'drop' });
-    return;
-  }
-  // Drop in front of the player at chest height, yaw-leveled: pitching the
-  // look straight down must not plant the item underground (full look
-  // direction would put it ~1 m below the surface).
-  const up = upAt(planet, playerEntity.position);
-  const { forward } = moveBasis(up, player.yaw, 0);
-  item.position = {
-    x: playerEntity.position.x + forward.x * 1.5 + up.x * 0.5,
-    y: playerEntity.position.y + forward.y * 1.5 + up.y * 0.5,
-    z: playerEntity.position.z + forward.z * 1.5 + up.z * 0.5,
-  };
-  item.planetId = planet.id;
-  item.rotation = { ...IDENTITY_QUAT };
-  delete itemComp.holder;
-  inventory.slots[slot] = null;
-  events.emit('actionApplied', { type: 'drop' });
 }
 
 /**

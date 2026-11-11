@@ -267,3 +267,166 @@ body {
   pointer-events: none;
   z-index: 40;
 }
+
+/* M09 printer panel: backpack (Tab) and station (E) recipe lists. */
+#printer-ui {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(560px, 92vw);
+  max-height: 74vh;
+  overflow-y: auto;
+  padding: 14px 16px 16px;
+  color: #e8eefc;
+  background: rgb(8 12 20 / 93%);
+  border: 1px solid rgb(255 255 255 / 20%);
+  border-radius: 10px;
+  z-index: 25;
+  pointer-events: auto;
+}
+
+#printer-ui[hidden] {
+  display: none;
+}
+
+#printer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+#printer-title {
+  font-size: 18px;
+  letter-spacing: 1px;
+}
+
+#printer-close {
+  width: 30px;
+  height: 30px;
+  font-size: 20px;
+  line-height: 1;
+  color: #e8eefc;
+  background: rgb(255 255 255 / 10%);
+  border: 1px solid rgb(255 255 255 / 20%);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+#printer-hint {
+  margin: 6px 0 10px;
+  font-size: 12px;
+  color: #9fb0cc;
+}
+
+#printer-station {
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgb(255 255 255 / 12%);
+}
+
+.printer-slots {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.printer-slot {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 2px;
+  font-size: 10px;
+  text-align: center;
+  color: #73809a;
+  background: rgb(255 255 255 / 5%);
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.printer-slot.filled {
+  color: #ffd9a8;
+  border-color: rgb(255 138 60 / 55%);
+}
+
+.printer-job {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: #ffd9a8;
+}
+
+.printer-bar {
+  height: 8px;
+  background: rgb(255 255 255 / 10%);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.printer-bar-fill {
+  height: 100%;
+  background: #ff8a3c;
+  border-radius: 4px;
+  transition: width 0.12s linear;
+}
+
+.printer-collect {
+  margin-top: 8px;
+  padding: 7px 14px;
+  font-size: 13px;
+  color: #08121c;
+  background: #ff8a3c;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+#printer-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.printer-row {
+  display: grid;
+  grid-template-columns: 150px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  background: rgb(255 255 255 / 5%);
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 6px;
+}
+
+.printer-row.locked {
+  opacity: 0.42;
+}
+
+.printer-row-name {
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.printer-row-inputs {
+  font-size: 11px;
+  color: #9fb0cc;
+}
+
+.printer-print {
+  padding: 5px 12px;
+  font-size: 12px;
+  color: #e8eefc;
+  background: rgb(255 138 60 / 28%);
+  border: 1px solid rgb(255 138 60 / 65%);
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.printer-print:disabled {
+  opacity: 0.45;
+  cursor: default;
+}

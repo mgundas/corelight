@@ -8,11 +8,12 @@ import { BACKPACK_SLOTS } from '../core/constants.js';
 import type { PlayerInput } from '../player/input.js';
 import type { EntityId } from '../sim/entities.js';
 import type { World } from '../sim/world.js';
-import { findAimedItem, findAimedTether } from './pickup.js';
+import { findAimedItem } from './pickup.js';
 
 /** Consume edge-triggered backpack keys into Actions (call once per tick).
  * Queues drain unconditionally so presses with no eligible player never fire
- * late; dispatches only happen when the player can act. */
+ * late; dispatches only happen when the player can act. E is handled by
+ * interactWiring (M09: station/item/tether/placement priority chain). */
 export function tickBackpackInput(
   world: World,
   playerId: EntityId | null,
@@ -21,7 +22,6 @@ export function tickBackpackInput(
 ): void {
   const select = input.consumeSelect();
   const drop = input.consumeDrop();
-  const interact = input.consumeInteract();
   const tether = input.consumeTether();
   if (!canAct || !playerId) return;
   if (select !== null && select >= 0 && select < BACKPACK_SLOTS) {
@@ -34,15 +34,6 @@ export function tickBackpackInput(
       playerId,
       slot: holder?.components.inventory?.selectedSlot ?? 0,
     });
-  }
-  if (interact) {
-    const aimed = findAimedItem(world, playerId);
-    if (aimed) world.dispatch({ type: 'pickUp', playerId, itemId: aimed });
-    else {
-      // No item under the crosshair: E on a tether post pulls it back up.
-      const post = findAimedTether(world, playerId);
-      if (post) world.dispatch({ type: 'removeTether', playerId, tetherId: post });
-    }
   }
   // T spends one backpack Tether item on a post under the player.
   if (tether) {
@@ -57,6 +48,8 @@ export interface BackpackFrame {
   slotDefs: (ItemDef | null)[];
   selectedSlot: number;
   soil: number;
+  /** Item id of the large package carried in front, if any. */
+  frontCarryItemId: string | null;
   /** "E: pick up Resin" when an item is aimed, else null. */
   prompt: string | null;
 }
@@ -69,6 +62,10 @@ export function backpackFrame(world: World, playerId: EntityId | null, flying: b
     ? inv.slots.map((id) => (id ? (world.entities.get(id)?.components.item?.itemId ?? null) : null))
     : [];
   const slotDefs = carriedItemIds.map((id) => (id && isKnownItem(id) ? itemDef(id) : null));
+  const largeId = holder?.components.player?.carryingLarge;
+  const frontCarryItemId = largeId
+    ? (world.entities.get(largeId)?.components.item?.itemId ?? null)
+    : null;
   let prompt: string | null = null;
   if (!flying && playerId) {
     const aimed = findAimedItem(world, playerId);
@@ -80,6 +77,7 @@ export function backpackFrame(world: World, playerId: EntityId | null, flying: b
     slotDefs,
     selectedSlot: inv?.selectedSlot ?? 0,
     soil: Math.floor(holder?.components.player?.soil ?? 0),
+    frontCarryItemId,
     prompt,
   };
 }
