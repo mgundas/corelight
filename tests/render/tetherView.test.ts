@@ -60,6 +60,19 @@ describe('TetherViews', () => {
     expect(lineColorHex(views)).toEqual([0xff4444]);
     views.dispose();
   });
+
+  it('keeps static cable geometry across syncs instead of rebuilding', () => {
+    const views = new TetherViews();
+    const pair = [tether('tether_a', 0, true, ['tether_b']), tether('tether_b', 10, true, ['tether_a'])];
+    views.sync(pair);
+    const before = views.group.children.find((c) => c instanceof THREE.Line) as THREE.Line;
+    if (!before) throw new Error('no cable built');
+    const geo = before.geometry;
+    views.sync(pair.map((e) => ({ ...e, position: { ...e.position } })));
+    const after = views.group.children.find((c) => c instanceof THREE.Line) as THREE.Line;
+    expect(after.geometry).toBe(geo);
+    views.dispose();
+  });
 });
 
 describe('HabitatViews and MarkerViews', () => {

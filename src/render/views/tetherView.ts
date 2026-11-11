@@ -32,11 +32,25 @@ function tipWorld(entity: Entity): THREE.Vector3 {
   return new THREE.Vector3(local.x + tip.x, local.y + tip.y, local.z + tip.z);
 }
 
+interface CableState {
+  ax: number;
+  ay: number;
+  az: number;
+  bx: number;
+  by: number;
+  bz: number;
+  live: boolean;
+}
+
 export class TetherViews {
   readonly group = new THREE.Group();
   private readonly posts = new Map<EntityId, THREE.Group>();
   private readonly tipMeshes = new Map<EntityId, THREE.Mesh>();
   private readonly cables = new Map<string, THREE.Line>();
+  /** Last built tip positions per cable (local space) + live flag: static
+   * cables skip the dispose/rebuild every frame. Origin shifts move every
+   * tip, so they naturally rebuild once after a shift. */
+  private readonly cableState = new Map<string, CableState>();
   private readonly postGeo = new THREE.CylinderGeometry(0.07, 0.1, TIP_HEIGHT, 6);
   private readonly postMat = new THREE.MeshStandardMaterial({
     color: 0x3a4148,
@@ -131,11 +145,27 @@ export class TetherViews {
       this.group.remove(line);
       line.geometry.dispose();
       this.cables.delete(key);
+      this.cableState.delete(key);
     }
     for (const [key, want] of wanted) {
       const aTip = tips.get(want.a);
       const bTip = tips.get(want.b);
       if (!aTip || !bTip) continue;
+      // Static cables (same tips, same live flag) keep their geometry:
+      // rebuilding every frame churns GPU buffers for zero visual change.
+      const prev = this.cableState.get(key);
+      if (
+        prev &&
+        prev.live === want.live &&
+        Math.abs(prev.ax - aTip.x) < 1e-4 &&
+        Math.abs(prev.ay - aTip.y) < 1e-4 &&
+        Math.abs(prev.az - aTip.z) < 1e-4 &&
+        Math.abs(prev.bx - bTip.x) < 1e-4 &&
+        Math.abs(prev.by - bTip.y) < 1e-4 &&
+        Math.abs(prev.bz - bTip.z) < 1e-4
+      ) {
+        continue;
+      }
       const dist = aTip.distanceTo(bTip);
       const downA = downs.get(want.a) ?? new THREE.Vector3(0, -1, 0);
       const downB = downs.get(want.b) ?? new THREE.Vector3(0, -1, 0);
@@ -160,6 +190,15 @@ export class TetherViews {
         line.geometry = new THREE.BufferGeometry().setFromPoints(points);
         line.material = mat;
       }
+      this.cableState.set(key, {
+        ax: aTip.x,
+        ay: aTip.y,
+        az: aTip.z,
+        bx: bTip.x,
+        by: bTip.y,
+        bz: bTip.z,
+        live: want.live,
+      });
     }
   }
 
@@ -172,6 +211,7 @@ export class TetherViews {
     this.posts.clear();
     this.tipMeshes.clear();
     this.cables.clear();
+    this.cableState.clear();
     this.postGeo.dispose();
     this.postMat.dispose();
     this.tipGeo.dispose();
