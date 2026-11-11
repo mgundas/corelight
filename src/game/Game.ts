@@ -7,12 +7,12 @@ import { layerAt, type DensityField } from '../terrain/density.js';
 import { ColliderPool } from '../terrain/colliderPool.js';
 import { getOrigin, maybeShiftOrigin, toLocal } from '../render/floatingOrigin.js';
 import { Renderer, type PrebuiltTerrain } from '../render/Renderer.js';
-import { CameraRig, HEAD_HEIGHT } from '../player/cameraRig.js';
+import { CameraRig } from '../player/cameraRig.js';
 import { wireTerrainEdits } from './editWiring.js';
+import { computeToolAim as buildToolAim } from './aimWiring.js';
 import { FreeFlyCamera } from '../player/freeFlyCamera.js';
 import { PlayerInput } from '../player/input.js';
 import { TerrainTool, type ToolAim } from '../player/terrainTool.js';
-import { computeAim, aimFromOrbitCamera } from '../player/toolAim.js';
 import { World } from '../sim/world.js';
 import type { EntityId } from '../sim/entities.js';
 import { timeOfDay, updateSun } from '../sim/systems/sun.js';
@@ -152,25 +152,15 @@ export class Game {
    * idle frames keep the cheap collider ray for the preview.
    */
   private computeToolAim(alpha: number, detailed: boolean): void {
-    this.toolAim = { hit: null, normal: null, planet: null };
-    if (this.flyCamera.enabled) return;
     const followed = findFollowed(this.world, this.planets, this.playerId);
-    if (!followed) return;
-    const field = this.toolFields.get(followed.planet.id);
-    if (!field) return;
-    const renderPos = this.renderer.playerView.interpolatedWorld(alpha) ?? followed.position;
-    const up = upAt(followed.planet, renderPos);
-    const head: Vec3d = {
-      x: renderPos.x + up.x * HEAD_HEIGHT,
-      y: renderPos.y + up.y * HEAD_HEIGHT,
-      z: renderPos.z + up.z * HEAD_HEIGHT,
-    };
-    const { origin, dir: viewDir } = aimFromOrbitCamera(head, this.rig.position);
-    this.toolAim = computeAim({
-      origin,
-      viewDir,
-      planet: followed.planet,
-      field,
+    this.toolAim = buildToolAim({
+      followed,
+      field: followed ? this.toolFields.get(followed.planet.id) : undefined,
+      renderPos:
+        this.flyCamera.enabled || !followed
+          ? null
+          : (this.renderer.playerView.interpolatedWorld(alpha) ?? followed.position),
+      rigPosition: this.rig.position,
       castRay: (origin, rayDir, maxDist) =>
         this.colliders.castTerrainRay(origin, rayDir, this.planets, maxDist),
       detailed,
@@ -245,6 +235,11 @@ export class Game {
     let ticks = 0;
     const flying = this.flyCamera.enabled;
     while (this.accumulator >= SIM_DT && ticks < MAX_TICKS_PER_FRAME) {
+      // Headlamp toggle is consumed every tick, in fly mode too (the lamp
+      // rides the camera): gating it on third-person would swallow presses.
+      if (this.input.consumeHeadlampToggle() && this.playerId) {
+        this.world.dispatch({ type: 'toggleHeadlamp', playerId: this.playerId });
+      }
       if (!flying && this.playerId) {
         const move = this.input.move();
         this.world.dispatch({
@@ -256,9 +251,6 @@ export class Game {
           lookYaw: this.rig.yaw,
           lookPitch: this.rig.pitch,
         });
-        if (this.input.consumeHeadlampToggle()) {
-          this.world.dispatch({ type: 'toggleHeadlamp', playerId: this.playerId });
-        }
         if (toolActive) {
           const edit = this.tool.update(performance.now(), this.playerId, toolButtons, this.toolAim);
           if (edit) this.world.dispatch(edit);

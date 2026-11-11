@@ -32,12 +32,16 @@ export interface EnvironmentUpdate {
   sunDirWorld: Vec3d;
   /** Shadow frustum follows this world point (third-person: near the player). */
   focusWorld: Vec3d;
-  /** Sun elevation above the local horizon at the camera (-1..1). */
+  /** Sun elevation above the local horizon at the camera (-1..1, for sky). */
   elevation: number;
-  /** Depth below the surface at the camera (sim formula, meters). */
+  /** Depth below the surface at the camera (sim formula, for sky/fog). */
   depthBelowM: number;
-  /** Height above the nominal surface at the camera (meters). */
+  /** Height above the nominal surface at the camera (meters, for sky/fog). */
   altitudeM: number;
+  /** Sun elevation at the focus point (hemisphere fill + sun warmth). */
+  focusElevation: number;
+  /** Depth below the surface at the focus point (hemisphere dimming). */
+  focusDepthBelowM: number;
   headlampOn: boolean;
   skyTint: Rgb;
   groundTint: Rgb;
@@ -144,8 +148,8 @@ export class Renderer {
     this.lighting.update({
       sunDirWorld: u.sunDirWorld,
       focusWorld: u.focusWorld,
-      elevation: u.elevation,
-      depthBelowM: u.depthBelowM,
+      elevation: u.focusElevation,
+      depthBelowM: u.focusDepthBelowM,
       headlampOn: u.headlampOn,
       skyTint: u.skyTint,
       groundTint: u.groundTint,

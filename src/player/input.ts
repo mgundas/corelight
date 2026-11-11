@@ -105,12 +105,14 @@ export class PlayerInput {
   };
 
   private handleKeyDown = (e: KeyboardEvent): void => {
-    if (!this.enabled) return;
-    if (e.code.startsWith('F')) return;
+    // Headlamp toggle works even when input is disabled (fly mode): the
+    // lamp rides the camera, so it stays useful there.
     if (e.code === 'KeyL') {
       if (!e.repeat) this.headlampQueued = true;
       return;
     }
+    if (!this.enabled) return;
+    if (e.code.startsWith('F')) return;
     if (e.code === 'Space') {
       e.preventDefault();
       if (!e.repeat) this.jumpQueued = true;

@@ -47,6 +47,8 @@ describe('updateSun + timeOfDay', () => {
     expect(sunDirection(world)).toEqual(world.sunDirection);
     world.addSystem(updateSun);
     world.tick();
+    // Post-tick direction matches the post-tick clock exactly (no lag).
+    expect(world.sunDirection).toEqual(sunDirectionAt(world.time));
     expect(timeOfDay(world)).toBeCloseTo(world.time / DAY_LENGTH_S, 10);
   });
 

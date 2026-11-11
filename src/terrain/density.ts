@@ -93,12 +93,12 @@ export function createDensityField(
   editDelta?: (x: number, y: number, z: number) => number,
 ): DensityField {
   const base = `${worldSeed}:${config.seed}`;
-  const surfaceNoise = createSeededNoise3D(`${base}:surface`);
-  const caveA = createSeededNoise3D(`${base}:caveA`);
-  const caveB = createSeededNoise3D(`${base}:caveB`);
-  const cavernRough = createSeededNoise3D(`${base}:cavernRough`);
-  const cavernPit = createSeededNoise3D(`${base}:cavernPit`);
-  const cavernMask = createSeededNoise3D(`${base}:cavernMask`);
+  const surfaceNoise = cachedNoise(`${base}:surface`);
+  const caveA = cachedNoise(`${base}:caveA`);
+  const caveB = cachedNoise(`${base}:caveB`);
+  const cavernRough = cachedNoise(`${base}:cavernRough`);
+  const cavernPit = cachedNoise(`${base}:cavernPit`);
+  const cavernMask = cachedNoise(`${base}:cavernMask`);
   const caveThresholdAt = (depth: number): number => caveThresholdAtDepth(config, depth);
   const stack = cavernStack(config);
   const caverns = config.caverns;
@@ -219,16 +219,25 @@ export function createDensityFn(config: PlanetConfig, worldSeed: number): Densit
   return createDensityField(config, worldSeed).density;
 }
 
-const surfaceNoises = new Map<string, NoiseFunction3D>();
+const noiseCache = new Map<string, NoiseFunction3D>();
 
-function surfaceNoiseFor(config: PlanetConfig, worldSeed: number): NoiseFunction3D {
-  const key = `${worldSeed}:${config.seed}`;
-  let noise = surfaceNoises.get(key);
+/**
+ * Module-level seeded noise, shared by the density field, the surface-depth
+ * helper and the color variation below. One entry per (seed, planet, field):
+ * bounded by the session's worlds in practice, and a single source of truth
+ * so the helpers can never disagree about "the same seeded noise".
+ */
+function cachedNoise(key: string): NoiseFunction3D {
+  let noise = noiseCache.get(key);
   if (!noise) {
-    noise = createSeededNoise3D(`${key}:surface`);
-    surfaceNoises.set(key, noise);
+    noise = createSeededNoise3D(key);
+    noiseCache.set(key, noise);
   }
   return noise;
+}
+
+function surfaceNoiseFor(config: PlanetConfig, worldSeed: number): NoiseFunction3D {
+  return cachedNoise(`${worldSeed}:${config.seed}:surface`);
 }
 
 /**
@@ -297,16 +306,8 @@ export function layerAt(config: PlanetConfig, x: number, y: number, z: number): 
   return { ...(layers[0] as LayerConfig), kind: 'layer' };
 }
 
-const detailNoises = new Map<string, NoiseFunction3D>();
-
 function detailNoise(salt: string | number): NoiseFunction3D {
-  const key = String(salt);
-  let noise = detailNoises.get(key);
-  if (!noise) {
-    noise = createSeededNoise3D(`corelight:color-detail:${key}`);
-    detailNoises.set(key, noise);
-  }
-  return noise;
+  return cachedNoise(`corelight:color-detail:${String(salt)}`);
 }
 
 /** Vertex color: layer color with noise variation; grass/dirt by slope at top. */

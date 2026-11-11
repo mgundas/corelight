@@ -52,7 +52,10 @@ export function depthBelowSurface(world: World, planet: PlanetConfig, localPos: 
   return surfaceDepthAt(planet, world.seed, localPos.x, localPos.y, localPos.z);
 }
 
-/** Sim system: re-derive the stored direction from the clock every tick. */
-export function updateSun(world: World): void {
-  world.sunDirection = sunDirectionAt(world.time);
+/** Sim system: re-derive the stored direction from the clock every tick.
+ * Uses `time + dt` (the post-tick clock) because `World.tick` advances time
+ * after running systems: the stored direction then matches `world.time`
+ * exactly instead of lagging one tick behind it. */
+export function updateSun(world: World, dt = 0): void {
+  world.sunDirection = sunDirectionAt(world.time + dt);
 }

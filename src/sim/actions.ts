@@ -117,7 +117,10 @@ export function applyAction(world: World, action: Action): void {
     case 'toggleHeadlamp': {
       const entity = world.entities.get(action.playerId);
       const player = entity?.components.player;
-      if (!entity || entity.kind !== 'player' || !player) return;
+      if (!entity || entity.kind !== 'player' || !player) {
+        events.emit('actionApplied', { type: action.type });
+        return;
+      }
       player.headlampOn = !player.headlampOn;
       events.emit('actionApplied', { type: action.type });
       return;

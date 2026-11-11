@@ -9,7 +9,9 @@ import { upAt } from '../sim/physics/frames.js';
 import { depthBelowSurface, sunDirection } from '../sim/systems/sun.js';
 import type { World } from '../sim/world.js';
 
-export function nearestPlanet(planets: PlanetConfig[], pos: Vec3d): PlanetConfig {  let nearest = planets[0] as PlanetConfig;
+export function nearestPlanet(planets: PlanetConfig[], pos: Vec3d): PlanetConfig {
+  if (planets.length === 0) throw new Error('nearestPlanet: no planets');
+  let nearest = planets[0] as PlanetConfig;
   let best = Infinity;
   for (const planet of planets) {
     const d = distance(pos, planet.center);
@@ -40,7 +42,8 @@ export function findFollowed(
 /**
  * Environment state for a frame. `activePos` is the camera world position
  * (drives sky/fog); `focusWorld` is the shadow-frustum center (the player
- * in third-person, the camera in fly mode).
+ * in third-person, the camera in fly mode) and drives the hemisphere fill,
+ * so the light on the player never darkens from rock the camera backs into.
  */
 export function computeEnvironment(
   world: World,
@@ -53,12 +56,18 @@ export function computeEnvironment(
   const skyPlanet = nearestPlanet(planets, activePos);
   const skyLocal = sub(activePos, skyPlanet.center);
   const elevation = dot(sunDir, upAt(skyPlanet, activePos));
+  const focusPlanet = nearestPlanet(planets, focusWorld);
+  const focusLocal = sub(focusWorld, focusPlanet.center);
   return {
     sunDirWorld: sunDir,
     focusWorld,
+    // Camera frame: sky background, fog, star fade.
     elevation,
     depthBelowM: depthBelowSurface(world, skyPlanet, skyLocal),
     altitudeM: length(skyLocal) - skyPlanet.radius,
+    // Player frame: hemisphere fill + sun warmth on the lit subject.
+    focusElevation: dot(sunDir, upAt(focusPlanet, focusWorld)),
+    focusDepthBelowM: depthBelowSurface(world, focusPlanet, focusLocal),
     headlampOn,
     skyTint: skyPlanet.atmosphere.sky,
     groundTint: skyPlanet.atmosphere.ground,
