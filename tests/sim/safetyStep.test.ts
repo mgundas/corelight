@@ -28,6 +28,7 @@ function makeEntity(x: number, y: number, z: number): Entity {
         soil: 0,
         toolHardness: 2,
         lastTooHard: -Infinity,
+        headlampOn: true,
       },
     },
   };

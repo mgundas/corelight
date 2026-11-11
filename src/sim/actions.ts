@@ -24,6 +24,7 @@ export type Action =
       lookPitch: number;
     }
   | { type: 'playerTeleport'; playerId: EntityId; position: Vec3d }
+  | { type: 'toggleHeadlamp'; playerId: EntityId }
   | {
       type: 'terrainEdit';
       playerId: EntityId;
@@ -78,6 +79,7 @@ export function applyAction(world: World, action: Action): void {
             soil: 0,
             toolHardness: 2,
             lastTooHard: -Infinity,
+            headlampOn: true,
           },
         },
       });
@@ -109,6 +111,14 @@ export function applyAction(world: World, action: Action): void {
       player.input = null;
       player.embeddedTime = 0;
       player.escaping = false;
+      events.emit('actionApplied', { type: action.type });
+      return;
+    }
+    case 'toggleHeadlamp': {
+      const entity = world.entities.get(action.playerId);
+      const player = entity?.components.player;
+      if (!entity || entity.kind !== 'player' || !player) return;
+      player.headlampOn = !player.headlampOn;
       events.emit('actionApplied', { type: action.type });
       return;
     }

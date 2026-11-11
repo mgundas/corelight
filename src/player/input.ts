@@ -6,6 +6,7 @@ export class PlayerInput {
   private keys = new Set<string>();
   private mouseButtons = new Set<number>();
   private jumpQueued = false;
+  private headlampQueued = false;
   private enabled = true;
   private canvas: HTMLCanvasElement | null = null;
   private lookTarget: { addLook: (dx: number, dy: number) => void } | null = null;
@@ -55,6 +56,7 @@ export class PlayerInput {
     this.keys.clear();
     this.mouseButtons.clear();
     this.jumpQueued = false;
+    this.headlampQueued = false;
     this.dragging = false;
   }
 
@@ -80,6 +82,13 @@ export class PlayerInput {
     return jump;
   }
 
+  /** Edge-triggered: true once per L keydown (headlamp toggle). */
+  consumeHeadlampToggle(): boolean {
+    const toggle = this.headlampQueued;
+    this.headlampQueued = false;
+    return toggle;
+  }
+
   /** Terrain tool buttons: left = dig, right = add, F or middle = flatten. */
   toolButtons(): { dig: boolean; add: boolean; flatten: boolean } {
     return {
@@ -98,6 +107,10 @@ export class PlayerInput {
   private handleKeyDown = (e: KeyboardEvent): void => {
     if (!this.enabled) return;
     if (e.code.startsWith('F')) return;
+    if (e.code === 'KeyL') {
+      if (!e.repeat) this.headlampQueued = true;
+      return;
+    }
     if (e.code === 'Space') {
       e.preventDefault();
       if (!e.repeat) this.jumpQueued = true;

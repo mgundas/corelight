@@ -1,27 +1,47 @@
 import * as THREE from 'three';
 import { SELA } from '../planets/configs/sela.js';
-import type { PlanetConfig } from '../planets/PlanetConfig.js';
+import type { PlanetConfig, Rgb } from '../planets/PlanetConfig.js';
 import type { Quat, Vec3d } from '../core/math.js';
 import { ChunkManager } from '../terrain/chunkManager.js';
 import { toWorldPlanes, type StreamStats } from '../terrain/streaming.js';
 import { MeshWorkerPool, type MeshResult } from '../terrain/workerPool.js';
+import { Atmosphere } from './atmosphere.js';
 import { ChunkBounds } from './chunkBounds.js';
 import { ChunkMeshes } from './chunkMeshes.js';
 import { getOrigin, toLocal } from './floatingOrigin.js';
 import { frustumPlanes } from './frustum.js';
+import { LightingRig } from './lighting.js';
+import { Sky } from './sky.js';
 import { PlayerView } from './views/playerView.js';
 
 // M02 renderer: scene + LOD-streamed chunk meshes. The ChunkManager owns
 // which chunks exist; pre-generation results (from the boot screen) are
 // adopted before the first frame so the planet is never bare.
-
-// Fixed world-space sun direction (directional light, infinite distance).
-const SUN_DIRECTION = new THREE.Vector3(1, 0.6, 0.4).normalize();
+// M05: lighting/sky/atmosphere are owned here and driven per frame by Game
+// from sim values (sun direction, depth below surface, headlamp state).
 
 export interface PrebuiltTerrain {
   planet: PlanetConfig;
   results: MeshResult[];
   emptyKeys: string[];
+}
+
+/** Per-frame environment state, computed by Game from sim values. */
+export interface EnvironmentUpdate {
+  /** World-space unit sun direction (from the sim). */
+  sunDirWorld: Vec3d;
+  /** Shadow frustum follows this world point (third-person: near the player). */
+  focusWorld: Vec3d;
+  /** Sun elevation above the local horizon at the camera (-1..1). */
+  elevation: number;
+  /** Depth below the surface at the camera (sim formula, meters). */
+  depthBelowM: number;
+  /** Height above the nominal surface at the camera (meters). */
+  altitudeM: number;
+  headlampOn: boolean;
+  skyTint: Rgb;
+  groundTint: Rgb;
+  dayColor: Rgb;
 }
 
 export class Renderer {
@@ -33,10 +53,12 @@ export class Renderer {
   readonly streamer: ChunkManager;
   readonly bounds = new ChunkBounds();
   readonly playerView = new PlayerView();
+  private readonly lighting: LightingRig;
+  private readonly sky: Sky;
+  private readonly atmosphere: Atmosphere;
   private readonly toolPreview: THREE.Mesh;
   private readonly toolPreviewMat: THREE.MeshBasicMaterial;
 
-  private sun: THREE.DirectionalLight;
   private readonly handleResize: () => void;
 
   constructor(
@@ -52,6 +74,8 @@ export class Renderer {
     });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
 
     this.camera = new THREE.PerspectiveCamera(
       70,
@@ -61,12 +85,10 @@ export class Renderer {
     );
     this.camera.position.set(0, 0, 600);
 
-    this.scene.background = new THREE.Color(0x05070f);
-
-    this.sun = new THREE.DirectionalLight(0xffffff, 2.2);
-    this.sun.position.copy(SUN_DIRECTION).multiplyScalar(1000);
-    this.scene.add(this.sun);
-    this.scene.add(new THREE.AmbientLight(0x8899bb, 0.5));
+    this.lighting = new LightingRig(this.scene, this.camera);
+    this.sky = new Sky(this.scene, this.camera, worldSeed);
+    this.atmosphere = new Atmosphere(this.scene);
+    for (const planet of planets) this.atmosphere.addPlanet(planet);
     this.scene.add(this.chunks.group);
     this.scene.add(this.bounds.group);
     this.scene.add(this.playerView.group);
@@ -96,6 +118,9 @@ export class Renderer {
     this.pool.dispose();
     this.chunks.dispose();
     this.playerView.dispose();
+    this.lighting.dispose();
+    this.sky.dispose();
+    this.atmosphere.dispose();
     this.toolPreview.geometry.dispose();
     this.toolPreviewMat.dispose();
     this.renderer.dispose();
@@ -112,6 +137,27 @@ export class Renderer {
 
   streamStats(): StreamStats {
     return this.streamer.stats();
+  }
+
+  /** Drive sun, sky, atmosphere and fog from sim values (call every frame). */
+  updateEnvironment(u: EnvironmentUpdate): void {
+    this.lighting.update({
+      sunDirWorld: u.sunDirWorld,
+      focusWorld: u.focusWorld,
+      elevation: u.elevation,
+      depthBelowM: u.depthBelowM,
+      headlampOn: u.headlampOn,
+      skyTint: u.skyTint,
+      groundTint: u.groundTint,
+    });
+    this.sky.update({
+      sunDirWorld: u.sunDirWorld,
+      elevation: u.elevation,
+      altitudeM: u.altitudeM,
+      depthBelowM: u.depthBelowM,
+      dayColor: u.dayColor,
+    });
+    this.atmosphere.update(u.sunDirWorld);
   }
 
   /** Third-person view: camera behind `camWorld`, looking at `headWorld`. */
@@ -148,6 +194,7 @@ export class Renderer {
     for (const obj of this.scene.children) {
       // Lights encode direction, not world position: shifting the sun would
       // change the lighting direction, so leave them in the local frame.
+      // (LightingRig repositions the sun absolutely every frame anyway.)
       if (obj instanceof THREE.Light) continue;
       // Groups that position children absolutely from world doubles manage
       // their own re-sync; shifting them as well would move meshes twice.
@@ -159,8 +206,6 @@ export class Renderer {
     // Re-sync authoritative positions on top to avoid drift.
     this.syncObjects();
     this.bounds.resync(delta);
-    // Sun stays at a fixed local offset so its direction never changes.
-    this.sun.position.copy(SUN_DIRECTION).multiplyScalar(1000);
   }
 
   /** Record the player state after a sim tick (call once per tick). */

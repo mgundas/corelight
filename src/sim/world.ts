@@ -1,9 +1,11 @@
 import { SIM_DT } from '../core/constants.js';
 import { events } from '../core/events.js';
+import type { Vec3d } from '../core/math.js';
 import type { PlanetConfig } from '../planets/PlanetConfig.js';
 import { TerrainEdits } from '../terrain/edits.js';
 import { applyAction, type Action } from './actions.js';
 import type { Entity, EntityId } from './entities.js';
+import { SUN_INITIAL } from './systems/sun.js';
 
 export type System = (world: World, dt: number) => void;
 
@@ -11,6 +13,10 @@ export class World {
   entities = new Map<EntityId, Entity>();
   /** Seconds of simulated time. */
   time = 0;
+  /** Shared sun direction (world space, unit length), re-derived from `time`
+   * by the sun system every tick. Part of World state so saves and replays
+   * agree on the light. */
+  sunDirection: Vec3d = { ...SUN_INITIAL };
   seed: number;
   /** Sparse player terrain edits (sim state; serialized by M06 saves). */
   readonly terrainEdits = new TerrainEdits();

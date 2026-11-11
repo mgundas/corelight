@@ -109,3 +109,35 @@ export const TOOL_EDITS_PER_SECOND = 10;
 export const TOOL_DIG_STRENGTH = 0.5;
 /** How long the "Too hard" indicator stays visible after a blocked dig. */
 export const TOO_HARD_INDICATOR_S = 1.5;
+
+/** Full day/night cycle in seconds (ARCHITECTURE.md: 12 minute period). */
+export const DAY_LENGTH_S = 12 * 60;
+
+/** Depth below the surface where caves are fully dark (ambient floor). */
+export const DEPTH_FULL_DARK_M = 25;
+/** Hemisphere/ambient scale at the surface vs deep underground (ARCHITECTURE.md). */
+export const AMBIENT_SURFACE = 1.0;
+export const AMBIENT_DEEP = 0.08;
+
+/** Shadow frustum side length in meters (single cascade around the player). */
+export const SHADOW_FRUSTUM_M = 64;
+/** Shadow map resolution (one 2048 cascade; near chunks only). */
+export const SHADOW_MAP_SIZE = 2048;
+
+/** FogExp2 density at the surface, deep underground, and in space. */
+export const FOG_SURFACE_DENSITY = 0.0011;
+export const FOG_CAVE_DENSITY = 0.028;
+/** Altitude above the surface where fog fades out toward space. */
+export const FOG_SPACE_START_M = 800;
+export const FOG_SPACE_END_M = 3000;
+/** Altitude where the sky background fades to black (stars take over). */
+export const SKY_SPACE_START_M = 800;
+export const SKY_SPACE_END_M = 3000;
+
+/** Headlamp spotlight tuning (SpotLight attached to the camera). */
+export const HEADLAMP_COLOR = 0xfff1d6;
+export const HEADLAMP_INTENSITY = 60;
+export const HEADLAMP_DISTANCE = 90;
+export const HEADLAMP_ANGLE = 0.46;
+export const HEADLAMP_PENUMBRA = 0.5;
+export const HEADLAMP_DECAY = 1.2;

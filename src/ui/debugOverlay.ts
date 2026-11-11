@@ -22,6 +22,10 @@ export interface OverlayStats {
   grounded?: boolean;
   pendingColliders?: number;
   loadedColliders?: number;
+  /** Fractional time of day in [0, 1): 0 = sunrise, 0.25 = noon. */
+  timeOfDay?: number;
+  /** Depth below the unedited surface at the camera (meters, sim formula). */
+  belowSurfaceM?: number;
   soil?: number;
   toolRadius?: number;
   /** Layer + hardness under the tool cursor, e.g. "crust h2". */
@@ -74,6 +78,14 @@ export class DebugOverlay {
         (stats.grounded !== undefined ? ` grounded: ${stats.grounded ? 'yes' : 'no'}` : '') +
         (stats.pendingColliders !== undefined ? ` colliders: ${stats.loadedColliders ?? 0} +${stats.pendingColliders} pending` : '');
     }
+    let sun = '';
+    if (stats.timeOfDay !== undefined || stats.belowSurfaceM !== undefined) {
+      const sunParts = [
+        stats.timeOfDay !== undefined ? `time ${stats.timeOfDay.toFixed(2)}` : null,
+        stats.belowSurfaceM !== undefined ? `below surface ${stats.belowSurfaceM.toFixed(1)} m` : null,
+      ].filter((part) => part !== null);
+      sun = `\nsun: ${sunParts.join(' | ')}`;
+    }
     let tool = '';
     if (stats.soil !== undefined || stats.toolRadius !== undefined || stats.toolInfo !== undefined) {
       const parts = [
@@ -87,6 +99,6 @@ export class DebugOverlay {
       `FPS: ${stats.fps.toFixed(0)} | tick: ${stats.tickMs.toFixed(2)} ms | draws: ${stats.drawCalls}\n` +
       `cam: ${c.x.toFixed(1)}, ${c.y.toFixed(1)}, ${c.z.toFixed(1)}\n` +
       `origin: ${o.x.toFixed(0)}, ${o.y.toFixed(0)}, ${o.z.toFixed(0)} (shifts: ${stats.originShifts})\n` +
-      `fly speed: ${stats.flySpeed.toFixed(1)} m/s${place}${player}${tool}${terrain}`;
+      `fly speed: ${stats.flySpeed.toFixed(1)} m/s${sun}${place}${player}${tool}${terrain}`;
   }
 }

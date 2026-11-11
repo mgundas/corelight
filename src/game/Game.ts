@@ -1,6 +1,6 @@
 import { MAX_TICKS_PER_FRAME, SIM_DT, TOO_HARD_INDICATOR_S } from '../core/constants.js';
 import { events } from '../core/events.js';
-import { distance, length, sub, type Vec3d } from '../core/math.js';
+import { length, sub, type Vec3d } from '../core/math.js';
 import type { PlanetConfig } from '../planets/PlanetConfig.js';
 import { PLANETS } from '../planets/solarSystem.js';
 import { layerAt, type DensityField } from '../terrain/density.js';
@@ -15,6 +15,8 @@ import { TerrainTool, type ToolAim } from '../player/terrainTool.js';
 import { computeAim, aimFromOrbitCamera } from '../player/toolAim.js';
 import { World } from '../sim/world.js';
 import type { EntityId } from '../sim/entities.js';
+import { timeOfDay, updateSun } from '../sim/systems/sun.js';
+import { computeEnvironment, findFollowed, nearestPlanet } from './environment.js';
 import { upAt } from '../sim/physics/frames.js';
 import { disposePhysics, physicsWorldFor } from '../sim/physics/rapierWorld.js';
 import { findSpawnPosition } from '../sim/physics/spawn.js';
@@ -64,10 +66,13 @@ export class Game {
     seed: number,
     planets: PlanetConfig[] = PLANETS,
     prebuilt: PrebuiltTerrain[] = [],
+    initialTimeS = 0,
   ) {
     this.planets = planets;
     this.world = new World(seed);
     this.world.planets = planets;
+    // ?time= starts the clock mid-cycle; the sun system derives light from it.
+    this.world.time = initialTimeS;
 
     // Physics first: collider ring (worker-backed, edit-aware) + movement
     // system, then the spawn so the very first tick already
@@ -88,6 +93,8 @@ export class Game {
     this.world.addSystem(
       makePhysicsSystem({ planets, worldSeed: seed, colliders: this.colliders, edits: this.world.terrainEdits }),
     );
+    // Environment clock (order-free: only re-derives sunDirection from time).
+    this.world.addSystem(updateSun);
     const home = planets[0] as PlanetConfig;
     this.world.dispatch({
       type: 'spawnPlayer',
@@ -147,7 +154,7 @@ export class Game {
   private computeToolAim(alpha: number, detailed: boolean): void {
     this.toolAim = { hit: null, normal: null, planet: null };
     if (this.flyCamera.enabled) return;
-    const followed = this.playerEntity();
+    const followed = findFollowed(this.world, this.planets, this.playerId);
     if (!followed) return;
     const field = this.toolFields.get(followed.planet.id);
     if (!field) return;
@@ -212,26 +219,6 @@ export class Game {
     this.renderer.dispose();
   }
 
-  private playerEntity(): { position: Vec3d; planet: PlanetConfig } | null {
-    const entity = this.playerId ? this.world.entities.get(this.playerId) : undefined;
-    if (!entity) return null;
-    const planet = this.planets.find((p) => p.id === entity.planetId) ?? this.nearestPlanet(entity.position);
-    return { position: entity.position, planet };
-  }
-
-  private nearestPlanet(pos: Vec3d): PlanetConfig {
-    let nearest = this.planets[0] as PlanetConfig;
-    let best = Infinity;
-    for (const planet of this.planets) {
-      const d = distance(pos, planet.center);
-      if (d < best) {
-        best = d;
-        nearest = planet;
-      }
-    }
-    return nearest;
-  }
-
   private frame(now: number): void {
     let frameDt = (now - this.lastTime) / 1000;
     this.lastTime = now;
@@ -269,6 +256,9 @@ export class Game {
           lookYaw: this.rig.yaw,
           lookPitch: this.rig.pitch,
         });
+        if (this.input.consumeHeadlampToggle()) {
+          this.world.dispatch({ type: 'toggleHeadlamp', playerId: this.playerId });
+        }
         if (toolActive) {
           const edit = this.tool.update(performance.now(), this.playerId, toolButtons, this.toolAim);
           if (edit) this.world.dispatch(edit);
@@ -299,7 +289,7 @@ export class Game {
       const local = toLocal(activePos);
       this.flyCamera.applyToCamera(this.renderer.camera, local);
     } else {
-      const followed = this.playerEntity();
+      const followed = findFollowed(this.world, this.planets, this.playerId);
       if (followed) {
         const renderPos =
           this.renderer.playerView.interpolatedWorld(alpha) ?? followed.position;
@@ -315,6 +305,23 @@ export class Game {
     if (shift) {
       this.renderer.applyOriginShift(shift);
     }
+
+    // Day/night environment (M05): sun, sky, atmosphere and fog follow the
+    // sim clock. The shadow cascade stays near the player (third-person) or
+    // the camera (fly mode); the sky uses the camera position.
+    const lampPlayer = this.playerId ? this.world.entities.get(this.playerId) : undefined;
+    const focusWorld = flying
+      ? activePos
+      : (this.renderer.playerView.interpolatedWorld(alpha) ?? lampPlayer?.position ?? activePos);
+    const env = computeEnvironment(
+      this.world,
+      this.planets,
+      activePos,
+      focusWorld,
+      lampPlayer?.components.player?.headlampOn ?? true,
+    );
+    this.renderer.updateEnvironment(env);
+    const depthBelowM = env.depthBelowM;
 
     // LOD streaming around the active camera (priority queue + 4 ms apply
     // budget). Chunk meshes are positioned when added and re-synced on
@@ -333,8 +340,8 @@ export class Game {
     // Debug overlay content. The overlay no-ops while hidden, so skip the
     // stats work (mesh counts, layer lookup) entirely in that case.
     if (this.overlay.isVisible()) {
-      const followed = this.playerEntity();
-      const planet = followed?.planet ?? this.nearestPlanet(activePos);
+      const followed = findFollowed(this.world, this.planets, this.playerId);
+      const planet = followed?.planet ?? nearestPlanet(this.planets, activePos);
       const focus = followed?.position ?? activePos;
       const rel = {
         x: focus.x - planet.center.x,
@@ -365,6 +372,8 @@ export class Game {
         drawCalls: this.renderer.renderer.info.render.calls,
         flySpeed: this.flySpeed,
         originShifts: this.originShifts,
+        timeOfDay: timeOfDay(this.world),
+        belowSurfaceM: depthBelowM,
         planet: planet.name,
         depthM: depth,
         layer: layerAt(planet, rel.x, rel.y, rel.z).name,

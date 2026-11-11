@@ -94,6 +94,13 @@ export class ChunkMeshes {
     geometry.setAttribute('color', new THREE.BufferAttribute(result.colors, 3));
     geometry.setIndex(new THREE.BufferAttribute(result.indices, 1));
     const mesh = new THREE.Mesh(geometry, this.material);
+    // Only the two finest LODs cast/receive shadows: the 64 m cascade
+    // follows the player, so coarser shells never intersect it. This keeps
+    // the depth pass to a handful of near chunks.
+    const { level } = parseChunkKey(result.key);
+    const castsShadow = level <= 1;
+    mesh.castShadow = castsShadow;
+    mesh.receiveShadow = castsShadow;
     // Worker origin is planet-local; world = planetCenter + chunkOrigin.
     const world: Vec3d = {
       x: config.center.x + result.origin.x,
@@ -108,7 +115,6 @@ export class ChunkMeshes {
     this.meshes.set(result.key, mesh);
     this.group.add(mesh);
     this.lru.push(result.key);
-    const { level } = parseChunkKey(result.key);
     this.levelCounts[level] = (this.levelCounts[level] ?? 0) + 1;
     this.evictIfNeeded();
     return 'added';

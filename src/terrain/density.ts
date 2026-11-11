@@ -219,6 +219,46 @@ export function createDensityFn(config: PlanetConfig, worldSeed: number): Densit
   return createDensityField(config, worldSeed).density;
 }
 
+const surfaceNoises = new Map<string, NoiseFunction3D>();
+
+function surfaceNoiseFor(config: PlanetConfig, worldSeed: number): NoiseFunction3D {
+  const key = `${worldSeed}:${config.seed}`;
+  let noise = surfaceNoises.get(key);
+  if (!noise) {
+    noise = createSeededNoise3D(`${key}:surface`);
+    surfaceNoises.set(key, noise);
+  }
+  return noise;
+}
+
+/**
+ * Depth below the unedited surface at a planet-local point:
+ * `planet.radius + surfaceNoise(dir) - r`. Positive = underground.
+ * WHY: lighting and fog need a cheap per-frame depth without raycasts
+ * (M05 spec); this repeats exactly the base term of the density field,
+ * so it agrees with the meshed surface to within carve/edit differences.
+ */
+export function surfaceDepthAt(
+  config: PlanetConfig,
+  worldSeed: number,
+  x: number,
+  y: number,
+  z: number,
+): number {
+  const r = Math.sqrt(x * x + y * y + z * z);
+  let nx = 0;
+  let ny = 1;
+  let nz = 0;
+  if (r > 1e-6) {
+    nx = x / r;
+    ny = y / r;
+    nz = z / r;
+  }
+  const f = config.surfaceFrequency;
+  const relief = fbm3(surfaceNoiseFor(config, worldSeed), nx * f, ny * f, nz * f, 4) * config.surfaceAmplitude;
+  return config.radius + relief - r;
+}
+
 export interface LayerInfo extends LayerConfig {
   kind: 'layer' | 'core_shell' | 'core_chamber';
 }

@@ -1,4 +1,4 @@
-import { DEFAULT_SEED } from './core/constants.js';
+import { DEFAULT_SEED, DAY_LENGTH_S } from './core/constants.js';
 import { getUrlParams } from './core/urlParams.js';
 import { PLANETS } from './planets/solarSystem.js';
 import { runBoot } from './game/boot.js';
@@ -23,11 +23,12 @@ async function boot(): Promise<void> {
   const hint = document.createElement('div');
   hint.id = 'hint';
   hint.textContent =
-    'Corelight M04 — walk with WASD, mouse look (click), Space jump, Shift sprint, wheel zoom, LMB dig, RMB add, F flatten, Ctrl+wheel brush size, F1 overlay, F3 fly, F4 wireframe, F5 chunk bounds';
+    'Corelight M05 — walk with WASD, mouse look (click), Space jump, Shift sprint, wheel zoom, LMB dig, RMB add, F flatten, Ctrl+wheel brush size, L headlamp, F1 overlay, F3 fly, F4 wireframe, F5 chunk bounds';
   app.appendChild(hint);
 
   const { prebuilt } = await runBootSafe(seed, params.skipBoot);
-  const game = new Game(canvas, seed, PLANETS, prebuilt);
+  const initialTimeS = (params.time ?? 0) * DAY_LENGTH_S;
+  const game = new Game(canvas, seed, PLANETS, prebuilt, initialTimeS);
   game.start();
 }
 

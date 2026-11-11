@@ -75,6 +75,8 @@ export interface PlayerComponent {
   toolHardness: number;
   /** World time of the last hardness-blocked edit (drives the indicator). */
   lastTooHard: number;
+  /** Helmet lamp on/off (L key). Part of player state, renders a SpotLight. */
+  headlampOn: boolean;
 }
 
 export interface Entity {
