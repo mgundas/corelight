@@ -193,6 +193,30 @@ function deserializeEntity(data: unknown): Entity {
     }
   }
   const components = structuredClone(r['components']) as Entity['components'];
+  // M11 components feed arithmetic (station progress -> global Data). A
+  // hand-edited value like "12" or NaN would corrupt Data on collection, so
+  // reject malformed shapes here, before they reach the sim.
+  const research = components.research as Record<string, unknown> | undefined;
+  if (research) {
+    if (research['inputId'] !== null && typeof research['inputId'] !== 'string') {
+      throw new Error('bad save: research.inputId malformed');
+    }
+    if (!isFiniteNumber(research['progressS']) || research['progressS'] < 0) {
+      throw new Error('bad save: research.progressS malformed');
+    }
+    if (!isFiniteNumber(research['dataReady']) || research['dataReady'] < 0) {
+      throw new Error('bad save: research.dataReady malformed');
+    }
+  }
+  const sample = components.sample as Record<string, unknown> | undefined;
+  if (sample) {
+    if (!isFiniteNumber(sample['value']) || sample['value'] < 0) {
+      throw new Error('bad save: sample.value malformed');
+    }
+    if (typeof sample['chunkKey'] !== 'string' || sample['chunkKey'].length === 0) {
+      throw new Error('bad save: sample.chunkKey malformed');
+    }
+  }
   // Inverse of the serialize normalization: null JSON "never" -> -Infinity.
   const player = components.player as { lastTooHard?: unknown } | undefined;
   if (player && player.lastTooHard === null) {

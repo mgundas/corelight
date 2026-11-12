@@ -122,8 +122,15 @@ export function pickUpItem(world: World, playerId: EntityId, itemId: EntityId): 
     events.emit('actionApplied', { type: 'pickUp' });
     return;
   }
-  // Take over foreign-held items (drop-then-grab races resolve deterministically).
+  // Station inputs are not backpack-held: taking one would leave
+  // printer.inputs / research.inputId pointing at a player-carried item.
+  // Normal play never aims at held items; this guards crafted Actions.
   const prevHolder = itemComp.holder ? world.entities.get(itemComp.holder) : undefined;
+  if (prevHolder && (prevHolder.kind === 'machine' || prevHolder.kind === 'platform')) {
+    events.emit('actionApplied', { type: 'pickUp' });
+    return;
+  }
+  // Take over foreign-held items (drop-then-grab races resolve deterministically).
   const prevInventory = prevHolder?.components.inventory;
   if (prevInventory) {
     const at = prevInventory.slots.indexOf(itemId);

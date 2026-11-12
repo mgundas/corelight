@@ -82,21 +82,21 @@ export function ResearchPanel() {
   const station = view.station;
   return (
     <div id="research-ui">
-      <div id="printer-header">
-        <div id="printer-title">{view.title}</div>
+      <div id="research-header">
+        <div id="research-title">{view.title}</div>
         <button
           type="button"
-          id="printer-close"
+          id="research-close"
           title="Close (Tab)"
           onClick={() => commands?.closeResearch()}
         >
           ×
         </button>
       </div>
-      <div id="printer-hint">
+      <div id="research-hint">
         {view.hint} Data: <strong>{view.data}</strong>
       </div>
-      <div id="printer-station">
+      <div id="research-station">
         <SampleSlot station={station} />
         {station.hasInput ? <Progress station={station} /> : null}
         {station.dataReady > 0 ? (
@@ -109,7 +109,7 @@ export function ResearchPanel() {
           </button>
         ) : null}
       </div>
-      <div id="printer-rows">
+      <div id="research-rows">
         {view.rows.map((row) => (
           <Row key={row.id} row={row} />
         ))}

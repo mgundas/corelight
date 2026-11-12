@@ -12,7 +12,12 @@ export function updateResearch(world: World, dt: number): void {
   for (const entity of world.entities.values()) {
     if (!isResearchStation(entity)) continue;
     const research = ensureResearch(entity);
-    if (!research || research.inputId === null) continue;
+    if (!research) continue;
+    // Defensive heal for hand-built/legacy components: non-finite fields
+    // would poison the global Data total when collected.
+    if (!Number.isFinite(research.progressS) || research.progressS < 0) research.progressS = 0;
+    if (!Number.isFinite(research.dataReady) || research.dataReady < 0) research.dataReady = 0;
+    if (research.inputId === null) continue;
     const sample = world.entities.get(research.inputId);
     if (!sample || sample.components.item?.itemId !== 'research_sample') {
       // Stale id (hand-made save or external deletion): drop the job cleanly.

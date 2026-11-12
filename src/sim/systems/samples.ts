@@ -8,12 +8,14 @@
 // that was carried once but is not depleted yet is also left alone (defensive
 // for hand-made saves) until the action records the depletion.
 //
-// Cost control matches nodes: one placement march per chunk per visit, edits
-// evict only their own chunks (via the shared L0 dirty set) and re-seat.
+// Cost control matches nodes: one placement march per chunk per visit. Edits
+// only re-seat pristine pods that a fill buried; resting or dropped pods keep
+// the position physics gave them.
 
 import { SAMPLE_DESPAWN_RANGE_M, SAMPLE_SPAWN_RANGE_M } from '../../core/constants.js';
-import { distance } from '../../core/math.js';
+import { distance, sub } from '../../core/math.js';
 import type { PlanetConfig } from '../../planets/PlanetConfig.js';
+import { parseChunkKey, type ChunkCoord } from '../../terrain/chunkKey.js';
 import type { World } from '../world.js';
 import { l0ChunksNear } from '../nodes.js';
 import { sampleChunkKey, sampleForChunk } from '../samples.js';
@@ -38,6 +40,36 @@ function ownedByPlayer(world: World, id: string): boolean {
   return item?.holder !== undefined || item?.grabbedBy !== undefined;
 }
 
+/**
+ * Edits must not teleport a pod that is resting where physics left it. Only a
+ * fill that buries a pristine pod moves it, back to the fresh deterministic
+ * wall spot (same id/value). Existing lives are reused; nothing is deleted.
+ */
+function reseatBuriedPods(
+  world: World,
+  planet: PlanetConfig,
+  key: string,
+  coord: ChunkCoord,
+): void {
+  const live = liveFieldFor(world, planet);
+  const base = baseFieldFor(world, planet);
+  for (const [id, entity] of [...world.entities]) {
+    if (entity.kind !== 'sample' || entity.components.sample?.chunkKey !== key) continue;
+    if (ownedByPlayer(world, id)) continue;
+    const local = sub(entity.position, planet.center);
+    if (live.density(local.x, local.y, local.z) < 0.2) continue;
+    const spec = sampleForChunk(world.seed, planet, coord, base.density, live.density)[0];
+    if (!spec) {
+      world.entities.delete(id);
+      continue;
+    }
+    entity.position = { ...spec.position };
+    entity.rotation = { ...spec.rotation };
+    const sample = entity.components.sample;
+    if (sample) sample.value = spec.value;
+  }
+}
+
 export function updateSamples(world: World, planets: PlanetConfig[]): void {
   const players = [...world.entities.values()].filter((e) => e.kind === 'player');
   if (players.length === 0) return;
@@ -46,11 +78,16 @@ export function updateSamples(world: World, planets: PlanetConfig[]): void {
   if (dirty.size > 0) {
     for (const key of dirty) {
       settled.delete(key);
-      for (const [id, entity] of [...world.entities]) {
-        if (entity.kind !== 'sample' || entity.components.sample?.chunkKey !== key) continue;
-        if (ownedByPlayer(world, id)) continue;
-        world.entities.delete(id);
+      let parsed: { planetId: string; level: number; coord: ChunkCoord };
+      try {
+        parsed = parseChunkKey(key);
+      } catch {
+        continue;
       }
+      if (parsed.level !== 0) continue;
+      const planet = planets.find((p) => p.id === parsed.planetId);
+      if (!planet) continue;
+      reseatBuriedPods(world, planet, key, parsed.coord);
     }
     dirty.clear();
   }

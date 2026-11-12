@@ -217,6 +217,23 @@ describe('save round trip', () => {
     ]);
   });
 
+  it('rejects malformed research and sample component fields', () => {
+    const good = serializeWorld(makeEditedWorld(5));
+    const corrupt = (components: Record<string, unknown>): Record<string, unknown> => {
+      const copy = JSON.parse(JSON.stringify(good)) as Record<string, unknown>;
+      const list = copy['entities'] as Array<Record<string, unknown>>;
+      const first = list[0];
+      if (!first) throw new Error('no entity in fixture');
+      first['components'] = components;
+      return copy;
+    };
+    expect(() => deserializeWorld(corrupt({ research: { inputId: 5, progressS: 0, dataReady: 0 } }), [SELA])).toThrow();
+    expect(() => deserializeWorld(corrupt({ research: { inputId: null, progressS: '1', dataReady: 0 } }), [SELA])).toThrow();
+    expect(() => deserializeWorld(corrupt({ research: { inputId: null, progressS: 0, dataReady: null } }), [SELA])).toThrow();
+    expect(() => deserializeWorld(corrupt({ sample: { value: null, chunkKey: 'k' } }), [SELA])).toThrow();
+    expect(() => deserializeWorld(corrupt({ sample: { value: 10, chunkKey: 3 } }), [SELA])).toThrow();
+  });
+
   it('drops unknown research ids and rejects malformed research on load', () => {
     const good = serializeWorld(makeEditedWorld(5));
     const unknown = JSON.parse(JSON.stringify(good)) as typeof good;

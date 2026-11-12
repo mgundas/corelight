@@ -367,19 +367,22 @@ body {
   }
 }
 
-#printer-header {
+#printer-header,
+#research-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
 
-#printer-title {
+#printer-title,
+#research-title {
   font-size: 18px;
   letter-spacing: 1px;
 }
 
-#printer-close {
+#printer-close,
+#research-close {
   width: 30px;
   height: 30px;
   font-size: 20px;
@@ -391,13 +394,15 @@ body {
   cursor: pointer;
 }
 
-#printer-hint {
+#printer-hint,
+#research-hint {
   margin: 6px 0 10px;
   font-size: 12px;
   color: #9fb0cc;
 }
 
-#printer-station {
+#printer-station,
+#research-station {
   margin-bottom: 10px;
   padding-bottom: 10px;
   border-bottom: 1px solid rgb(255 255 255 / 12%);
@@ -462,7 +467,8 @@ body {
   cursor: pointer;
 }
 
-#printer-rows {
+#printer-rows,
+#research-rows {
   display: flex;
   flex-direction: column;
   gap: 6px;

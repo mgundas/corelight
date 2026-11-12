@@ -9,7 +9,11 @@ import { distance } from '../core/math.js';
 import { researchById } from '../data/loadResearch.js';
 import type { Entity, EntityId, ResearchComponent } from '../sim/entities.js';
 import { inventoryFor } from './inventoryActions.js';
-import { unlockedRecipes, type ResearchState } from './researchState.js';
+import {
+  isResearchEntryUnlocked,
+  unlockedRecipes,
+  type ResearchState,
+} from './researchState.js';
 import type { World } from './world.js';
 
 /** Recipe ids unlocked by this world's research (starter recipes excluded). */
@@ -20,7 +24,7 @@ export function unlockedRecipesFor(world: World): Set<string> {
 /** Cost + prerequisite check without mutating (shared by action and UI). */
 export function canUnlockResearch(research: ResearchState, entryId: string): boolean {
   const entry = researchById(entryId);
-  if (!entry || research.unlocked.includes(entryId)) return false;
+  if (!entry || isResearchEntryUnlocked(research, entryId)) return false;
   if (research.data < entry.cost) return false;
   for (const req of entry.requires) {
     if (!research.unlocked.includes(req)) return false;
@@ -152,11 +156,24 @@ export function collectResearch(world: World, playerId: EntityId, stationId: Ent
   const player = world.entities.get(playerId);
   const station = world.entities.get(stationId);
   const research = station ? ensureResearch(station) : null;
-  if (!player || !station || !research || research.dataReady <= 0 || !nearStation(player, station)) {
+  if (
+    !player ||
+    !station ||
+    !research ||
+    !Number.isFinite(research.dataReady) ||
+    research.dataReady <= 0 ||
+    !Number.isFinite(world.research.data) ||
+    !nearStation(player, station)
+  ) {
     events.emit('actionApplied', { type: 'collectResearch' });
     return;
   }
-  world.research.data += research.dataReady;
+  const total = world.research.data + research.dataReady;
+  if (!Number.isFinite(total)) {
+    events.emit('actionApplied', { type: 'collectResearch' });
+    return;
+  }
+  world.research.data = total;
   research.dataReady = 0;
   events.emit('actionApplied', { type: 'collectResearch' });
 }

@@ -23,6 +23,22 @@ describe('storeSave', () => {
     expect(typeof result).toBe('boolean');
   });
 
+  it('refuses snapshots with non-finite research data', async () => {
+    const result = await storeSave({
+      version: 3,
+      seed: 1,
+      time: 0,
+      idCounter: 0,
+      entities: [],
+      edits: {},
+      depleted: [],
+      nodeCharges: {},
+      research: { data: Number.NaN, unlocked: [] },
+      depletedSamples: [],
+    });
+    expect(result).toBe(false);
+  });
+
   it('refuses snapshots with non-finite positions', async () => {
     const result = await storeSave({
       version: 3,

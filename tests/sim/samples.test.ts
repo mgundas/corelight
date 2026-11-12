@@ -20,6 +20,7 @@ import { mineNodes } from '../../src/sim/mining.js';
 import { createDensityField, layerAt } from '../../src/terrain/density.js';
 import { TerrainEdits } from '../../src/terrain/edits.js';
 import type { ChunkCoord } from '../../src/terrain/chunkKey.js';
+import { nodeOrigin } from '../../src/terrain/octree.js';
 
 function spawnWorld(seed = 1337): { world: World; playerId: EntityId } {
   const world = new World(seed, { planets: [SELA] });
@@ -202,6 +203,54 @@ describe('sample streaming', () => {
     world.tick();
     updateSamples(world, [SELA]);
     expect([...world.entities.values()].filter((e) => e.id === found.spec.id)).toHaveLength(1);
+  });
+
+  it('does not teleport a resting pod when an unrelated edit hits its chunk', () => {
+    const { world, playerId } = spawnWorld();
+    const found = findSample(1337, [23, 22, 21]);
+    world.dispatch({ type: 'playerTeleport', playerId, position: { ...found.spec.position } });
+    world.tick();
+    updateSamples(world, [SELA]);
+    const pod = world.entities.get(found.spec.id);
+    if (!pod) throw new Error('no pod spawned');
+    // Simulate a pod that fell/rested a few metres away from its wall spot:
+    // scan the same chunk's base field for an air point.
+    const field = createDensityField(SELA, 1337);
+    const min = nodeOrigin(SELA, 0, found.coord);
+    let resting: { x: number; y: number; z: number } | null = null;
+    for (let gx = 0; gx <= 32 && !resting; gx += 4) {
+      for (let gy = 0; gy <= 32 && !resting; gy += 4) {
+        for (let gz = 0; gz <= 32 && !resting; gz += 4) {
+          const local = { x: min.x + gx, y: min.y + gy, z: min.z + gz };
+          if (field.density(local.x, local.y, local.z) >= -1) continue;
+          const p = {
+            x: SELA.center.x + local.x,
+            y: SELA.center.y + local.y,
+            z: SELA.center.z + local.z,
+          };
+          if (distance(p, found.spec.position) < 4) continue;
+          resting = p;
+        }
+      }
+    }
+    if (!resting) throw new Error('no air point near pod');
+    pod.position = { ...resting };
+    const expected = { ...resting };
+    world.dispatch({
+      type: 'terrainEdit',
+      playerId,
+      planetId: SELA.id,
+      mode: 'dig',
+      center: { ...found.spec.position },
+      radius: 2,
+      strength: 0.5,
+    });
+    world.tick();
+    updateNodes(world, [SELA]);
+    updateSamples(world, [SELA]);
+    const after = world.entities.get(found.spec.id);
+    expect(after).toBeDefined();
+    expect(after?.position).toEqual(expected);
   });
 
   it('a terrain edit re-seats the pod instead of deleting it', () => {

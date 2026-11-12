@@ -48,12 +48,17 @@ export function buildResearchState(
   if (station.planetId !== player.planetId) return null;
   if (distance(player.position, station.position) > STATION_RANGE_M) return null;
   const research = researchFor(station);
-  if (!research) return null;
+  // A station from an older/hand-made save may lack the component until the
+  // next sim tick heals it. Treat that as an empty station instead of closing
+  // the panel the E press just opened (read-only path: no healing here).
+  const inputId = research?.inputId ?? null;
+  const progressS = research?.progressS ?? 0;
+  const dataReady = research?.dataReady ?? 0;
   const def = placeableForMachineType('research_station');
   const paused = station.components.power?.paused === true;
-  const hint = research.dataReady > 0
+  const hint = dataReady > 0
     ? 'Analysis complete — press E or Collect.'
-    : research.inputId
+    : inputId
       ? paused
         ? 'Paused — no power. Progress resumes when the network can afford it.'
         : 'Analyzing… one sample at a time (1 power/s).'
@@ -65,13 +70,13 @@ export function buildResearchState(
     station: {
       stationId,
       name: def?.name ?? 'Research station',
-      slots: [sampleName(world, research.inputId)],
+      slots: [sampleName(world, inputId)],
       acceptsItemIds: ['research_sample'],
-      hasInput: research.inputId !== null,
+      hasInput: inputId !== null,
       // Decisecond precision: the panel key changes ~10x/s while analyzing.
-      progressS: Math.round(research.progressS * 10) / 10,
+      progressS: Math.round(progressS * 10) / 10,
       timeS: RESEARCH_TIME_S,
-      dataReady: research.dataReady,
+      dataReady,
       paused,
     },
     rows: rowsFor(world),

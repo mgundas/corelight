@@ -118,6 +118,13 @@ describe('research station', () => {
     expect(inv.slots).not.toContain(sampleId);
     expect(world.entities.get(sampleId)?.components.item?.holder).toBe(stationId);
     expect(world.depletedSamples.has(sampleId)).toBe(true);
+    // Crafted pickUp must not steal a station input (the station would keep
+    // analyzing a player-carried item).
+    world.dispatch({ type: 'pickUp', playerId, itemId: sampleId });
+    world.tick();
+    expect(research(world, stationId).inputId).toBe(sampleId);
+    expect(world.entities.get(sampleId)?.components.item?.holder).toBe(stationId);
+    expect(inv.slots).not.toContain(sampleId);
     // The single slot refuses a second sample.
     giveSample(world, playerId, 20);
     world.dispatch({ type: 'depositResearchSample', playerId, stationId });

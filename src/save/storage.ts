@@ -52,6 +52,12 @@ export async function storeSave(data: SaveData): Promise<boolean> {
         return false;
       }
     }
+    // Global progression is arithmetic too: a NaN would serialize as null
+    // and make the save unloadable, so refuse it at the IDB boundary.
+    if (!Number.isFinite(data.research.data) || data.research.data < 0) {
+      console.warn('save store refused: non-finite research data');
+      return false;
+    }
     await set(SAVE_KEY, data);
     return true;
   } catch (err) {

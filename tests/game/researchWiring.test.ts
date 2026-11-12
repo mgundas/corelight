@@ -103,7 +103,7 @@ describe('research panel state', () => {
     expect(state?.hint).toMatch(/collect/i);
   });
 
-  it('returns null for non-research stations, missing components and far stations', () => {
+  it('returns null for non-research/far stations but tolerates an unhealed component', () => {
     const { world, playerId, stationId } = context();
     const station = world.entities.get(stationId);
     if (!station) throw new Error('no station');
@@ -111,7 +111,13 @@ describe('research panel state', () => {
     expect(buildResearchState(world, playerId, stationId)).toBe(null);
     station.components.machine = { machineType: 'research_station' };
     delete station.components.research;
-    expect(buildResearchState(world, playerId, stationId)).toBe(null);
+    // Old/hand-made save: the panel opens as an empty station instead of
+    // closing before updateResearch can heal the component.
+    const unhealed = buildResearchState(world, playerId, stationId);
+    expect(unhealed).not.toBe(null);
+    expect(unhealed?.station.hasInput).toBe(false);
+    expect(unhealed?.station.dataReady).toBe(0);
+    expect(unhealed?.station.slots).toEqual([null]);
     station.components.research = { inputId: null, progressS: 0, dataReady: 0 };
     const player = world.entities.get(playerId);
     if (!player) throw new Error('no player');
