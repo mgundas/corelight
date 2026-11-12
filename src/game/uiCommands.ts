@@ -1,0 +1,35 @@
+// UI -> Action command installation (React port). Kept out of Game.ts so the
+// file stays under the 400-line hard rule. Every command dispatches an
+// Action; the UI never mutates the World directly.
+
+import type { EntityId } from '../sim/entities.js';
+import type { World } from '../sim/world.js';
+import { setUiCommands } from '../ui/stores/commandsStore.js';
+
+export function installUiCommands(
+  world: World,
+  playerId: () => EntityId | null,
+  closePrinter: () => void,
+): void {
+  const withPlayer = (run: (id: EntityId) => void): void => {
+    const id = playerId();
+    if (id) run(id);
+  };
+  setUiCommands({
+    selectSlot: (slot) => withPlayer((id) => world.dispatch({ type: 'selectSlot', playerId: id, slot })),
+    moveItem: (from, to) =>
+      withPlayer((id) => world.dispatch({ type: 'moveItem', playerId: id, from, to })),
+    dropSlot: (slot) => withPlayer((id) => world.dispatch({ type: 'drop', playerId: id, slot })),
+    depositSlotToStation: (stationId, slot) =>
+      withPlayer((id) =>
+        world.dispatch({ type: 'depositSlotToStation', playerId: id, stationId, slot }),
+      ),
+    printBackpack: (recipeId) =>
+      withPlayer((id) => world.dispatch({ type: 'printBackpack', playerId: id, recipeId })),
+    printStation: (stationId, recipeId) =>
+      withPlayer((id) => world.dispatch({ type: 'printAtStation', playerId: id, stationId, recipeId })),
+    collectStation: (stationId) =>
+      withPlayer((id) => world.dispatch({ type: 'collectStation', playerId: id, stationId })),
+    closePrinter,
+  });
+}

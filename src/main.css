@@ -443,3 +443,152 @@ body {
   opacity: 0.45;
   cursor: default;
 }
+
+/* --- React UI port + inventory drag (pointer events, no HTML5 DnD) --- */
+
+#hud-slots {
+  pointer-events: none;
+}
+
+.hud-slot {
+  pointer-events: auto;
+}
+
+.hud-slot,
+.bag-slot {
+  touch-action: none;
+  user-select: none;
+  cursor: grab;
+}
+
+.hud-slot .slot-number {
+  opacity: 0.55;
+  margin-right: 3px;
+}
+
+.hud-slot .slot-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 62px;
+  display: inline-block;
+  vertical-align: bottom;
+}
+
+.hud-slot.drop-ok,
+.bag-slot.drop-ok,
+.printer-slot.drop-ok {
+  outline: 2px solid #39ff88;
+  outline-offset: 1px;
+}
+
+.hud-slot.drop-bad,
+.bag-slot.drop-bad,
+.printer-slot.drop-bad {
+  outline: 2px solid #ff5555;
+  outline-offset: 1px;
+}
+
+#hud-mode {
+  font-size: 12px;
+  color: #9fb0cc;
+  background: rgb(0 0 0 / 45%);
+  padding: 3px 10px;
+  border-radius: 6px;
+}
+
+#hud-mode.deform {
+  color: #08121c;
+  background: #66ffcc;
+}
+
+#drag-ghost {
+  position: fixed;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 9px;
+  font-size: 12px;
+  color: #fff;
+  background: rgb(8 12 20 / 92%);
+  border: 1px solid rgb(255 255 255 / 30%);
+  border-radius: 6px;
+  pointer-events: none;
+  z-index: 60;
+  white-space: nowrap;
+}
+
+#drag-ghost.ok {
+  border-color: #39ff88;
+}
+
+#drag-ghost.bad {
+  border-color: #ff5555;
+}
+
+.drag-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+.drag-label {
+  color: #9fb0cc;
+}
+
+/* Death fade: remounts per death token and animates from black. */
+#death-fade {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 40;
+}
+
+#death-fade.run {
+  animation: death-fade-out 1.7s ease-out forwards;
+}
+
+@keyframes death-fade-out {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Backpack panel slots (React) share the HUD look. */
+.bag-slot {
+  min-width: 64px;
+  padding: 5px 6px;
+  font-size: 11px;
+  text-align: center;
+  color: #cdd6e4;
+  background: rgb(0 0 0 / 55%);
+  border: 1px solid rgb(255 255 255 / 18%);
+  border-bottom: 3px solid var(--slot-color, transparent);
+  border-radius: 6px;
+}
+
+.bag-slot.selected {
+  border-color: #fff;
+  color: #fff;
+}
+
+.bag-slot.filled {
+  color: #fff;
+}
+
+.bag-grid {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.bag-grid .bag-slot {
+  flex: 1;
+  min-width: 0;
+  max-width: 72px;
+}

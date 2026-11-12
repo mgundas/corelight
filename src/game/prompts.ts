@@ -4,7 +4,7 @@
 
 import { STATION_INPUT_SLOTS } from '../core/constants.js';
 import { isKnownItem, itemDef } from '../data/loadData.js';
-import { placeableById, placeableForMachineType } from '../data/loadPlaceables.js';
+import { placeableById, placeableForMachineType, placeableForPackageItem } from '../data/loadPlaceables.js';
 import type { EntityId } from '../sim/entities.js';
 import type { World } from '../sim/world.js';
 import { depositCandidate, printerFor } from '../sim/craftingActions.js';
@@ -15,7 +15,7 @@ import { hasSelectedLightstick } from './interactWiring.js';
 import { findAimedItem, findAimedStation, findAimedTether } from './pickup.js';
 import { carriedPlaceable, placementCheckFor, type PlacementMode } from './placement.js';
 import { primaryPackTarget } from './packTarget.js';
-import { findAimedSnap } from './snapTarget.js';
+import { findAimedSnap, findPlacementTarget } from './snapTarget.js';
 
 function nameForId(id: string): string {
   if (isKnownItem(id)) return itemDef(id).name;
@@ -29,6 +29,8 @@ export function interactPrompt(
   aim: ToolAim,
   placement: PlacementMode,
   cable?: CableMode,
+  cursorItemId: EntityId | null = null,
+  cursorPackId: EntityId | null = null,
 ): string | null {
   if (!playerId) return null;
   if (cable?.isActive()) {
@@ -49,6 +51,24 @@ export function interactPrompt(
     }
     if (!check.ok) return `${carried.placeable.name}: ${check.reason} (E: cancel)`;
     return `Click: place ${carried.placeable.name} (E: cancel)`;
+  }
+  const grabbedId = world.entities.get(playerId)?.components.player?.grabbed;
+  if (grabbedId) {
+    const itemId = world.entities.get(grabbedId)?.components.item?.itemId;
+    const name = itemId ? nameForId(itemId) : 'item';
+    const def = itemId ? placeableForPackageItem(itemId) : undefined;
+    if (def && findPlacementTarget(world, playerId, def.id, aim)) {
+      return `Click: place ${def.name}`;
+    }
+    return `Click: drop ${name}`;
+  }
+  if (cursorItemId) {
+    const itemId = world.entities.get(cursorItemId)?.components.item?.itemId;
+    if (itemId) return `Click: grab ${nameForId(itemId)}`;
+  }
+  if (cursorPackId) {
+    const placeableId = world.entities.get(cursorPackId)?.components.placeable?.placeableId;
+    return `Click: move ${placeableId ? nameForId(placeableId) : 'structure'}`;
   }
   const packTarget = primaryPackTarget(world, playerId);
   if (packTarget) {

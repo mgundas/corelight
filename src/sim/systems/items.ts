@@ -37,11 +37,12 @@ export function makeItemsSystem(opts: ItemsOptions): (world: World, dt: number) 
   const bodies = new Map<EntityId, ItemBody>();
 
   return (world: World, dt: number) => {
-    // Drop bodies for deleted, carried, or planet-swapped items.
+    // Drop bodies for deleted, carried, grabbed, or planet-swapped items.
     for (const [id, entry] of [...bodies]) {
       const entity = world.entities.get(id);
       const held = entity?.components.item?.holder !== undefined;
-      if (!entity || entity.kind !== 'item' || held || entity.planetId !== entry.planetId) {
+      const grabbed = entity?.components.item?.grabbedBy !== undefined;
+      if (!entity || entity.kind !== 'item' || held || grabbed || entity.planetId !== entry.planetId) {
         try {
           opts.worldFor(entry.planetId).removeRigidBody(entry.body);
         } catch {
@@ -65,6 +66,7 @@ export function makeItemsSystem(opts: ItemsOptions): (world: World, dt: number) 
     // the player controller's 'pending' ground state).
     for (const entity of world.entities.values()) {
       if (entity.kind !== 'item' || entity.components.item?.holder !== undefined) continue;
+      if (entity.components.item?.grabbedBy !== undefined) continue;
       if (opts.groundReady && !opts.groundReady(entity.position)) {
         const frozen = bodies.get(entity.id);
         if (frozen) {

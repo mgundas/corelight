@@ -13,7 +13,7 @@ Read this file before every task. The **Hard rules** section is not optional. If
 | Noise | simplex-noise (with our own seeded RNG) |
 | Storage | idb-keyval (IndexedDB) |
 | Tests | vitest |
-| UI | Plain DOM + CSS modules in `src/ui/`. No React/Vue. |
+| UI | React + zustand in `src/ui/` (components `.tsx`, presentation stores). React owns DOM overlays only; three.js canvas stays outside. |
 
 Do not add other runtime dependencies without adding them to this table in the same commit and explaining why in the commit message.
 
@@ -40,7 +40,7 @@ src/
   planets/             PlanetConfig type, configs/sela.ts, configs/vorn.ts, solarSystem.ts
   render/              three.js only: scene, floating origin, chunk meshes, atmosphere, sky, lights, entity views
   player/              input mapping, camera rig, terrain tool (turns input into Actions)
-  ui/                  HUD, backpack, printer UI, menus, debug overlay
+  ui/                  React components (.tsx) + zustand presentation stores, menus, HUD, debug overlay, inventory drag
   save/                serialize/deserialize World, IndexedDB
   data/                items.json, recipes.json, research.json (data-driven game content)
   audio/               WebAudio procedural sound effects
@@ -165,5 +165,5 @@ interface Entity {
 
 - F1: overlay with FPS, tick time, planet, depth, layer, LOD chunk counts, worker queue length, draw calls, player world position, current origin.
 - F3: free-fly camera (fast, no collision, scroll to change speed).
-- F4: wireframe toggle. F5: show chunk bounds.
+- F4: wireframe toggle. B: show chunk bounds. (F5 is reserved by the browser for refresh and must not be intercepted.)
 - URL `?seed=123` overrides the world seed. `?skipBoot=1` skips pre-generation for fast iteration (low detail far away is fine).

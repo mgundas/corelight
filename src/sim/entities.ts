@@ -38,7 +38,7 @@ export interface OxygenComponent {
 
 export interface InventoryComponent {
   slots: (EntityId | null)[];
-  /** Selected slot index (0-based, drives the Q drop + HUD highlight). */
+  /** Selected slot index (0-based, drives drag/drop + HUD highlight). */
   selectedSlot: number;
 }
 
@@ -80,6 +80,8 @@ export interface ItemComponent {
   itemId: string;
   /** Player entity id holding this item, if any (carried items skip physics). */
   holder?: EntityId;
+  /** Player entity id grab-carrying this item (cursor mode). */
+  grabbedBy?: EntityId;
 }
 
 /** A tether post: oxygen relay when live (connected back to a habitat). */
@@ -186,6 +188,8 @@ export interface PlayerComponent {
    * Optional so pre-M09 saves (and their lazy component heals) stay valid.
    */
   carryingLarge?: EntityId | null;
+  /** Item levitating in front of the player during grab-carry (cursor mode). */
+  grabbed?: EntityId | null;
 }
 
 export interface Entity {

@@ -1,5 +1,5 @@
 // M10 cable tool state: first click arms a source, second click connects,
-// clicking a cabled snap cuts, and right-click exits. The sim action still
+// clicking a cabled snap cuts, and E exits. The sim action still
 // validates range/freeness; this test pins the click-click gesture.
 
 import { describe, expect, it } from 'vitest';
@@ -80,11 +80,11 @@ describe('cable tool', () => {
     mode.activate();
     const aSnap = { entityId: ctx.a, snapIndex: 2 };
     const bSnap = { entityId: ctx.b, snapIndex: 0 };
-    expect(mode.tick(ctx.world, ctx.playerId, aimAt(ctx, ctx.a, 2), true, false)).toBe(null);
+    expect(mode.tick(ctx.world, ctx.playerId, aimAt(ctx, ctx.a, 2), true)).toBe(null);
     expect(mode.pendingRef()).toEqual(aSnap);
     // Release then click: a fresh edge on the second snap.
-    expect(mode.tick(ctx.world, ctx.playerId, aimAt(ctx, ctx.b, 0), false, false)).toBe(null);
-    const request = mode.tick(ctx.world, ctx.playerId, aimAt(ctx, ctx.b, 0), true, false);
+    expect(mode.tick(ctx.world, ctx.playerId, aimAt(ctx, ctx.b, 0), false)).toBe(null);
+    const request = mode.tick(ctx.world, ctx.playerId, aimAt(ctx, ctx.b, 0), true);
     expect(request).toEqual({ type: 'connect', from: aSnap, to: bSnap });
     expect(mode.pendingRef()).toBe(null);
     ctx.world.dispatch({
@@ -107,18 +107,18 @@ describe('cable tool', () => {
     ) as EntityId;
     const mode = new CableMode();
     mode.activate();
-    const request = mode.tick(ctx.world, ctx.playerId, aimAt(ctx, ctx.a, 2), true, false);
+    const request = mode.tick(ctx.world, ctx.playerId, aimAt(ctx, ctx.a, 2), true);
     expect(request).toEqual({ type: 'disconnect', cableId });
   });
 
-  it('right-click exits and clears the pending source', () => {
+  it('keeps the pending source on a non-primary tick (RMB is unbound)', () => {
     const ctx = context();
     const mode = new CableMode();
     mode.activate();
-    mode.tick(ctx.world, ctx.playerId, aimAt(ctx, ctx.a, 2), true, false);
+    mode.tick(ctx.world, ctx.playerId, aimAt(ctx, ctx.a, 2), true);
     expect(mode.pendingRef()).not.toBe(null);
-    expect(mode.tick(ctx.world, ctx.playerId, aimAt(ctx, ctx.b, 0), false, true)).toBe(null);
-    expect(mode.isActive()).toBe(false);
-    expect(mode.pendingRef()).toBe(null);
+    expect(mode.tick(ctx.world, ctx.playerId, aimAt(ctx, ctx.b, 0), false)).toBe(null);
+    expect(mode.isActive()).toBe(true);
+    expect(mode.pendingRef()).not.toBe(null);
   });
 });

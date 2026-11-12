@@ -74,6 +74,8 @@ function stationState(world: World, playerId: EntityId, stationId: EntityId): Pr
     return itemId && isKnownItem(itemId) ? itemDef(itemId).name : null;
   });
   while (slots.length < STATION_INPUT_SLOTS) slots.push(null);
+  const stationRecipes = recipesForStation(machineType as RecipeStation);
+  const acceptsItemIds = [...new Set(stationRecipes.flatMap((recipe) => recipe.inputs.map((input) => input.item)))];
   const paused = station.components.power?.paused === true;
   const hint = printer.outputReady
     ? 'Output ready — press E or Collect.'
@@ -90,6 +92,7 @@ function stationState(world: World, playerId: EntityId, stationId: EntityId): Pr
       stationId,
       name: stationDef?.name ?? 'Station',
       slots,
+      acceptsItemIds,
       job: jobRecipe
         ? {
             name: nameForId(jobRecipe.output),
@@ -101,7 +104,7 @@ function stationState(world: World, playerId: EntityId, stationId: EntityId): Pr
         : null,
       outputName: printer.outputReady ? nameForId(printer.outputReady) : null,
     },
-    rows: recipesForStation(machineType as RecipeStation).map((recipe) =>
+    rows: stationRecipes.map((recipe) =>
       rowFor(recipe, count, busy),
     ),
   };
@@ -148,20 +151,8 @@ export function updatePrinterUi(
   ui.sync(state);
 }
 
-/** Build the panel with Action-dispatch handlers (keeps Game wiring short). */
-export function createPrinterUi(world: World, playerId: () => EntityId | null): PrinterUi {
-  return new PrinterUi({
-    onPrintBackpack: (recipeId) => {
-      const id = playerId();
-      if (id) world.dispatch({ type: 'printBackpack', playerId: id, recipeId });
-    },
-    onPrintStation: (stationId, recipeId) => {
-      const id = playerId();
-      if (id) world.dispatch({ type: 'printAtStation', playerId: id, stationId, recipeId });
-    },
-    onCollect: (stationId) => {
-      const id = playerId();
-      if (id) world.dispatch({ type: 'collectStation', playerId: id, stationId });
-    },
-  });
+/** Build the panel controller. Buttons dispatch Actions via the UI command
+ * bridge installed by Game (ui/stores/commandsStore.ts). */
+export function createPrinterUi(): PrinterUi {
+  return new PrinterUi();
 }

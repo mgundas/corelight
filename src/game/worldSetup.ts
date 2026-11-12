@@ -17,6 +17,7 @@ import { physicsWorldFor } from '../sim/physics/rapierWorld.js';
 import { findSpawnPosition } from '../sim/physics/spawn.js';
 import { makePhysicsSystem } from '../sim/physics/system.js';
 import { makeItemsSystem } from '../sim/systems/items.js';
+import { updateGrab } from '../sim/systems/grab.js';
 import { updateCrafting } from '../sim/systems/crafting.js';
 import { updateLightsticks } from '../sim/systems/lightsticks.js';
 import { updateNodes } from '../sim/systems/nodes.js';
@@ -268,6 +269,8 @@ export function setupWorldSystems(
   );
   // Deterministic resource nodes stream in around each player.
   world.addSystem((tickWorld) => updateNodes(tickWorld, planets));
+  // Grab-carry follow (cursor mode): levitating item tracks the aim.
+  world.addSystem((tickWorld) => updateGrab(tickWorld, planets));
   // Tether graph (recomputed only on topology/nearby-edit changes).
   world.addSystem((tickWorld) => updateTethers(tickWorld, planets));
   // Oxygen breathing, canisters and death/respawn (reads the tether graph).

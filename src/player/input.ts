@@ -1,6 +1,11 @@
-// Player keyboard/mouse state, sampled once per sim tick by Game and sent
-// as a playerInput Action (ARCHITECTURE.md hard rule 2). Pointer lock on
-// click; drag fallback like the free-fly camera. F3 is owned by Game.
+// Player keyboard/mouse state, sampled once per sim tick by Game and sent as
+// a playerInput Action (ARCHITECTURE.md hard rule 2).
+//
+// Cursor model: the pointer is NOT captured during normal play. Hold middle
+// mouse to orbit the camera; only then is the pointer locked (fixed in place)
+// so movement is unbounded. Right mouse is unbound everywhere. Q equips the
+// terrain tool, X toggles dig/add while equipped; with the tool off LMB is
+// grab-carry (handled by Game/tickInput).
 
 import { BACKPACK_SLOTS } from '../core/constants.js';
 
@@ -10,13 +15,17 @@ export class PlayerInput {
   private jumpQueued = false;
   private headlampQueued = false;
   private interactQueued = false;
-  private dropQueued = false;
   private tetherQueued = false;
   private printerQueued = false;
   private cableQueued = false;
+  private toolQueued = false;
+  private brushQueued = false;
+  private primaryQueued = false;
   private selectQueued: number | null = null;
   /** True while E is physically down (hold-to-pack). */
   private interactHeld = false;
+  /** True while middle mouse (orbit) is held. */
+  private orbiting = false;
   private enabled = true;
   private canvas: HTMLCanvasElement | null = null;
   private lookTarget: { addLook: (dx: number, dy: number) => void } | null = null;
@@ -25,6 +34,9 @@ export class PlayerInput {
   private dragging = false;
   private lastX = 0;
   private lastY = 0;
+  /** Latest cursor position in CSS pixels (for screen-space aim/picking). */
+  cursorX = 0;
+  cursorY = 0;
 
   attach(
     canvas: HTMLCanvasElement,
@@ -36,6 +48,8 @@ export class PlayerInput {
     this.lookTarget = lookTarget;
     this.zoomTarget = zoomTarget;
     this.radiusTarget = radiusTarget ?? null;
+    this.cursorX = window.innerWidth / 2;
+    this.cursorY = window.innerHeight / 2;
     window.addEventListener('keydown', this.handleKeyDown);
     window.addEventListener('keyup', this.handleKeyUp);
     canvas.addEventListener('mousedown', this.handleMouseDown);
@@ -43,6 +57,7 @@ export class PlayerInput {
     window.addEventListener('mousemove', this.handleMouseMove);
     window.addEventListener('mouseup', this.handleMouseUp);
     window.addEventListener('blur', this.handleBlur);
+    document.addEventListener('pointerlockchange', this.handlePointerLockChange);
     canvas.addEventListener('wheel', this.handleWheel, { passive: false });
   }
 
@@ -54,7 +69,9 @@ export class PlayerInput {
     window.removeEventListener('mousemove', this.handleMouseMove);
     window.removeEventListener('mouseup', this.handleMouseUp);
     window.removeEventListener('blur', this.handleBlur);
+    document.removeEventListener('pointerlockchange', this.handlePointerLockChange);
     this.canvas?.removeEventListener('wheel', this.handleWheel);
+    this.releaseOrbit();
     this.keys.clear();
     this.mouseButtons.clear();
     this.canvas = null;
@@ -68,13 +85,16 @@ export class PlayerInput {
     this.jumpQueued = false;
     this.headlampQueued = false;
     this.interactQueued = false;
-    this.dropQueued = false;
     this.tetherQueued = false;
     this.printerQueued = false;
     this.cableQueued = false;
+    this.toolQueued = false;
+    this.brushQueued = false;
+    this.primaryQueued = false;
     this.selectQueued = null;
     this.interactHeld = false;
     this.dragging = false;
+    this.releaseOrbit();
   }
 
   /** Strafe/forward intent in [-1, 1]. */
@@ -125,11 +145,25 @@ export class PlayerInput {
     return cable;
   }
 
-  /** Edge-triggered: true once per Q keydown (drop the selected slot). */
-  consumeDrop(): boolean {
-    const drop = this.dropQueued;
-    this.dropQueued = false;
-    return drop;
+  /** Edge-triggered: true once per Q keydown (equip/stow the terrain tool). */
+  consumeToolToggle(): boolean {
+    const tool = this.toolQueued;
+    this.toolQueued = false;
+    return tool;
+  }
+
+  /** Edge-triggered: true once per X keydown (dig <-> add brush). */
+  consumeBrushToggle(): boolean {
+    const brush = this.brushQueued;
+    this.brushQueued = false;
+    return brush;
+  }
+
+  /** Edge-triggered: true once per left mouse down (grab/release click). */
+  consumePrimaryClick(): boolean {
+    const click = this.primaryQueued;
+    this.primaryQueued = false;
+    return click;
   }
 
   /** Edge-triggered: true once per T keydown (place a tether post). */
@@ -153,20 +187,46 @@ export class PlayerInput {
     return select;
   }
 
-  /** Terrain tool buttons: left = dig, right = add, F or middle = flatten. */
-  toolButtons(): { dig: boolean; add: boolean; flatten: boolean } {
+  /** True while the middle mouse button (camera orbit) is held. */
+  isOrbiting(): boolean {
+    return this.orbiting;
+  }
+
+  /**
+   * Tool buttons: left = primary brush (dig or add, chosen by ToolMode),
+   * F = flatten. Right mouse is unbound and never reports here.
+   */
+  toolButtons(): { primary: boolean; flatten: boolean } {
     return {
-      dig: this.mouseButtons.has(0),
-      add: this.mouseButtons.has(2),
-      flatten: this.keys.has('KeyF') || this.mouseButtons.has(1),
+      primary: this.mouseButtons.has(0),
+      flatten: this.keys.has('KeyF'),
     };
   }
+
+  private releaseOrbit(): void {
+    this.orbiting = false;
+    this.dragging = false;
+    if (document.pointerLockElement === this.canvas) {
+      try {
+        document.exitPointerLock();
+      } catch {
+        // Pointer lock unavailable; nothing to release.
+      }
+    }
+  }
+
+  private handlePointerLockChange = (): void => {
+    // Losing the lock (Esc, tab switch) must never leave the camera stuck in
+    // orbit mode; the next middle-mouse press re-locks.
+    if (document.pointerLockElement !== this.canvas) this.orbiting = false;
+  };
 
   private handleBlur = (): void => {
     this.keys.clear();
     this.mouseButtons.clear();
     this.interactHeld = false;
     this.dragging = false;
+    this.releaseOrbit();
   };
 
   private handleKeyDown = (e: KeyboardEvent): void => {
@@ -190,7 +250,11 @@ export class PlayerInput {
       return;
     }
     if (e.code === 'KeyQ') {
-      if (!e.repeat) this.dropQueued = true;
+      if (!e.repeat) this.toolQueued = true;
+      return;
+    }
+    if (e.code === 'KeyX') {
+      if (!e.repeat) this.brushQueued = true;
       return;
     }
     if (e.code === 'KeyT') {
@@ -226,29 +290,39 @@ export class PlayerInput {
 
   private handleMouseDown = (e: MouseEvent): void => {
     if (!this.enabled) return;
-    if (document.pointerLockElement !== this.canvas) {
-      try {
-        const result = this.canvas?.requestPointerLock() as unknown as Promise<void> | undefined;
-        result?.catch?.(() => {});
-      } catch {
-        // Pointer lock unavailable — drag fallback still works.
+    // Right mouse is deliberately unbound (no add brush, no menu action);
+    // the context menu is still suppressed by handleContextMenu.
+    if (e.button === 2) return;
+    this.mouseButtons.add(e.button);
+    if (e.button === 0) this.primaryQueued = true;
+    if (e.button === 1) {
+      // Middle mouse: orbit. Lock the pointer only for the duration of the
+      // hold so the cursor is fixed while looking around.
+      e.preventDefault();
+      this.orbiting = true;
+      this.dragging = true;
+      this.lastX = e.clientX;
+      this.lastY = e.clientY;
+      if (document.pointerLockElement !== this.canvas) {
+        try {
+          const result = this.canvas?.requestPointerLock() as unknown as Promise<void> | undefined;
+          result?.catch?.(() => {});
+        } catch {
+          // Pointer lock unavailable — drag fallback still works.
+        }
       }
     }
-    this.mouseButtons.add(e.button);
-    // Middle click would autoscroll the page: suppress it (it is flatten).
-    if (e.button === 1) e.preventDefault();
-    this.dragging = true;
-    this.lastX = e.clientX;
-    this.lastY = e.clientY;
   };
 
   private handleContextMenu = (e: MouseEvent): void => {
-    // Right mouse is the add brush, not a menu.
+    // Never let a stray right click open the browser menu over the game.
     e.preventDefault();
   };
 
   private handleMouseMove = (e: MouseEvent): void => {
-    if (!this.enabled) return;
+    this.cursorX = e.clientX;
+    this.cursorY = e.clientY;
+    if (!this.enabled || !this.orbiting) return;
     let dx = 0;
     let dy = 0;
     if (document.pointerLockElement === this.canvas) {
@@ -267,7 +341,7 @@ export class PlayerInput {
 
   private handleMouseUp = (e: MouseEvent): void => {
     this.mouseButtons.delete(e.button);
-    this.dragging = false;
+    if (e.button === 1) this.releaseOrbit();
   };
 
   private handleWheel = (e: WheelEvent): void => {

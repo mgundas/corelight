@@ -9,6 +9,7 @@ import type { World } from './sim/world.js';
 import { deserializeWorld } from './save/serialize.js';
 import { clearSave, hasSave, loadSave, startAutosave, storeSave } from './save/storage.js';
 import { showMainMenu, showPauseMenu } from './ui/menu.js';
+import { mountUi } from './ui/react/mount.js';
 import './main.css';
 
 /** One live session: game + autosave + pause wiring, all disposed on quit. */
@@ -145,11 +146,13 @@ async function boot(): Promise<void> {
   canvas.id = 'scene';
   app.appendChild(canvas);
   appCanvas = canvas;
+  // React + zustand UI root (HUD, printer, menus, debug overlay, drag ghost).
+  mountUi();
 
   const hint = document.createElement('div');
   hint.id = 'hint';
   hint.textContent =
-    'Corelight M10 — WASD move, click look, Space jump, Shift sprint, wheel zoom, LMB dig, RMB add, F flatten, Ctrl+wheel brush size, E interact, hold E pack up, Tab printer, C cable tool (click snap, click target; click a cabled snap to cut), Q drop, 1-8 slots, T tether, L headlamp, Esc menu, F1 overlay, F3 fly, F4 wireframe, F5 chunk bounds. Dev: ?dev=1 tethers, ?build=1 power-base packages';
+    'Corelight — WASD move, hold MMB look, Space jump, Shift sprint, wheel zoom, Q terrain tool (LMB use, X dig/add, F flatten, Ctrl+wheel size), LMB click grabs/releases items with the tool off, drag backpack slots to move/drop, E interact, hold E pack up, Tab printer, C cable tool, 1-8 slots, T tether, L headlamp, Esc menu, F1 overlay, F3 fly, F4 wireframe, B chunk bounds. Dev: ?dev=1 tethers, ?build=1 power-base packages';
   app.appendChild(hint);
 
   const { prebuilt } = await runBootSafe(bootSeed, params.skipBoot);

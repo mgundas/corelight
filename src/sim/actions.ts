@@ -1,31 +1,24 @@
 import type { Vec3d } from '../core/math.js';
-import { distance, IDENTITY_QUAT } from '../core/math.js';
-import {
-  BACKPACK_SLOTS,
-  OXYGEN_MAX,
-  SOIL_MAX,
-  TOOL_MAX_RADIUS,
-  TOOL_MIN_RADIUS,
-  TOOL_RANGE_M,
-  TOOL_RANGE_SLACK_M,
-} from '../core/constants.js';
+import { IDENTITY_QUAT } from '../core/math.js';
+import { BACKPACK_SLOTS, OXYGEN_MAX } from '../core/constants.js';
 import { events } from '../core/events.js';
-import { layerAt } from '../terrain/density.js';
-import type { EditMode, FlattenPlane } from '../terrain/edits.js';
+import type { EditMode } from '../terrain/edits.js';
 import type { EntityId, SnapRef } from './entities.js';
 import {
   collectStation,
+  depositSlotToStation,
   depositToStation,
   printAtStation,
   printBackpack,
 } from './craftingActions.js';
 import { connectCable, disconnectCable } from './cableActions.js';
-import { dropItem, pickUpItem } from './inventoryActions.js';
-import { mineNodes } from './mining.js';
+import { dropItem, moveItem, pickUpItem } from './inventoryActions.js';
+import { grabItem, releaseGrabbed } from './grabActions.js';
 import { packUpPlaced } from './packActions.js';
 import { placeLightstick, placePlaceable } from './placeActions.js';
 import type { PlacementTarget } from './placeResolve.js';
-import { baseFieldFor, placeTether, removeTether, spawnHabitatEntity } from './tetherActions.js';
+import { applyTerrainEdit } from './terrainEditAction.js';
+import { placeTether, removeTether, spawnHabitatEntity } from './tetherActions.js';
 import type { World } from './world.js';
 
 // All gameplay changes go through Actions (ARCHITECTURE.md hard rule 2).
@@ -61,6 +54,19 @@ export type Action =
   | { type: 'pickUp'; playerId: EntityId; itemId: EntityId }
   | { type: 'drop'; playerId: EntityId; slot: number }
   | { type: 'selectSlot'; playerId: EntityId; slot: number }
+  | { type: 'moveItem'; playerId: EntityId; from: number; to: number }
+  | { type: 'grabItem'; playerId: EntityId; itemId: EntityId }
+  | {
+      type: 'releaseGrabbed';
+      playerId: EntityId;
+      /** Requested drop point (cursor aim), or null for "in front". */
+      position: Vec3d | null;
+      /** False = always drop loose (stowing the tool), never place. */
+      allowPlace?: boolean;
+      /** Platform rim snap or top slot for packaged placeables. */
+      snap?: PlacementTarget['snap'];
+      slot?: PlacementTarget['slot'];
+    }
   | { type: 'spawnHabitat'; planetId: string; position: Vec3d }
   | { type: 'placeTether'; playerId: EntityId }
   | { type: 'removeTether'; playerId: EntityId; tetherId: EntityId }
@@ -69,6 +75,7 @@ export type Action =
   | { type: 'packUpPlaced'; playerId: EntityId; entityId: EntityId }
   | { type: 'printBackpack'; playerId: EntityId; recipeId: string }
   | { type: 'depositToStation'; playerId: EntityId; stationId: EntityId }
+  | { type: 'depositSlotToStation'; playerId: EntityId; stationId: EntityId; slot: number }
   | { type: 'printAtStation'; playerId: EntityId; stationId: EntityId; recipeId: string }
   | { type: 'collectStation'; playerId: EntityId; stationId: EntityId }
   | {
@@ -126,6 +133,7 @@ export function applyAction(world: World, action: Action): void {
             headlampOn: true,
             deathMarkerId: null,
             carryingLarge: null,
+            grabbed: null,
           },
           inventory: {
             slots: Array<EntityId | null>(BACKPACK_SLOTS).fill(null),
@@ -195,113 +203,7 @@ export function applyAction(world: World, action: Action): void {
       return;
     }
     case 'terrainEdit': {
-      const entity = world.entities.get(action.playerId);
-      const player = entity?.components.player;
-      if (!entity || entity.kind !== 'player' || !player) return;
-      const planet = world.planets.find((p) => p.id === action.planetId);
-      if (!planet) return;
-      // Terminal validation always emits: an action reaching a known player
-      // and planet was processed, even when rejected (debug/UI counting
-      // depends on it). Unknown players/planets stay silent (unprocessable).
-      // The sim trusts no crafted action: the stroke must belong to the
-      // player's planet and start within tool range of the player. NaN
-      // centers/radii would corrupt soil accounting and saves, so they are
-      // rejected; out-of-range radii clamp to the tool's brush limits.
-      if (
-        !Number.isFinite(action.radius) ||
-        action.radius <= 0 ||
-        !Number.isFinite(action.strength) ||
-        typeof action.center?.x !== 'number' ||
-        typeof action.center?.y !== 'number' ||
-        typeof action.center?.z !== 'number' ||
-        !Number.isFinite(action.center.x) ||
-        !Number.isFinite(action.center.y) ||
-        !Number.isFinite(action.center.z)
-      ) {
-        events.emit('actionApplied', { type: action.type });
-        return;
-      }
-      const radius = Math.min(TOOL_MAX_RADIUS, Math.max(TOOL_MIN_RADIUS, action.radius));
-      if (
-        entity.planetId !== planet.id ||
-        action.strength <= 0 ||
-        !Number.isFinite(action.strength) ||
-        distance(entity.position, action.center) > TOOL_RANGE_M + TOOL_RANGE_SLACK_M + radius
-      ) {
-        events.emit('actionApplied', { type: action.type });
-        return;
-      }
-      // A non-finite flatten plane would smear NaN deltas into the edit
-      // store (and then into saves): reject the stroke instead.
-      if (action.flattenPlane) {
-        const fp = action.flattenPlane;
-        if (
-          typeof fp.point?.x !== 'number' ||
-          typeof fp.point?.y !== 'number' ||
-          typeof fp.point?.z !== 'number' ||
-          typeof fp.normal?.x !== 'number' ||
-          typeof fp.normal?.y !== 'number' ||
-          typeof fp.normal?.z !== 'number' ||
-          !Number.isFinite(fp.point.x) ||
-          !Number.isFinite(fp.point.y) ||
-          !Number.isFinite(fp.point.z) ||
-          !Number.isFinite(fp.normal.x) ||
-          !Number.isFinite(fp.normal.y) ||
-          !Number.isFinite(fp.normal.z)
-        ) {
-          events.emit('actionApplied', { type: action.type });
-          return;
-        }
-      }
-      // Add mode consumes soil; an empty counter fails the whole stroke bit.
-      if (action.mode === 'add' && player.soil <= 0) {
-        events.emit('actionApplied', { type: action.type });
-        return;
-      }
-      const field = baseFieldFor(world, planet.id);
-      const local = {
-        x: action.center.x - planet.center.x,
-        y: action.center.y - planet.center.y,
-        z: action.center.z - planet.center.z,
-      };
-      const plane: FlattenPlane | undefined = action.flattenPlane
-        ? {
-            point: {
-              x: action.flattenPlane.point.x - planet.center.x,
-              y: action.flattenPlane.point.y - planet.center.y,
-              z: action.flattenPlane.point.z - planet.center.z,
-            },
-            normal: { ...action.flattenPlane.normal },
-          }
-        : undefined;
-      const outcome = world.terrainEdits.applySphere(
-        planet,
-        field.density,
-        local,
-        radius,
-        action.strength,
-        action.mode,
-        {
-          maxHardness: player.toolHardness,
-          hardnessAt: (x, y, z) => layerAt(planet, x, y, z).hardness,
-          flattenPlane: plane,
-          // Digging earns soil; adding/flattening may only flip what the
-          // counter covers (never spend what the player does not have).
-          soilBudget: action.mode === 'dig' ? undefined : player.soil,
-        },
-      );
-      player.soil = Math.min(SOIL_MAX, Math.max(0, player.soil + outcome.gained - outcome.spent));
-      if (outcome.blocked) player.lastTooHard = world.time;
-      // Mining: a dig stroke that actually moved terrain and overlaps a node
-      // shakes one charge loose as a physical item beside it. Fully blocked
-      // (too-hard) strokes mine nothing. Add/flatten never mine.
-      if (action.mode === 'dig' && outcome.keys.length > 0) {
-        mineNodes(world, planet.id, action.center, radius);
-      }
-      if (outcome.keys.length > 0) {
-        events.emit('terrainEdited', { planetId: planet.id, keys: outcome.keys });
-      }
-      events.emit('actionApplied', { type: action.type });
+      applyTerrainEdit(world, action);
       return;
     }
     case 'pickUp': {
@@ -323,6 +225,20 @@ export function applyAction(world: World, action: Action): void {
         inventory.selectedSlot = action.slot;
       }
       events.emit('actionApplied', { type: action.type });
+      return;
+    }
+    case 'moveItem': {
+      moveItem(world, action.playerId, action.from, action.to);
+      return;
+    }
+    case 'grabItem': {
+      grabItem(world, action.playerId, action.itemId);
+      return;
+    }
+    case 'releaseGrabbed': {
+      const target: PlacementTarget | null =
+        action.snap || action.slot ? { snap: action.snap, slot: action.slot } : null;
+      releaseGrabbed(world, action.playerId, action.position, target, action.allowPlace !== false);
       return;
     }
     case 'spawnHabitat': {
@@ -355,6 +271,10 @@ export function applyAction(world: World, action: Action): void {
     }
     case 'depositToStation': {
       depositToStation(world, action.playerId, action.stationId);
+      return;
+    }
+    case 'depositSlotToStation': {
+      depositSlotToStation(world, action.playerId, action.stationId, action.slot);
       return;
     }
     case 'printAtStation': {

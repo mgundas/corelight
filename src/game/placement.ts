@@ -55,8 +55,7 @@ export class PlacementMode {
   private activeId: string | null = null;
   /** Button edges are tracked while inactive too, so entering placement
    * with the mouse already held cannot instantly place. */
-  private lastDig = false;
-  private lastAdd = false;
+  private lastPrimary = false;
 
   activePlaceableId(): string | null {
     return this.activeId;
@@ -70,6 +69,15 @@ export class PlacementMode {
     this.activeId = placeableId;
   }
 
+  /**
+   * Enter placement from a click on a placed structure: seed the button edge
+   * as already held so the same click cannot instantly re-place it.
+   */
+  enterFromClick(placeableId: string): void {
+    this.activeId = placeableId;
+    this.lastPrimary = true;
+  }
+
   cancel(): void {
     this.activeId = null;
   }
@@ -77,19 +85,11 @@ export class PlacementMode {
   /**
    * Call once per sim tick. Returns a placement request on a fresh left-click
    * over a valid spot; the caller dispatches it. Invalid clicks keep the mode
-   * active (the ghost is red), right-click or E cancels.
+   * active (the ghost is red), E cancels.
    */
-  tick(
-    world: World,
-    playerId: EntityId,
-    aim: ToolAim,
-    dig: boolean,
-    add: boolean,
-  ): PlacementRequest | null {
-    const digEdge = dig && !this.lastDig;
-    const addEdge = add && !this.lastAdd;
-    this.lastDig = dig;
-    this.lastAdd = add;
+  tick(world: World, playerId: EntityId, aim: ToolAim, primary: boolean): PlacementRequest | null {
+    const primaryEdge = primary && !this.lastPrimary;
+    this.lastPrimary = primary;
     if (!this.activeId) return null;
     const player = world.entities.get(playerId);
     const carried = carriedPlaceable(world, playerId);
@@ -97,11 +97,7 @@ export class PlacementMode {
       this.activeId = null;
       return null;
     }
-    if (addEdge) {
-      this.activeId = null;
-      return null;
-    }
-    if (!digEdge) return null;
+    if (!primaryEdge) return null;
     const target = findPlacementTarget(world, playerId, this.activeId, aim);
     if (!aim.hit && !target) return null;
     const requested = aim.hit ?? { x: 0, y: 0, z: 0 };

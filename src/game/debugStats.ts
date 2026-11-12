@@ -26,6 +26,8 @@ export interface DebugStatsContext {
   playerId: EntityId | null;
   toolAim: ToolAim;
   toolRadius: number;
+  toolMode: 'cursor' | 'deform';
+  brushMode: 'dig' | 'add';
   fps: number;
   tickMs: number;
   flySpeed: number;
@@ -92,6 +94,8 @@ export function updateDebugOverlay(ctx: DebugStatsContext): void {
     loadedColliders: ctx.colliders.loadedCount,
     soil: playerComp?.soil,
     toolRadius: ctx.toolRadius,
+    toolMode: ctx.toolMode,
+    brushMode: ctx.brushMode,
     toolInfo,
     tooHard:
       playerComp !== undefined &&

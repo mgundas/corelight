@@ -151,8 +151,37 @@ export function pickUpItem(world: World, playerId: EntityId, itemId: EntityId): 
   events.emit('actionApplied', { type: 'pickUp' });
 }
 
-export function dropItem(world: World, playerId: EntityId, slot: number): void {
-  const playerEntity = world.entities.get(playerId);
+/**
+ * Drag-and-drop reorder: move a slot's item into another slot, swapping when
+ * the target is occupied. One item per slot, so this is the whole operation.
+ */
+export function moveItem(world: World, playerId: EntityId, from: number, to: number): void {
+  const inventory = inventoryFor(world, playerId);
+  if (
+    !inventory ||
+    !Number.isInteger(from) ||
+    !Number.isInteger(to) ||
+    from < 0 ||
+    to < 0 ||
+    from >= BACKPACK_SLOTS ||
+    to >= BACKPACK_SLOTS ||
+    from === to
+  ) {
+    events.emit('actionApplied', { type: 'moveItem' });
+    return;
+  }
+  const moved = inventory.slots[from] ?? null;
+  if (!moved) {
+    events.emit('actionApplied', { type: 'moveItem' });
+    return;
+  }
+  inventory.slots[from] = inventory.slots[to] ?? null;
+  inventory.slots[to] = moved;
+  inventory.selectedSlot = to;
+  events.emit('actionApplied', { type: 'moveItem' });
+}
+
+export function dropItem(world: World, playerId: EntityId, slot: number): void {  const playerEntity = world.entities.get(playerId);
   const inventory = inventoryFor(world, playerId);
   if (!playerEntity || !inventory) return;
   if (!Number.isInteger(slot) || slot < 0 || slot >= BACKPACK_SLOTS) {
@@ -161,7 +190,8 @@ export function dropItem(world: World, playerId: EntityId, slot: number): void {
   }
   const carriedId = inventory.slots[slot] as EntityId | null;
   const player = playerEntity.components.player;
-  // Empty selected slot + a front-carried large package: Q drops the package.
+  // Empty selected slot + a front-carried large package: dropping the slot
+  // (drag outside the inventory) drops the package.
   const largeId = carriedId ? null : (player?.carryingLarge ?? null);
   const dropId = carriedId ?? largeId;
   if (!dropId) {

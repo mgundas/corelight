@@ -21,19 +21,10 @@ export function tickBackpackInput(
   canAct: boolean,
 ): void {
   const select = input.consumeSelect();
-  const drop = input.consumeDrop();
   const tether = input.consumeTether();
   if (!canAct || !playerId) return;
   if (select !== null && select >= 0 && select < BACKPACK_SLOTS) {
     world.dispatch({ type: 'selectSlot', playerId, slot: select });
-  }
-  if (drop) {
-    const holder = world.entities.get(playerId);
-    world.dispatch({
-      type: 'drop',
-      playerId,
-      slot: holder?.components.inventory?.selectedSlot ?? 0,
-    });
   }
   // T spends one backpack Tether item on a post under the player.
   if (tether) {

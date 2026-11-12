@@ -193,6 +193,51 @@ export function depositToStation(world: World, playerId: EntityId, stationId: En
   events.emit('actionApplied', { type: 'depositToStation' });
 }
 
+/** Drag-and-drop deposit: load the item from a specific backpack slot. */
+export function depositSlotToStation(
+  world: World,
+  playerId: EntityId,
+  stationId: EntityId,
+  slot: number,
+): void {
+  const player = world.entities.get(playerId);
+  const station = world.entities.get(stationId);
+  const inventory = player ? inventoryFor(world, playerId) : null;
+  const printer = station ? ensurePrinter(station) : null;
+  if (
+    !player ||
+    !station ||
+    !inventory ||
+    !printer ||
+    !Number.isInteger(slot) ||
+    slot < 0 ||
+    slot >= inventory.slots.length
+  ) {
+    events.emit('actionApplied', { type: 'depositSlotToStation' });
+    return;
+  }
+  const itemId = inventory.slots[slot];
+  const item = itemId ? world.entities.get(itemId)?.components.item : undefined;
+  const machineType = station.components.machine?.machineType;
+  if (!itemId || !item || !machineType) {
+    events.emit('actionApplied', { type: 'depositSlotToStation' });
+    return;
+  }
+  // The sim trusts no crafted action: the station must actually consume this
+  // item id, and the player must be near with room in the input slots.
+  const consumes = recipesForStation(machineType as RecipeStation).some((recipe) =>
+    recipe.inputs.some((input) => input.item === item.itemId),
+  );
+  if (!consumes || !nearStation(player, station) || printer.inputs.length >= STATION_INPUT_SLOTS) {
+    events.emit('actionApplied', { type: 'depositSlotToStation' });
+    return;
+  }
+  inventory.slots[slot] = null;
+  item.holder = stationId;
+  printer.inputs.push(itemId);
+  events.emit('actionApplied', { type: 'depositSlotToStation' });
+}
+
 /** Start a station job; inputs are consumed now, output appears after time. */
 export function printAtStation(
   world: World,

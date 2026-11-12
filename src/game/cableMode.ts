@@ -1,7 +1,7 @@
 // Cable tool state (M10). Presentation/input state, not World state: a click
 // either arms a source snap, completes a connection, or cuts an existing
 // cable. Game dispatches the Action and the sim re-validates range/freeness.
-// C toggles the tool; right-click or E exits back to the terrain tool.
+// C toggles the tool; E exits back to the cursor/terrain tool.
 
 import { CABLE_MAX_LENGTH_M } from '../core/constants.js';
 import { distance } from '../core/math.js';
@@ -18,8 +18,7 @@ export type CableRequest =
 export class CableMode {
   private active = false;
   private pending: SnapRef | null = null;
-  private lastDig = false;
-  private lastAdd = false;
+  private lastPrimary = false;
 
   isActive(): boolean {
     return this.active;
@@ -49,23 +48,11 @@ export class CableMode {
    * a free snap arms the source, the next free snap within 10 m connects,
    * and a click on a cabled snap cuts that cable.
    */
-  tick(
-    world: World,
-    playerId: EntityId,
-    aim: ToolAim,
-    dig: boolean,
-    add: boolean,
-  ): CableRequest | null {
-    const digEdge = dig && !this.lastDig;
-    const addEdge = add && !this.lastAdd;
-    this.lastDig = dig;
-    this.lastAdd = add;
+  tick(world: World, playerId: EntityId, aim: ToolAim, primary: boolean): CableRequest | null {
+    const primaryEdge = primary && !this.lastPrimary;
+    this.lastPrimary = primary;
     if (!this.active) return null;
-    if (addEdge) {
-      this.cancel();
-      return null;
-    }
-    if (!digEdge) return null;
+    if (!primaryEdge) return null;
     const aimed = findAimedSnap(world, playerId, aim);
     if (!aimed) return null;
     if (this.pending) {

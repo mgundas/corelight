@@ -11,6 +11,7 @@ import type { ToolAim } from '../player/terrainTool.js';
 import type { Hud } from '../ui/hud.js';
 import type { PlacementMode } from './placement.js';
 import type { CableMode } from './cableMode.js';
+import type { ToolMode } from './toolMode.js';
 import { carriedPlaceable, placementCheckFor } from './placement.js';
 import { backpackFrame } from './backpackWiring.js';
 import { oxygenStatusFor } from './oxygenStatus.js';
@@ -28,6 +29,11 @@ export interface FrameHudDeps {
   aim: ToolAim;
   placement: PlacementMode;
   cable?: CableMode;
+  toolMode: ToolMode;
+  /** Loose item under the cursor (cursor mode), else null. */
+  cursorItemId: EntityId | null;
+  /** Empty structure under the cursor (cursor mode), else null. */
+  cursorPackId: EntityId | null;
 }
 
 /** Render synced entity views and refresh the HUD slot bar + oxygen meter. */
@@ -47,12 +53,22 @@ export function updateFrameHud(deps: FrameHudDeps): void {
     slots: frame.slotDefs,
     selectedSlot: frame.selectedSlot,
     soil: frame.soil,
-    prompt: interactPrompt(deps.world, activePlayer, deps.aim, deps.placement, deps.cable),
+    prompt: interactPrompt(
+      deps.world,
+      activePlayer,
+      deps.aim,
+      deps.placement,
+      deps.cable,
+      deps.cursorItemId,
+      deps.cursorPackId,
+    ),
     oxygen: o2?.oxygen ?? 100,
     onNetwork: o2?.onNetwork ?? true,
     habitatHint: o2?.habitat ?? null,
     deathHint: o2?.deathMarker ?? null,
     power: power?.status ?? null,
+    toolMode: deps.toolMode.active ? 'deform' : 'cursor',
+    brushMode: deps.toolMode.brush,
   });
 }
 

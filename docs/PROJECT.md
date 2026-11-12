@@ -103,22 +103,27 @@ Each core chamber holds an ancient engine with an activation socket. Sela's engi
 | Key | Action |
 |---|---|
 | WASD | Move |
-| Mouse | Look (pointer lock) |
+| Hold middle mouse | Look (pointer is free otherwise; right mouse is unbound) |
 | Space | Jump / thrust up in jetpack-free low gravity / shuttle thrust |
 | Shift | Sprint |
-| Left mouse | Use tool (dig) |
-| Right mouse | Tool alt (add terrain) |
-| Middle mouse or F | Tool flatten mode |
+| Q | Equip / stow the terrain tool |
+| Left mouse (tool on) | Use the selected brush |
+| X (tool on) | Switch brush: dig <-> add |
+| F (tool on) | Flatten mode |
+| Ctrl+wheel (tool on) | Brush size |
+| Left mouse (tool off) | Grab / release the item under the cursor (levitates it; release near a platform slot to place) |
+| Drag backpack slot | Reorder / swap; drop outside the inventory to drop it into the world |
 | C | Cable tool: click a snap, click a target; click a cabled snap to cut |
 | Hold E | Pack up an empty machine/platform |
 | E | Interact / pick up / enter shuttle |
 | Tab | Backpack and printer UI |
-| Q | Drop held item |
 | T | Place tether |
 | L | Toggle headlamp |
 | 1 to 8 | Select backpack slot |
 | F1 | Debug overlay |
 | F3 | Free-fly debug camera |
+| F4 | Wireframe toggle |
+| B | Show chunk bounds |
 | Esc | Pause menu |
 
 ## Out of scope for v1

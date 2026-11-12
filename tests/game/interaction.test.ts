@@ -352,7 +352,7 @@ describe('placement mode confirmation', () => {
     give(ctx.world, ctx.playerId, 'platform_package');
     const placement = new PlacementMode();
     placement.enter('platform');
-    const request = placement.tick(ctx.world, ctx.playerId, ctx.aim, true, false);
+    const request = placement.tick(ctx.world, ctx.playerId, ctx.aim, true);
     expect(request?.placeableId).toBe('platform');
     expect(placement.isActive()).toBe(false);
     if (request) {
@@ -372,22 +372,22 @@ describe('placement mode confirmation', () => {
     give(ctx.world, ctx.playerId, 'platform_package');
     const placement = new PlacementMode();
     // A tick with the button already held (inactive) records lastDig = true.
-    placement.tick(ctx.world, ctx.playerId, ctx.aim, true, false);
+    placement.tick(ctx.world, ctx.playerId, ctx.aim, true);
     placement.enter('platform');
-    expect(placement.tick(ctx.world, ctx.playerId, ctx.aim, true, false)).toBe(null);
+    expect(placement.tick(ctx.world, ctx.playerId, ctx.aim, true)).toBe(null);
     expect(placement.isActive()).toBe(true);
     // Release and click again: this one places.
-    placement.tick(ctx.world, ctx.playerId, ctx.aim, false, false);
-    expect(placement.tick(ctx.world, ctx.playerId, ctx.aim, true, false)).not.toBe(null);
+    placement.tick(ctx.world, ctx.playerId, ctx.aim, false);
+    expect(placement.tick(ctx.world, ctx.playerId, ctx.aim, true)).not.toBe(null);
   });
 
-  it('right-click cancels without placing', () => {
+  it('does not cancel on a non-primary tick (RMB is unbound)', () => {
     const ctx = context();
     give(ctx.world, ctx.playerId, 'platform_package');
     const placement = new PlacementMode();
     placement.enter('platform');
-    expect(placement.tick(ctx.world, ctx.playerId, ctx.aim, false, true)).toBe(null);
-    expect(placement.isActive()).toBe(false);
+    expect(placement.tick(ctx.world, ctx.playerId, ctx.aim, false)).toBe(null);
+    expect(placement.isActive()).toBe(true);
     expect([...ctx.world.entities.values()].filter((e) => e.kind === 'platform')).toHaveLength(0);
   });
 
@@ -397,7 +397,7 @@ describe('placement mode confirmation', () => {
     const placement = new PlacementMode();
     placement.enter('platform');
     ctx.world.entities.delete(packageId);
-    placement.tick(ctx.world, ctx.playerId, ctx.aim, false, false);
+    placement.tick(ctx.world, ctx.playerId, ctx.aim, false);
     expect(placement.isActive()).toBe(false);
   });
 });

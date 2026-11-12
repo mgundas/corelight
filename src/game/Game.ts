@@ -8,22 +8,28 @@ import { getUrlParams } from '../core/urlParams.js';
 import { Renderer, type PrebuiltTerrain } from '../render/Renderer.js';
 import { CameraRig } from '../player/cameraRig.js';
 import { wireTerrainEdits } from './editWiring.js';
-import { computeToolAim as buildToolAim } from './aimWiring.js';
+import { computeFrameAim } from './frameAim.js';
 import { FreeFlyCamera } from '../player/freeFlyCamera.js';
 import { PlayerInput } from '../player/input.js';
 import { TerrainTool, type ToolAim } from '../player/terrainTool.js';
+import { ToolMode } from './toolMode.js';
+import type { WorldRay } from './grabPick.js';
+import { installUiCommands } from './uiCommands.js';
+import { resetUiCommands } from '../ui/stores/commandsStore.js';
+import { resetDragStore } from '../ui/stores/dragStore.js';
+import { installDebugKeys } from './debugKeys.js';
+import { toggleFly } from './flyToggle.js';
 import { World } from '../sim/world.js';
 import type { EntityId } from '../sim/entities.js';
-import { findFollowed } from './environment.js';
 import { disposePhysics } from '../sim/physics/rapierWorld.js';
 import { TerrainColliders } from '../sim/physics/terrainColliders.js';
 import { serializeWorld, type SaveData } from '../save/serialize.js';
 import { DebugOverlay } from '../ui/debugOverlay.js';
 import { Hud } from '../ui/hud.js';
 import { updateFrameHud, updatePlacementGhost, updateToolPreview } from './frameHud.js';
-import { installDebugHandle, uninstallDebugHandle } from './debugHandle.js';
+import { installGameDebugHandle, uninstallDebugHandle } from './debugHandle.js';
 import { setupWorldSystems } from './worldSetup.js';
-import { updateDebugOverlay } from './debugStats.js';
+import { updateFrameDebug } from './frameDebug.js';
 import { PlacementMode } from './placement.js';
 import { CableMode } from './cableMode.js';
 import { PackHold } from './packHold.js';
@@ -31,6 +37,7 @@ import { dispatchTickInput } from './tickInput.js';
 import { createPrinterUi, updatePrinterUi } from './printerWiring.js';
 import type { PrinterUi } from '../ui/printerUi.js';
 import { updateCameraAndEnvironment } from './frameCamera.js';
+import { applyPaused } from './pause.js';
 
 // Game owns World + Renderer and wires the fixed-timestep loop: sim runs at
 // 30 Hz, rendering interpolates, and input becomes Actions per tick.
@@ -42,6 +49,7 @@ export class Game {
   readonly rig = new CameraRig();
   readonly input = new PlayerInput();
   readonly tool = new TerrainTool();
+  readonly toolMode = new ToolMode();
   readonly overlay = new DebugOverlay();
   readonly placement = new PlacementMode();
   readonly cable = new CableMode();
@@ -56,6 +64,12 @@ export class Game {
   private readonly toolFields = new Map<string, DensityField>();
   /** Aim from the last computeToolAim (drives stroke dispatch + preview). */
   private toolAim: ToolAim = { hit: null, normal: null, planet: null };
+  /** Screen ray under the cursor (cursor mode grab picking), null in fly. */
+  private cursorRay: WorldRay | null = null;
+  /** Loose item hovered by the cursor (prompt + click-to-grab), else null. */
+  private cursorItemId: EntityId | null = null;
+  /** Empty structure hovered by the cursor (prompt + click-to-move). */
+  private cursorPackId: EntityId | null = null;
 
   private accumulator = 0;
   private lastTime = 0;
@@ -74,6 +88,7 @@ export class Game {
   private readonly unsubscribeOriginShifted: () => void;
   private readonly unsubscribeTerrainEdited: () => void;
   private readonly unsubscribePlayerDied: () => void;
+  private readonly disposeDebugKeys: () => void;
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -110,7 +125,8 @@ export class Game {
     });
     this.colliders = setup.colliders;
     this.playerId = setup.playerId;
-    this.printerUi = createPrinterUi(this.world, () => this.playerId);
+    this.printerUi = createPrinterUi();
+    installUiCommands(this.world, () => this.playerId, () => this.printerUi.close());
 
     this.renderer = new Renderer(canvas, worldSeed, planets, prebuilt);
     const wiring = wireTerrainEdits(this.world, planets, this.colliders, this.renderer.streamer);
@@ -132,7 +148,15 @@ export class Game {
     this.input.attach(canvas, this.rig, this.rig, this.tool);
     this.input.setEnabled(true);
 
-    window.addEventListener('keydown', this.handleGlobalKey);
+    this.disposeDebugKeys = installDebugKeys({
+      overlay: this.overlay,
+      toggleFly: () => this.toggleFly(),
+      toggleWireframe: () => {
+        this.wireframe = !this.wireframe;
+        this.renderer.setWireframe(this.wireframe);
+      },
+      toggleBounds: () => this.renderer.setBoundsVisible(!this.renderer.bounds.isVisible()),
+    });
     this.unsubscribeOriginShifted = events.on('originShifted', () => {
       this.originShifts += 1;
     });
@@ -142,115 +166,83 @@ export class Game {
     });
     // Console debug handle: lets a blank screen be diagnosed with facts
     // (entity positions) instead of theories. Read-only, browser only.
-    installDebugHandle(this.world, () => this.playerId, {
-      flying: () => this.flyCamera.enabled,
-      views: () => ({
-        tethers: this.renderer.tetherViews.group,
-        cables: this.renderer.cableViews.group,
-        habitats: this.renderer.habitatViews.group,
-        markers: this.renderer.markerViews.group,
-        placeables: this.renderer.placeableViews.group,
-      }),
-    });
+    installGameDebugHandle(this.world, () => this.playerId, this.renderer, () => this.flyCamera.enabled);
   }
 
-  private handleGlobalKey = (e: KeyboardEvent): void => {
-    if (e.code === 'F1') {
-      e.preventDefault();
-      this.overlay.toggle();
-    } else if (e.code === 'F3') {
-      e.preventDefault();
-      this.toggleFly();
-    } else if (e.code === 'F4') {
-      e.preventDefault();
-      this.wireframe = !this.wireframe;
-      this.renderer.setWireframe(this.wireframe);
-    } else if (e.code === 'F5') {
-      e.preventDefault();
-      this.renderer.setBoundsVisible(!this.renderer.bounds.isVisible());
-    }
-  };
-
-  /** Aim the tool from the orbit camera; strokes bake it into Actions. */
+  /** Aim the tool from the cursor (or screen center while orbiting). */
   private computeToolAim(alpha: number, detailed: boolean): void {
-    const followed = findFollowed(this.world, this.planets, this.playerId);
-    this.toolAim = buildToolAim({
-      followed,
-      field: followed ? this.toolFields.get(followed.planet.id) : undefined,
-      renderPos:
-        this.flyCamera.enabled || !followed
-          ? null
-          : (this.renderer.playerView.interpolatedWorld(alpha) ?? followed.position),
-      rigPosition: this.rig.position,
-      castRay: (origin, rayDir, maxDist) =>
-        this.colliders.castTerrainRay(origin, rayDir, this.planets, maxDist),
+    const result = computeFrameAim({
+      world: this.world,
+      planets: this.planets,
+      playerId: this.playerId,
+      renderer: this.renderer,
+      colliders: this.colliders,
+      toolFields: this.toolFields,
+      flyCamera: this.flyCamera,
+      rig: this.rig,
+      alpha,
       detailed,
+      toolActive: this.toolMode.active,
+      orbiting: this.input.isOrbiting(),
+      cursorX: this.input.cursorX,
+      cursorY: this.input.cursorY,
     });
+    this.toolAim = result.aim;
+    this.cursorRay = result.ray;
+    this.cursorItemId = result.hoverItemId;
+    this.cursorPackId = result.hoverPackId;
   }
 
   /** F3: free-fly debug camera. Leaving it drops the player at the camera. */
   private toggleFly(): void {
-    this.flyCamera.enabled = !this.flyCamera.enabled;
-    this.packHold.reset();
-    this.cable.cancel();
-    const player = this.playerId ? this.world.entities.get(this.playerId) : undefined;
-    if (this.flyCamera.enabled) {
-      if (player) this.flyCamera.position = { ...player.position };
-      this.input.setEnabled(false);
-      this.printerUi.close();
-    } else {
-      this.input.setEnabled(true);
-      if (player && this.playerId) {
-        this.world.dispatch({ type: 'playerTeleport', playerId: this.playerId, position: { ...this.flyCamera.position } });
-      }
-    }
+    toggleFly({
+      world: this.world,
+      playerId: this.playerId,
+      flyCamera: this.flyCamera,
+      input: this.input,
+      cable: this.cable,
+      packHold: this.packHold,
+      closePrinter: () => this.printerUi.close(),
+    });
   }
   /** Freeze sim ticks (pause menu); rendering continues behind the menu. */
   setPaused(paused: boolean): void {
     this.paused = paused;
-    // Edges queued while paused must never fire on resume (e.g. Q dropping
-    // a slot): disabling clears every queue, and re-enabling on resume
-    // drains anything queued by the menu itself (including the L bypass).
-    if (paused) {
-      this.input.setEnabled(false);
-      this.packHold.reset();
-      this.cable.cancel();
-      this.printerUi.close();
-    } else {
-      this.input.setEnabled(!this.flyCamera.enabled);
-    }
+    applyPaused(
+      {
+        input: this.input,
+        packHold: this.packHold,
+        cable: this.cable,
+        printerUi: this.printerUi,
+        flyCamera: this.flyCamera,
+      },
+      paused,
+    );
   }
 
-  isPaused(): boolean {
-    return this.paused;
-  }
+  isPaused(): boolean { return this.paused; }
   /** Current world as a save payload (autosave / Save now). */
-  snapshot(): SaveData {
-    return serializeWorld(this.world);
-  }
-
+  snapshot(): SaveData { return serializeWorld(this.world); }
   start(): void {
     if (this.running) return;
     this.running = true;
     this.lastTime = performance.now();
-    const loop = (now: number): void => {
-      if (!this.running) return;
-      this.frame(now);
-      this.rafId = requestAnimationFrame(loop);
-    };
+    const loop = (now: number): void => { if (!this.running) return; this.frame(now); this.rafId = requestAnimationFrame(loop); };
     this.rafId = requestAnimationFrame(loop);
   }
 
   stop(): void {
     this.running = false;
     cancelAnimationFrame(this.rafId);
-    window.removeEventListener('keydown', this.handleGlobalKey);
+    this.disposeDebugKeys();
     this.unsubscribeOriginShifted();
     this.unsubscribeTerrainEdited();
     this.flyCamera.detach();
     this.input.detach();
     this.unsubscribePlayerDied();
     this.printerUi.dispose();
+    resetUiCommands();
+    resetDragStore();
     this.colliderPool.dispose();
     this.colliders.dispose();
     disposePhysics();
@@ -278,9 +270,9 @@ export class Game {
     // Movement input is sampled per tick so replays stay deterministic.
     // The tool aim is frame-rate (render state); strokes bake it into Actions.
     // Buttons are sampled once per frame: detailed aim (march + normal)
-    // only runs while a brush button is actually held.
+    // only runs while the tool/placement is actually active.
     const toolButtons = this.input.toolButtons();
-    const toolActive = toolButtons.dig || toolButtons.add || toolButtons.flatten;
+    const toolActive = this.toolMode.active;
     this.computeToolAim(
       Math.min(1, Math.max(0, this.accumulator / SIM_DT)),
       toolActive || this.placement.isActive(),
@@ -298,9 +290,10 @@ export class Game {
           input: this.input,
           rig: this.rig,
           tool: this.tool,
+          toolMode: this.toolMode,
           toolAim: this.toolAim,
+          cursorRay: this.cursorRay,
           toolButtons,
-          toolActive,
           nowMs: performance.now(),
           flying,
           uiOpen: this.printerUi.isOpen(),
@@ -360,6 +353,9 @@ export class Game {
       aim: this.toolAim,
       placement: this.placement,
       cable: this.cable,
+      toolMode: this.toolMode,
+      cursorItemId: this.cursorItemId,
+      cursorPackId: this.cursorPackId,
     });
     updatePlacementGhost({
       renderer: this.renderer,
@@ -370,30 +366,34 @@ export class Game {
       placement: this.placement,
     });
     // Terrain brush preview: translucent sphere at the aim point (hidden in
-    // fly mode or when nothing is in range). Re-set every frame from world
-    // doubles, so origin shifts can never desync it.
-    updateToolPreview({ renderer: this.renderer, flying, hit: this.toolAim.hit, radius: this.tool.radius });
+    // fly mode, with the tool stowed, or when nothing is in range). Re-set
+    // every frame from world doubles, so origin shifts can never desync it.
+    updateToolPreview({
+      renderer: this.renderer,
+      flying: flying || !this.toolMode.active,
+      hit: this.toolAim.hit,
+      radius: this.tool.radius,
+    });
     this.renderer.render();
 
-    // Debug overlay content. The overlay no-ops while hidden, so skip the
-    // stats work (mesh counts, layer lookup) entirely in that case.
-    if (this.overlay.isVisible()) {
-      updateDebugOverlay({
-        world: this.world,
-        planets: this.planets,
-        renderer: this.renderer,
-        overlay: this.overlay,
-        colliders: this.colliders,
-        playerId: this.playerId,
-        toolAim: this.toolAim,
-        toolRadius: this.tool.radius,
-        fps: this.fps,
-        tickMs: this.lastTickMs,
-        flySpeed: this.flySpeed,
-        originShifts: this.originShifts,
-        activePos,
-        depthBelowM,
-      });
-    }
+    // Debug overlay content (stats work is skipped while hidden).
+    updateFrameDebug({
+      world: this.world,
+      planets: this.planets,
+      renderer: this.renderer,
+      overlay: this.overlay,
+      colliders: this.colliders,
+      playerId: this.playerId,
+      toolAim: this.toolAim,
+      toolRadius: this.tool.radius,
+      toolMode: this.toolMode.active ? 'deform' : 'cursor',
+      brushMode: this.toolMode.brush,
+      fps: this.fps,
+      tickMs: this.lastTickMs,
+      flySpeed: this.flySpeed,
+      originShifts: this.originShifts,
+      activePos,
+      depthBelowM,
+    });
   }
 }

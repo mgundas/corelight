@@ -239,3 +239,11 @@ export const CABLE_SNAP_RADIUS_M = 1.5;
 export const SNAP_PLACE_RADIUS_M = 2;
 /** Hold E this long on an empty machine/platform to pack it up (ms). */
 export const PACK_HOLD_MS = 1000;
+
+/** Grab-carry (cursor mode): click range and hold distance in front. */
+export const GRAB_RANGE_M = 4;
+export const GRAB_DISTANCE_M = 2.2;
+/** Lift the grabbed item slightly above the aim line (Astroneer feel). */
+export const GRAB_LEVITATE_M = 0.35;
+/** Max distance a released item may land from the player (m). */
+export const GRAB_RELEASE_RANGE_M = TOOL_RANGE_M + TOOL_RANGE_SLACK_M;

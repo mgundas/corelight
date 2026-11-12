@@ -94,6 +94,7 @@ function findAimed(world: World, playerId: EntityId, kind: 'item' | 'tether'): E
   for (const entity of world.entities.values()) {
     if (kind === 'item') {
       if (entity.kind !== 'item' || entity.components.item?.holder !== undefined) continue;
+      if (entity.components.item?.grabbedBy !== undefined) continue;
     } else {
       if (entity.kind !== 'tether') continue;
     }

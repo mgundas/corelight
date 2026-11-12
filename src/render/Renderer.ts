@@ -81,6 +81,9 @@ export class Renderer {
   private readonly atmosphere: Atmosphere;
   private readonly toolPreview: THREE.Mesh;
   private readonly toolPreviewMat: THREE.MeshBasicMaterial;
+  /** Reused screen-ray scratch (no per-frame allocation). */
+  private readonly screenNdc = new THREE.Vector2();
+  private readonly screenRaycaster = new THREE.Raycaster();
 
   private readonly handleResize: () => void;
 
@@ -210,6 +213,33 @@ export class Renderer {
     this.camera.up.set(upWorld.x, upWorld.y, upWorld.z);
     this.camera.position.set(cam.x, cam.y, cam.z);
     this.camera.lookAt(head.x, head.y, head.z);
+  }
+
+  /**
+   * World-space ray through a cursor position (CSS pixels). The pointer is
+   * free during normal play, so aiming/picking uses the actual cursor rather
+   * than the screen center. Render-only math; the result is plain doubles.
+   */
+  screenRay(clientX: number, clientY: number): { origin: Vec3d; dir: Vec3d } {
+    this.screenNdc.set(
+      (clientX / window.innerWidth) * 2 - 1,
+      -(clientY / window.innerHeight) * 2 + 1,
+    );
+    this.camera.updateMatrixWorld();
+    this.screenRaycaster.setFromCamera(this.screenNdc, this.camera);
+    const origin = getOrigin();
+    return {
+      origin: {
+        x: this.screenRaycaster.ray.origin.x + origin.x,
+        y: this.screenRaycaster.ray.origin.y + origin.y,
+        z: this.screenRaycaster.ray.origin.z + origin.z,
+      },
+      dir: {
+        x: this.screenRaycaster.ray.direction.x,
+        y: this.screenRaycaster.ray.direction.y,
+        z: this.screenRaycaster.ray.direction.z,
+      },
+    };
   }
 
   setWireframe(enabled: boolean): void {

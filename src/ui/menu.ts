@@ -1,88 +1,21 @@
-// Main + pause menus (M06). Pure DOM: no World access, no gameplay
-// mutation — every button calls back into main.ts, which owns the session.
+// Main + pause menu bridge (React port). main.ts owns the session callbacks;
+// these helpers only toggle the menu store, which MenuViews renders.
 
-export interface MainMenuOptions {
-  hasSave: boolean;
-  error?: string | null;
-  onContinue(): void;
-  onNewGame(): void;
-}
+import {
+  showMainMenuInStore,
+  showPauseMenuInStore,
+  type MainMenuOptions,
+  type PauseMenuOptions,
+} from './stores/menuStore.js';
 
-export interface PauseMenuOptions {
-  onResume(): void;
-  onSaveNow(): Promise<boolean>;
-  onQuitToMenu(): void;
-}
-
-function makeOverlay(id: string, title: string, subtitle: string): { root: HTMLDivElement; body: HTMLDivElement } {
-  const root = document.createElement('div');
-  root.id = id;
-  const heading = document.createElement('h1');
-  heading.textContent = title;
-  const sub = document.createElement('div');
-  sub.className = 'menu-sub';
-  sub.textContent = subtitle;
-  const body = document.createElement('div');
-  body.className = 'menu-buttons';
-  root.append(heading, sub, body);
-  document.body.appendChild(root);
-  return { root, body };
-}
-
-function makeButton(label: string, onClick: () => void): HTMLButtonElement {
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.className = 'menu-button';
-  button.textContent = label;
-  button.addEventListener('click', onClick);
-  return button;
-}
+export type { MainMenuOptions, PauseMenuOptions };
 
 /** Full-screen title menu. Returns a dispose function. */
 export function showMainMenu(opts: MainMenuOptions): () => void {
-  const { root, body } = makeOverlay('menu', 'Corelight', 'A small game about digging holes on small planets');
-  if (opts.error) {
-    const err = document.createElement('div');
-    err.className = 'menu-error';
-    err.textContent = opts.error;
-    body.appendChild(err);
-  }
-  if (opts.hasSave) {
-    body.appendChild(makeButton('Continue', opts.onContinue));
-  }
-  body.appendChild(makeButton(opts.hasSave ? 'New game (overwrites save)' : 'New game', opts.onNewGame));
-  const settingsNote = document.createElement('div');
-  settingsNote.className = 'menu-note';
-  settingsNote.textContent = 'Settings: coming in a later milestone (M16 polish).';
-  settingsNote.hidden = true;
-  body.appendChild(makeButton('Settings', () => {
-    settingsNote.hidden = !settingsNote.hidden;
-  }));
-  body.appendChild(settingsNote);
-  return () => {
-    root.remove();
-  };
+  return showMainMenuInStore(opts);
 }
 
 /** Pause menu over a frozen session. Returns a dispose function. */
 export function showPauseMenu(opts: PauseMenuOptions): () => void {
-  const { root, body } = makeOverlay('pause-menu', 'Paused', 'The world is holding its breath');
-  body.appendChild(makeButton('Resume', opts.onResume));
-  const saveButton = makeButton('Save now', () => {
-    saveButton.disabled = true;
-    saveButton.textContent = 'Saving…';
-    void opts.onSaveNow().then((ok) => {
-      // Honest confirmation: storeSave reports failure instead of swallowing it.
-      saveButton.textContent = ok ? 'Saved!' : 'Save failed';
-      window.setTimeout(() => {
-        saveButton.disabled = false;
-        saveButton.textContent = 'Save now';
-      }, 1200);
-    });
-  });
-  body.appendChild(saveButton);
-  body.appendChild(makeButton('Quit to menu', opts.onQuitToMenu));
-  return () => {
-    root.remove();
-  };
+  return showPauseMenuInStore(opts);
 }

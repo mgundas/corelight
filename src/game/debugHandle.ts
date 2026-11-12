@@ -7,6 +7,7 @@
 
 import type { EntityId } from '../sim/entities.js';
 import type { World } from '../sim/world.js';
+import type { Renderer } from '../render/Renderer.js';
 
 /** Bump on every user-visible fix so stale tabs are instantly detectable. */
 export const DEBUG_BUILD = 'm10-power';
@@ -74,8 +75,8 @@ declare global {
 
 let nextGameId = 1;
 
-/** Install `window.__corelight` for the live session (browser only). */
-export function installDebugHandle(  world: World,
+/** Install `window.__corelight` for the live session (browser only). */export function installDebugHandle(
+  world: World,
   playerId: () => EntityId | null,
   extra: {
     flying: () => boolean;
@@ -141,9 +142,27 @@ export function installDebugHandle(  world: World,
   window.__corelight_all = [handle];
 }
 
+/** Install the standard Game handle with the renderer's view groups. */
+export function installGameDebugHandle(
+  world: World,
+  playerId: () => EntityId | null,
+  renderer: Renderer,
+  flying: () => boolean,
+): void {
+  installDebugHandle(world, playerId, {
+    flying,
+    views: () => ({
+      tethers: renderer.tetherViews.group,
+      cables: renderer.cableViews.group,
+      habitats: renderer.habitatViews.group,
+      markers: renderer.markerViews.group,
+      placeables: renderer.placeableViews.group,
+    }),
+  });
+}
+
 /** Drop the debug handle (call from Game.stop so dead sessions release). */
-export function uninstallDebugHandle(): void {
-  if (typeof window === 'undefined') return;
+export function uninstallDebugHandle(): void {  if (typeof window === 'undefined') return;
   if (window.__corelight) window.__corelight = undefined;
   window.__corelight_all = [];
 }

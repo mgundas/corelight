@@ -126,6 +126,23 @@ function die(world: World, player: Entity, planets: PlanetConfig[]): void {
     }
     playerComp.carryingLarge = null;
   }
+  // A grab-carried item drops with the rest of the pack (cursor mode).
+  const grabbedId = playerComp?.grabbed;
+  if (grabbedId) {
+    const grabbed = world.entities.get(grabbedId);
+    if (grabbed) {
+      grabbed.position = {
+        x: deathPos.x + up.x * 0.5,
+        y: deathPos.y + up.y * 0.5,
+        z: deathPos.z + up.z * 0.5,
+      };
+      grabbed.planetId = player.planetId;
+      grabbed.rotation = { ...IDENTITY_QUAT };
+      const grabbedComp = grabbed.components.item;
+      if (grabbedComp) delete grabbedComp.grabbedBy;
+    }
+    playerComp.grabbed = null;
+  }
   // A second death supersedes the first: the old marker goes with it.
   if (playerComp?.deathMarkerId) {
     world.entities.delete(playerComp.deathMarkerId);

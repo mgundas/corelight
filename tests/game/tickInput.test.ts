@@ -12,6 +12,7 @@ import type { PlayerInput } from '../../src/player/input.js';
 import { TerrainTool } from '../../src/player/terrainTool.js';
 import { PlacementMode } from '../../src/game/placement.js';
 import { CableMode } from '../../src/game/cableMode.js';
+import { ToolMode } from '../../src/game/toolMode.js';
 import { dispatchTickInput } from '../../src/game/tickInput.js';
 
 function flatPlanet(): PlanetConfig {
@@ -65,15 +66,20 @@ function input(opts: {
   headlamp?: boolean;
   cable?: boolean;
   interactHeld?: boolean;
+  toolToggle?: boolean;
+  brushToggle?: boolean;
+  primaryClick?: boolean;
 }): PlayerInput {
   return {
     consumeHeadlampToggle: () => opts.headlamp === true,
     consumeSelect: () => null,
-    consumeDrop: () => false,
     consumeTether: () => false,
     consumeInteract: () => opts.interact === true,
     consumePrinter: () => opts.printer === true,
     consumeCableToggle: () => opts.cable === true,
+    consumeToolToggle: () => opts.toolToggle === true,
+    consumeBrushToggle: () => opts.brushToggle === true,
+    consumePrimaryClick: () => opts.primaryClick === true,
     isInteractHeld: () => opts.interactHeld === true,
     move: () => ({ x: 0, z: 0 }),
     consumeJump: () => false,
@@ -90,18 +96,21 @@ function run(
     flying?: boolean;
     uiOpen?: boolean;
     toolActive?: boolean;
+    toolMode?: ToolMode;
     toggles?: { count: number };
   },
-): void {
+): ToolMode {
+  const toolMode = opts.toolMode ?? new ToolMode();
+  toolMode.active = opts.toolMode ? toolMode.active : opts.toolActive === true;
   dispatchTickInput({
     world: ctx.world,
     playerId: ctx.playerId,
     input: opts.input,
     rig: { yaw: 0, pitch: 0 },
     tool: new TerrainTool(),
+    toolMode,
     toolAim: { hit: ctx.aim, normal: { x: 0, y: 1, z: 0 }, planet: ctx.planet },
-    toolButtons: { dig: opts.toolActive === true, add: false, flatten: false },
-    toolActive: opts.toolActive === true,
+    toolButtons: { primary: opts.toolActive === true, flatten: false },
     nowMs: 1000,
     flying: opts.flying === true,
     uiOpen: opts.uiOpen === true,
@@ -113,6 +122,7 @@ function run(
     },
   });
   ctx.world.tick();
+  return toolMode;
 }
 
 describe('tick input dispatch', () => {
@@ -164,5 +174,51 @@ describe('tick input dispatch', () => {
     run(ctx, { input: input({ interact: true }), cable, toolActive: true });
     expect(cable.isActive()).toBe(false);
     expect(ctx.world.terrainEdits.sampleCount).toBe(0);
+  });
+
+  it('Q equips the terrain tool and X flips dig/add', () => {
+    const ctx = setup();
+    const mode = run(ctx, { input: input({ toolToggle: true }) });
+    expect(mode.active).toBe(true);
+    run(ctx, { input: input({ brushToggle: true }), toolMode: mode });
+    expect(mode.brush).toBe('add');
+    const stowed = run(ctx, { input: input({ toolToggle: true }), toolMode: mode });
+    expect(stowed.active).toBe(false);
+  });
+
+  it('with the tool off, a primary click grabs the aimed loose item', () => {
+    const ctx = setup();
+    const player = ctx.world.entities.get(ctx.playerId);
+    if (!player) throw new Error('no player');
+    const id = ctx.world.nextId('item');
+    ctx.world.entities.set(id, {
+      id,
+      kind: 'item',
+      planetId: ctx.planet.id,
+      position: { x: player.position.x + 1, y: player.position.y, z: player.position.z },
+      rotation: { x: 0, y: 0, z: 0, w: 1 },
+      components: { item: { itemId: 'resin' } },
+    });
+    run(ctx, { input: input({ primaryClick: true }) });
+    expect(ctx.world.entities.get(ctx.playerId)?.components.player?.grabbed).toBe(id);
+    expect(ctx.world.terrainEdits.sampleCount).toBe(0);
+  });
+
+  it('with the tool on, the same click digs instead of grabbing', () => {
+    const ctx = setup();
+    const player = ctx.world.entities.get(ctx.playerId);
+    if (!player) throw new Error('no player');
+    const id = ctx.world.nextId('item');
+    ctx.world.entities.set(id, {
+      id,
+      kind: 'item',
+      planetId: ctx.planet.id,
+      position: { x: player.position.x + 1, y: player.position.y, z: player.position.z },
+      rotation: { x: 0, y: 0, z: 0, w: 1 },
+      components: { item: { itemId: 'resin' } },
+    });
+    run(ctx, { input: input({ primaryClick: true }), toolActive: true });
+    expect(ctx.world.entities.get(ctx.playerId)?.components.player?.grabbed).toBe(null);
+    expect(ctx.world.terrainEdits.sampleCount).toBeGreaterThan(0);
   });
 });

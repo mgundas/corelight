@@ -14,7 +14,7 @@ const AIM: ToolAim = {
 describe('TerrainTool', () => {
   it('rate-limits edits to 10 per second', () => {
     const tool = new TerrainTool();
-    const buttons = { dig: true, add: false, flatten: false };
+    const buttons = { primary: true, flatten: false };
     const first = tool.update(0, 'player_x', buttons, AIM);
     expect(first).not.toBeNull();
     expect(first?.type).toBe('terrainEdit');
@@ -44,7 +44,7 @@ describe('TerrainTool', () => {
 
   it('captures the flatten plane at stroke start and freezes it', () => {
     const tool = new TerrainTool();
-    const buttons = { dig: false, add: false, flatten: true };
+    const buttons = { primary: false, flatten: true };
     const first = tool.update(0, 'player_x', buttons, AIM);
     if (first?.type !== 'terrainEdit') throw new Error('expected a flatten action');
     expect(first.flattenPlane?.point).toEqual({ x: 1, y: 2, z: 3 });
@@ -63,7 +63,7 @@ describe('TerrainTool', () => {
 
   it('captures the plane when aim appears mid-press and resets on release', () => {
     const tool = new TerrainTool();
-    const buttons = { dig: false, add: false, flatten: true };
+    const buttons = { primary: false, flatten: true };
     const noHit: ToolAim = { hit: null, normal: null, planet: SELA };
     // Press F while looking at the sky: no plane, no action.
     expect(tool.update(0, 'player_x', buttons, noHit)).toBeNull();
@@ -72,7 +72,7 @@ describe('TerrainTool', () => {
     if (first?.type !== 'terrainEdit') throw new Error('expected a flatten action');
     expect(first.flattenPlane?.point).toEqual({ x: 1, y: 2, z: 3 });
     // Release clears the plane: the next stroke captures fresh.
-    tool.update(100, 'player_x', { dig: false, add: false, flatten: false }, AIM);
+    tool.update(100, 'player_x', { primary: false, flatten: false }, AIM);
     const moved: ToolAim = {
       hit: { x: 9, y: 9, z: 9 },
       normal: { x: 1, y: 0, z: 0 },
@@ -86,7 +86,14 @@ describe('TerrainTool', () => {
   it('returns null without a hit or without buttons', () => {
     const tool = new TerrainTool();
     const noHit: ToolAim = { hit: null, normal: null, planet: SELA };
-    expect(tool.update(0, 'player_x', { dig: true, add: false, flatten: false }, noHit)).toBeNull();
-    expect(tool.update(200, 'player_x', { dig: false, add: false, flatten: false }, AIM)).toBeNull();
+    expect(tool.update(0, 'player_x', { primary: true, flatten: false }, noHit)).toBeNull();
+    expect(tool.update(200, 'player_x', { primary: false, flatten: false }, AIM)).toBeNull();
+  });
+
+  it('applies the selected add brush to the primary button (X mode)', () => {
+    const tool = new TerrainTool();
+    const action = tool.update(0, 'player_x', { primary: true, flatten: false }, AIM, 'add');
+    if (action?.type !== 'terrainEdit') throw new Error('expected an add action');
+    expect(action.mode).toBe('add');
   });
 });

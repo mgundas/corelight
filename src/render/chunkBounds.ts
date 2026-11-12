@@ -1,4 +1,4 @@
-// F5 debug view: one Box3Helper per visible chunk mesh, colored by LOD
+// B debug view: one Box3Helper per visible chunk mesh, colored by LOD
 // level. World boxes are stored in doubles and re-projected through the
 // floating origin, so bounds stay correct across origin shifts.
 
