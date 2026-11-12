@@ -4,6 +4,8 @@
 
 import type { Vec3d } from '../core/math.js';
 import { moveBasis } from '../sim/physics/frames.js';
+import { CAMERA_LOOK_RADIANS_PER_PIXEL, CAMERA_RECOVERY_RATE } from '../core/constants.js';
+import { getSettings } from '../core/settings.js';
 
 export const CAM_DISTANCE_DEFAULT = 4;
 export const CAM_DISTANCE_MIN = 2;
@@ -21,10 +23,13 @@ export class CameraRig {
   distance = CAM_DISTANCE_DEFAULT;
   /** Current camera world position (for streaming + floating origin). */
   position: Vec3d = { x: 0, y: 0, z: 0 };
+  private actualDistance: number | null = null;
 
   addLook(dx: number, dy: number): void {
-    this.yaw -= dx * 0.0025;
-    this.pitch -= dy * 0.0025;
+    const settings = getSettings();
+    const sensitivity = CAMERA_LOOK_RADIANS_PER_PIXEL * settings.sensitivity;
+    this.yaw -= dx * sensitivity;
+    this.pitch -= dy * sensitivity * (settings.invertY ? -1 : 1);
     const limit = Math.PI / 2 - 0.05;
     this.pitch = Math.max(-limit, Math.min(limit, this.pitch));
   }
@@ -44,6 +49,7 @@ export class CameraRig {
     playerPos: Vec3d,
     up: Vec3d,
     raycast: (origin: Vec3d, dir: Vec3d, maxDist: number) => number | null,
+    frameDt?: number,
   ): void {
     const head: Vec3d = {
       x: playerPos.x + up.x * HEAD_HEIGHT,
@@ -58,6 +64,12 @@ export class CameraRig {
     if (hit !== null) {
       dist = Math.max(WALL_MIN, Math.min(dist, hit - WALL_MARGIN));
     }
+    // Pull inward immediately to avoid clipping. Ease only the return to
+    // full distance, so walking past an edge does not kick the camera out.
+    if (this.actualDistance !== null && dist > this.actualDistance && frameDt !== undefined && getSettings().smoothCamera) {
+      dist = this.actualDistance + (dist - this.actualDistance) * (1 - Math.exp(-CAMERA_RECOVERY_RATE * Math.max(0, frameDt)));
+    }
+    this.actualDistance = dist;
     this.position = {
       x: head.x + back.x * dist,
       y: head.y + back.y * dist,

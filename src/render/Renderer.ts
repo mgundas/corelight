@@ -24,6 +24,7 @@ import { CableViews } from './views/cableViews.js';
 import { LightingRig } from './lighting.js';
 import { Sky } from './sky.js';
 import { PlayerView } from './views/playerView.js';
+import { bindRenderPreferences } from './preferences.js';
 
 // M02 renderer: scene + LOD-streamed chunk meshes. The ChunkManager owns
 // which chunks exist; pre-generation results (from the boot screen) are
@@ -89,6 +90,7 @@ export class Renderer {
 
   private readonly handleResize: () => void;
   private readonly planets: PlanetConfig[];
+  private readonly disposePreferences: () => void;
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -116,6 +118,7 @@ export class Renderer {
     this.camera.position.set(0, 0, 600);
 
     this.lighting = new LightingRig(this.scene, this.camera);
+    this.disposePreferences = bindRenderPreferences(this.renderer, this.camera, this.lighting);
     this.sky = new Sky(this.scene, this.camera, worldSeed);
     this.atmosphere = new Atmosphere(this.scene);
     for (const planet of planets) this.atmosphere.addPlanet(planet);
@@ -157,6 +160,7 @@ export class Renderer {
   }
 
   dispose(): void {
+    this.disposePreferences();
     window.removeEventListener('resize', this.handleResize);
     this.pool.dispose();
     this.chunks.dispose();

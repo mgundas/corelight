@@ -29,6 +29,7 @@ export interface HudViewState {
   deathHint: NavHint | null;
   power: PowerStatus | null;
   toolMode: 'cursor' | 'deform';
+  interactionMode: 'explore' | 'terrain' | 'cable' | 'place' | 'carry';
   brushMode: 'dig' | 'add';
   /** Drill tier from the selected backpack slot (M12). */
   drillTier: DrillTier;
@@ -53,6 +54,7 @@ const INITIAL: HudViewState = {
   deathHint: null,
   power: null,
   toolMode: 'cursor',
+  interactionMode: 'explore',
   brushMode: 'dig',
   drillTier: 1,
   deathFadeToken: 0,

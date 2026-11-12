@@ -148,6 +148,9 @@ interface Entity {
 
 ## Rendering
 
+- Presentation preferences live in `core/settings.ts` (validated, guarded localStorage, independent of World/save state). Render/input read them; React edits them through `SettingsPanel`. Renderer subscribes once for live FOV/shadow changes and unsubscribes on disposal.
+- ACES filmic tone mapping compresses bright highlights. The astronaut's primitive art rig and distance-driven gait are render-only; capsule collision and simulation movement are unchanged.
+
 - `Renderer` subscribes to world state each frame and keeps a `Map<EntityId, Object3D>` of views.
 - Materials: `MeshStandardMaterial` with `vertexColors: true`, `flatShading: true`. Fog color matches the sky.
 - Lighting underground: ambient intensity scales with depth below the surface (1.0 at surface, 0.08 below 25 m). Headlamp = SpotLight attached to the camera. Light sticks and lumen crystals = PointLights, at most 12 active, nearest first.

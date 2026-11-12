@@ -38,6 +38,7 @@ export interface HudState {
   power: PowerStatus | null;
   /** Terrain tool equipped (Q) and its add/deform sub-mode (X). */
   toolMode: 'cursor' | 'deform';
+  interactionMode: 'explore' | 'terrain' | 'cable' | 'place' | 'carry';
   brushMode: 'dig' | 'add';
   /** Current drill tier (M12): from the selected backpack slot. */
   drillTier: DrillTier;
@@ -79,6 +80,7 @@ export class Hud {
         ? `${power.generation.toFixed(1)}:${power.demand.toFixed(1)}:${power.stored.toFixed(1)}:${power.capacity}:${power.state}`
         : '',
       state.toolMode,
+      state.interactionMode,
       state.brushMode,
       state.drillTier,
       ...state.slots.map((d) => d?.id ?? ''),
@@ -100,6 +102,7 @@ export class Hud {
       deathHint: state.deathHint,
       power: state.power,
       toolMode: state.toolMode,
+      interactionMode: state.interactionMode,
       brushMode: state.brushMode,
       drillTier: state.drillTier,
     });

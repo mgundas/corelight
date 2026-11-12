@@ -14,6 +14,7 @@ import type { TerrainColliders } from '../sim/physics/terrainColliders.js';
 import { upAt } from '../sim/physics/frames.js';
 import type { World } from '../sim/world.js';
 import { computeEnvironment, findFollowed } from './environment.js';
+import { CAMERA_FOCUS_HEIGHT } from '../core/constants.js';
 
 export interface FrameCameraDeps {
   world: World;
@@ -52,8 +53,13 @@ export function updateCameraAndEnvironment(deps: FrameCameraDeps): FrameCameraRe
       const up = upAt(followed.planet, renderPos);
       deps.rig.update(renderPos, up, (origin, dir, maxDist) =>
         deps.colliders.castTerrainRay(origin, dir, planets, maxDist),
+        deps.paused ? 0 : deps.frameDt,
       );
-      renderer.applyRigCamera(renderPos, deps.rig.position, up);
+      renderer.applyRigCamera({
+        x: renderPos.x + up.x * CAMERA_FOCUS_HEIGHT,
+        y: renderPos.y + up.y * CAMERA_FOCUS_HEIGHT,
+        z: renderPos.z + up.z * CAMERA_FOCUS_HEIGHT,
+      }, deps.rig.position, up);
     }
     activePos = deps.rig.position;
   }

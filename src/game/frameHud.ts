@@ -42,6 +42,7 @@ export function updateFrameHud(deps: FrameHudDeps): void {
   const frame = backpackFrame(deps.world, activePlayer, deps.flying);
   const o2 = oxygenStatusFor(deps.world, activePlayer);
   const power = powerStatusFor(deps.world, activePlayer);
+  const grabbed = activePlayer ? deps.world.entities.get(activePlayer)?.components.player?.grabbed : null;
   deps.renderer.renderEntities(
     deps.world.entities.values(),
     deps.focusWorld,
@@ -70,6 +71,8 @@ export function updateFrameHud(deps: FrameHudDeps): void {
     deathHint: o2?.deathMarker ?? null,
     power: power?.status ?? null,
     toolMode: deps.toolMode.active ? 'deform' : 'cursor',
+    interactionMode: deps.cable?.isActive() ? 'cable' : deps.placement.isActive() ? 'place'
+      : deps.toolMode.active ? 'terrain' : grabbed ? 'carry' : 'explore',
     brushMode: deps.toolMode.brush,
     drillTier: frame.drillTier,
   });

@@ -11,6 +11,9 @@ import { clearSave, hasSave, loadSave, startAutosave, storeSave } from './save/s
 import { showMainMenu, showPauseMenu } from './ui/menu.js';
 import { mountUi } from './ui/react/mount.js';
 import './main.css';
+import './ui/styles/hud.css';
+import './ui/styles/panels.css';
+import './ui/styles/menus.css';
 
 /** One live session: game + autosave + pause wiring, all disposed on quit. */
 interface Session {
@@ -36,7 +39,7 @@ function launchSession(
   };
   const onKey = (e: KeyboardEvent): void => {
     // Esc while pointer-locked exits the lock instead of reaching the page;
-    // a second press (unlocked) opens the menu. Documented in the hint bar.
+    // a second press (unlocked) opens the menu. Documented in the field guide.
     if (e.code !== 'Escape') return;
     if (game.isPaused()) {
       closePauseMenu();
@@ -45,15 +48,14 @@ function launchSession(
       disposePauseMenu = showPauseMenu({
         onResume: closePauseMenu,
         onSaveNow: () => storeSave(game.snapshot()),
-        onQuitToMenu: () => {
+        onQuitToMenu: async () => {
           // Quit must not lose up to 60 s of progress: persist before the
           // session (and its autosave) is torn down.
-          void (async () => {
-            await storeSave(game.snapshot());
-            closePauseMenu();
-            stopSession();
-            await showMenu();
-          })();
+          if (!await storeSave(game.snapshot())) return false;
+          closePauseMenu();
+          stopSession();
+          await showMenu();
+          return true;
         },
       });
     }
@@ -148,12 +150,6 @@ async function boot(): Promise<void> {
   appCanvas = canvas;
   // React + zustand UI root (HUD, printer, menus, debug overlay, drag ghost).
   mountUi();
-
-  const hint = document.createElement('div');
-  hint.id = 'hint';
-  hint.textContent =
-    'Corelight — WASD move, hold RMB look, Space jump, Shift sprint, wheel zoom, Q terrain tool (LMB use, X dig/add, F flatten, Ctrl+wheel size), LMB click grabs/releases items with the tool off, drag backpack slots to move/drop, E interact, hold E pack up, Tab printer, C cable tool, 1-8 slots, T tether, L headlamp, Esc menu, F1 overlay, F3 fly, F4 wireframe, B chunk bounds. Dev: ?dev=1 tethers + V teleports to Vorn, ?build=1 power-base packages';
-  app.appendChild(hint);
 
   const { prebuilt } = await runBootSafe(bootSeed, params.skipBoot);
   bootPrebuilt = prebuilt;

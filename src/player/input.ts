@@ -8,6 +8,7 @@
 // the tool off LMB is grab-carry (handled by Game/tickInput).
 
 import { BACKPACK_SLOTS } from '../core/constants.js';
+import { isUiKey } from './uiInput.js';
 
 export class PlayerInput {
   private keys = new Set<string>();
@@ -229,6 +230,7 @@ export class PlayerInput {
   };
 
   private handleKeyDown = (e: KeyboardEvent): void => {
+    if (isUiKey(e)) return;
     // Headlamp toggle works even when input is disabled (fly mode): the
     // lamp rides the camera, so it stays useful there.
     if (e.code === 'KeyL') {

@@ -13,7 +13,7 @@ export interface MainMenuOptions {
 export interface PauseMenuOptions {
   onResume(): void;
   onSaveNow(): Promise<boolean>;
-  onQuitToMenu(): void;
+  onQuitToMenu(): Promise<boolean>;
 }
 
 export type MenuView =

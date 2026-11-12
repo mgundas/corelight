@@ -53,7 +53,10 @@ export function InventorySlot({ index, slot, selected, variant = 'hud', showNumb
     ? { itemId: slot.itemId, name: slot.name, color: slot.color }
     : null;
   return (
-    <div
+    <button
+      type="button"
+      aria-label={`Slot ${index + 1}: ${slot?.name ?? 'Empty'}`}
+      aria-pressed={selected}
       className={classes.join(' ')}
       data-drop={`bag:${index}`}
       title={slot ? slot.name : 'Empty slot'}
@@ -65,7 +68,8 @@ export function InventorySlot({ index, slot, selected, variant = 'hud', showNumb
       onClick={() => commands?.selectSlot(index)}
     >
       {showNumber ? <span className="slot-number">{index + 1}</span> : null}
-      <span className="slot-name">{slot ? slot.name : ''}</span>
-    </div>
+      <span className={`slot-icon${slot ? '' : ' empty'}`} aria-hidden="true">{slot ? '◆' : '+'}</span>
+      <span className="slot-name">{slot ? slot.name : 'Empty'}</span>
+    </button>
   );
 }

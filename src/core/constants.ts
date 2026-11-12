@@ -6,6 +6,15 @@ export const SIM_DT = 1 / 30;
 /** Max sim ticks applied per rendered frame (caps spiral of death). */
 export const MAX_TICKS_PER_FRAME = 5;
 
+/** Render-only camera recovery; inward collision response stays immediate. */
+export const CAMERA_RECOVERY_RATE = 8;
+export const CAMERA_LOOK_RADIANS_PER_PIXEL = 0.0025;
+export const CAMERA_FOCUS_HEIGHT = 0.45;
+export const SHADOW_MAP_SIZE_LOW = 1024;
+export const AVATAR_STRIDE_M = 2.2;
+export const AVATAR_LIMB_SWING = 0.4;
+export const AVATAR_TELEPORT_DISTANCE_SQ = 25;
+
 /** Camera distance from floating origin that triggers a shift. */
 export const ORIGIN_SHIFT_DISTANCE = 1000;
 
@@ -163,10 +172,10 @@ export const ATMOSPHERE_SHELL_MULT = 1.35;
 
 /** Headlamp spotlight tuning (SpotLight attached to the camera). */
 export const HEADLAMP_COLOR = 0xfff1d6;
-export const HEADLAMP_INTENSITY = 60;
+export const HEADLAMP_INTENSITY = 18;
 export const HEADLAMP_DISTANCE = 90;
-export const HEADLAMP_ANGLE = 0.46;
-export const HEADLAMP_PENUMBRA = 0.5;
+export const HEADLAMP_ANGLE = 0.58;
+export const HEADLAMP_PENUMBRA = 0.85;
 export const HEADLAMP_DECAY = 1.2;
 
 /** Max entries in the module-level seeded-noise cache (density.ts).

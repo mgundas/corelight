@@ -34,4 +34,16 @@ describe('PlayerView.interpolatedWorld', () => {
     expect(view.interpolatedWorld(0.5)).toEqual({ x: 100, y: 0, z: 0 });
     view.dispose();
   });
+
+  it('interpolates the suit orientation between ticks without changing the target sample', () => {
+    resetOrigin();
+    const view = new PlayerView();
+    view.pushSample({ x: 0, y: 0, z: 0 }, { ...IDENTITY_QUAT });
+    view.pushSample({ x: 0, y: 0, z: 0 }, { x: 0, y: Math.SQRT1_2, z: 0, w: Math.SQRT1_2 });
+    view.render(0.5);
+    expect(view.group.quaternion.y).toBeCloseTo(Math.sin(Math.PI / 8));
+    view.render(1);
+    expect(view.group.quaternion.y).toBeCloseTo(Math.SQRT1_2);
+    view.dispose();
+  });
 });

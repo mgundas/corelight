@@ -1,5 +1,8 @@
 import type { PerspectiveCamera } from 'three';
 import type { Vec3d } from '../core/math.js';
+import { CAMERA_LOOK_RADIANS_PER_PIXEL } from '../core/constants.js';
+import { getSettings } from '../core/settings.js';
+import { isUiKey } from './uiInput.js';
 
 // Free-fly debug camera (F3). WASD + mouse (pointer lock), Q/E down/up,
 // scroll changes speed 1..2000 m/s. On by default in M00.
@@ -48,6 +51,7 @@ export class FreeFlyCamera {
   };
 
   private handleKeyDown = (e: KeyboardEvent): void => {
+    if (!this.enabled || isUiKey(e)) return;
     if (e.code === 'F3' || e.code === 'F1') return; // handled by Game toggle
     if (e.code.startsWith('F')) return; // never treat function keys as movement
     if (e.code === 'Space') e.preventDefault();
@@ -91,8 +95,10 @@ export class FreeFlyCamera {
     } else {
       return;
     }
-    this.yaw -= dx * 0.0025;
-    this.pitch -= dy * 0.0025;
+    const settings = getSettings();
+    const sensitivity = CAMERA_LOOK_RADIANS_PER_PIXEL * settings.sensitivity;
+    this.yaw -= dx * sensitivity;
+    this.pitch -= dy * sensitivity * (settings.invertY ? -1 : 1);
     const limit = Math.PI / 2 - 0.01;
     this.pitch = Math.max(-limit, Math.min(limit, this.pitch));
   };

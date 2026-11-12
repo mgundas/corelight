@@ -1,76 +1,72 @@
-// HUD (React port): oxygen bar, tether indicator, backpack slot bar, soil,
-// power readout, prompt and navigation hints. Renders only the projection
-// pushed by the Game; slot drags go through InventorySlot.
-
 import { useHudStore } from '../stores/hudStore.js';
+import { useMenuStore } from '../stores/menuStore.js';
 import { arrowForBearing, type NavHint } from '../../game/oxygenStatus.js';
 import { InventorySlot } from './InventorySlot.js';
+import { SOIL_MAX } from '../../core/constants.js';
 
 function hintText(hint: NavHint | null): string {
   if (!hint) return '';
-  return `${hint.label} ${Math.round(hint.distM)}m ${arrowForBearing(hint.bearingDeg)}`;
+  return `${arrowForBearing(hint.bearingDeg)} ${hint.label} · ${Math.round(hint.distM)} m`;
 }
 
 export function HudView() {
-  const slots = useHudStore((s) => s.slots);
-  const selectedSlot = useHudStore((s) => s.selectedSlot);
-  const soil = useHudStore((s) => s.soil);
-  const prompt = useHudStore((s) => s.prompt);
-  const oxygen = useHudStore((s) => s.oxygen);
-  const onNetwork = useHudStore((s) => s.onNetwork);
-  const heat = useHudStore((s) => s.heat);
-  const cold = useHudStore((s) => s.cold);
-  const habitatHint = useHudStore((s) => s.habitatHint);
-  const deathHint = useHudStore((s) => s.deathHint);
-  const power = useHudStore((s) => s.power);
-  const toolMode = useHudStore((s) => s.toolMode);
-  const brushMode = useHudStore((s) => s.brushMode);
-  const drillTier = useHudStore((s) => s.drillTier);
-  const deathFadeToken = useHudStore((s) => s.deathFadeToken);
-  const toast = useHudStore((s) => s.toast);
-  const toastToken = useHudStore((s) => s.toastToken);
-
-  const navParts = [hintText(habitatHint), hintText(deathHint)].filter((part) => part !== '');
+  const state = useHudStore();
+  const menuOpen = useMenuStore((s) => s.view.kind !== 'none');
+  const { slots, selectedSlot, soil, prompt, oxygen, onNetwork, heat, cold,
+    habitatHint, deathHint, power, toolMode, brushMode, drillTier,
+    deathFadeToken, toast, toastToken } = state;
+  const equipped = toolMode === 'deform';
+  const modeLabel = state.interactionMode === 'cable' ? 'Cable tool'
+    : state.interactionMode === 'place' ? 'Place structure'
+    : state.interactionMode === 'carry' ? 'Carrying item'
+    : equipped ? `${brushMode === 'dig' ? 'Dig' : 'Add'} · tool on` : 'Explore';
+  const modeHelp = state.interactionMode === 'cable' || state.interactionMode === 'place' ? 'E: exit mode'
+    : state.interactionMode === 'carry' ? 'LMB: release item'
+    : equipped ? 'Q: stow terrain tool' : 'Q: terrain tool';
+  const o2 = Math.max(0, Math.min(100, oxygen));
+  const navParts = [hintText(habitatHint), hintText(deathHint)].filter(Boolean);
   return (
     <>
-      <div id="hud">
-        <div id="hud-oxygen" className={oxygen < 25 ? 'low' : ''} title={`Oxygen ${Math.ceil(oxygen)}`}>
-          <div id="hud-oxygen-fill" style={{ width: `${Math.max(0, Math.min(100, oxygen))}%` }} />
-        </div>
-        <div id="hud-tether" className={onNetwork ? 'live' : ''}>
-          {onNetwork ? 'O₂ ●' : 'O₂ ○'}
-        </div>
-        <div id="hud-mode" className={toolMode === 'deform' ? 'deform' : ''}>
-          {toolMode === 'deform' ? `Q: tool on · ${brushMode === 'dig' ? 'Dig' : 'Add'} (X)` : 'Q: terrain tool'}
-        </div>
-        <div id="hud-drill" title="Selected backpack drill">
-          Drill Mk{drillTier}
-        </div>
-        <div id="hud-slots">
-          {Array.from({ length: 8 }, (_, i) => (
-            <InventorySlot
-              key={i}
-              index={i}
-              slot={slots[i] ?? null}
-              selected={i === selectedSlot}
-            />
-          ))}
-        </div>
-        <div id="hud-soil">Soil {soil}</div>
-        {power ? (
-          <div id="hud-power" className={power.state === 'paused' ? 'paused' : ''}>
-            ⚡ {power.generation.toFixed(1)}/s in · {power.demand.toFixed(1)}/s out ·{' '}
-            {Math.round(power.stored)}/{Math.round(power.capacity)} stored ·{' '}
-            {power.state === 'paused' ? 'paused: no power' : power.state}
+      <div id="hud" hidden={menuOpen}>
+        <section className="suit-panel" aria-label="Suit status">
+          <div className="eyebrow">SUIT TELEMETRY <span className="status-dot" /></div>
+          <div className="oxygen-readout"><span>O<span className="subscript">2</span></span><strong>{Math.ceil(o2)}<small>%</small></strong></div>
+          <div id="hud-oxygen" className={o2 < 25 ? 'low' : ''}
+            role="progressbar" aria-label="Oxygen" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.ceil(o2)}>
+            <div id="hud-oxygen-fill" style={{ width: `${o2}%` }} />
           </div>
-        ) : null}
-        {prompt ? <div id="hud-prompt">{prompt}</div> : null}
-        {toast ? (
-          <div key={toastToken} id="hud-toast">
-            {toast}
+          <div id="hud-tether" className={onNetwork ? 'live' : ''}>
+            <span className="network-dot" />{onNetwork ? 'Tether connected' : o2 < 25 ? 'Oxygen low · return to a tether' : 'Using suit oxygen'}
           </div>
-        ) : null}
-        {navParts.length > 0 ? <div id="hud-nav">{navParts.join('   ')}</div> : null}
+          {heat || cold ? <div className="hazard-label">{heat ? 'Heat exposure' : 'Cold exposure'} · increased O₂ use</div> : null}
+        </section>
+        <aside className="field-panel">
+          <div className="eyebrow">FIELD EQUIPMENT</div>
+          <div id="hud-mode" className={equipped ? 'deform' : ''}>
+            <span className="mode-glyph" aria-hidden="true">{equipped ? '◈' : '⌖'}</span>
+            <div><strong>{modeLabel}</strong><small>{modeHelp}</small></div>
+          </div>
+          <div className="equipment-meta"><span id="hud-drill">Drill Mk{drillTier}</span><span id="hud-soil">Soil {soil} / {SOIL_MAX}</span></div>
+          {equipped ? <div className="brush-controls"><kbd>LMB</kbd> use <kbd>X</kbd> dig / add<br /><kbd>F</kbd> hold to flatten <kbd>Ctrl + wheel</kbd> size</div> : null}
+          {navParts.length > 0 ? <div id="hud-nav">{navParts.map((part) => <div key={part}>{part}</div>)}</div> : null}
+        </aside>
+        {power ? <div id="hud-power" className={power.state === 'paused' ? 'paused' : ''}>
+          <span className="eyebrow">POWER NETWORK</span>
+          <strong>{power.state === 'paused' ? 'Paused · no power' : power.state}</strong>
+          <span>{power.generation.toFixed(1)}/s in · {power.demand.toFixed(1)}/s out</span>
+          <span>{Math.round(power.stored)} / {Math.round(power.capacity)} stored</span>
+        </div> : null}
+        <div className="action-feedback">
+          {toast ? <div key={toastToken} id="hud-toast" role="status">{toast}</div> : null}
+          {prompt ? <div id="hud-prompt">{prompt}</div> : null}
+        </div>
+        <div className="backpack-dock">
+          <div className="dock-heading"><span className="eyebrow">BACKPACK <span className="muted">{slots.filter(Boolean).length} / 8</span></span><span><kbd>Tab</kbd> printer</span></div>
+          <div id="hud-slots" aria-label="Backpack slots">
+            {Array.from({ length: 8 }, (_, i) => <InventorySlot key={i} index={i} slot={slots[i] ?? null} selected={i === selectedSlot} />)}
+          </div>
+          <div className="dock-footer"><span><kbd>RMB</kbd> hold to look <span className="separator">/</span> <kbd>Wheel</kbd> zoom</span><span><kbd>T</kbd> tether <kbd>L</kbd> lamp <kbd>Esc</kbd> menu</span></div>
+        </div>
       </div>
       <div id="heat-haze" className={heat ? 'on' : ''} />
       <div id="cold-tint" className={cold ? 'on' : ''} />

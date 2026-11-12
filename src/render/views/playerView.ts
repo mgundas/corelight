@@ -1,5 +1,5 @@
-// Placeholder low-poly astronaut (M03): capsule body, round helmet with a
-// visor, small backpack — all three.js primitives. Rendered at the entity
+// Low-poly astronaut with an art-only limb rig, visor and oxygen tanks.
+// Rendered at the entity
 // position interpolated between the last two sim ticks. The group is
 // positioned absolutely from world doubles every frame, so it owns its
 // origin shifts (like the chunk group) and applyOriginShift must skip it.
@@ -9,6 +9,8 @@ import { toLocal } from '../floatingOrigin.js';
 import type { Quat, Vec3d } from '../../core/math.js';
 import type { ItemDef } from '../../data/loadData.js';
 import { makeItemMesh } from './itemGeometry.js';
+import { makeAstronaut } from './astronaut.js';
+import { AVATAR_STRIDE_M, AVATAR_TELEPORT_DISTANCE_SQ } from '../../core/constants.js';
 
 interface Sample {
   pos: Vec3d;
@@ -16,34 +18,15 @@ interface Sample {
 }
 
 /** Teleports snap instead of streaking across the map. */
-const SNAP_DISTANCE_SQ = 25;
+const SNAP_DISTANCE_SQ = AVATAR_TELEPORT_DISTANCE_SQ;
 
 export class PlayerView {
   readonly group = new THREE.Group();
-  private readonly bodyMat = new THREE.MeshStandardMaterial({
-    color: 0xcc6633,
-    roughness: 0.8,
-    metalness: 0.1,
-    flatShading: true,
-  });
-  private readonly helmetMat = new THREE.MeshStandardMaterial({
-    color: 0xe8ecef,
-    roughness: 0.4,
-    metalness: 0.2,
-    flatShading: true,
-  });
-  private readonly visorMat = new THREE.MeshStandardMaterial({
-    color: 0x0a1626,
-    roughness: 0.15,
-    metalness: 0.6,
-    flatShading: true,
-  });
-  private readonly packMat = new THREE.MeshStandardMaterial({
-    color: 0x8a8f96,
-    roughness: 0.9,
-    metalness: 0.05,
-    flatShading: true,
-  });
+  private readonly suit = makeAstronaut();
+  private lastRenderPos: Vec3d | null = null;
+  private gaitPhase = 0;
+  private readonly previousRotation = new THREE.Quaternion();
+  private readonly currentRotation = new THREE.Quaternion();
   private prev: Sample | null = null;
   private curr: Sample | null = null;
   private visible = false;
@@ -59,29 +42,7 @@ export class PlayerView {
     this.group.userData['originManaged'] = true;
     this.group.visible = false;
 
-    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.35, 1.1, 4, 12), this.bodyMat);
-    body.matrixAutoUpdate = false;
-    body.updateMatrix();
-    this.group.add(body);
-
-    const helmet = new THREE.Mesh(new THREE.SphereGeometry(0.27, 12, 10), this.helmetMat);
-    helmet.position.set(0, 0.62, 0.02);
-    helmet.matrixAutoUpdate = false;
-    helmet.updateMatrix();
-    this.group.add(helmet);
-
-    const visor = new THREE.Mesh(new THREE.SphereGeometry(0.2, 12, 10), this.visorMat);
-    visor.scale.set(1, 0.7, 0.6);
-    visor.position.set(0, 0.62, 0.16);
-    visor.matrixAutoUpdate = false;
-    visor.updateMatrix();
-    this.group.add(visor);
-
-    const pack = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.52, 0.26), this.packMat);
-    pack.position.set(0, 0.08, -0.34);
-    pack.matrixAutoUpdate = false;
-    pack.updateMatrix();
-    this.group.add(pack);
+    this.group.add(this.suit.group);
   }
 
   /** Record the latest tick state (call after every sim tick). */
@@ -102,6 +63,7 @@ export class PlayerView {
     this.group.visible = false;
     this.prev = null;
     this.curr = null;
+    this.lastRenderPos = null;
   }
 
   /** Interpolated world position between the last two tick samples. */
@@ -124,10 +86,22 @@ export class PlayerView {
     if (!world) return;
     const local = toLocal(world);
     this.group.position.set(local.x, local.y, local.z);
-    // Nearest-sample orientation (quaternion slerp across one tick adds
-    // nothing visible at 30 Hz; position is what the eye tracks).
-    const curr = this.curr as { quat: Quat };
-    this.group.quaternion.set(curr.quat.x, curr.quat.y, curr.quat.z, curr.quat.w);
+    const curr = this.curr!;
+    const prev = this.prev!;
+    const q = curr.quat;
+    const p = prev.quat;
+    const teleport = Math.hypot(curr.pos.x - prev.pos.x, curr.pos.y - prev.pos.y, curr.pos.z - prev.pos.z) ** 2 > SNAP_DISTANCE_SQ;
+    this.group.quaternion.set(q.x, q.y, q.z, q.w);
+    if (!teleport) {
+      this.previousRotation.set(p.x, p.y, p.z, p.w);
+      this.currentRotation.set(q.x, q.y, q.z, q.w);
+      this.group.quaternion.slerpQuaternions(this.previousRotation, this.currentRotation, Math.max(0, Math.min(1, alpha)));
+    }
+    const step = this.lastRenderPos ? Math.hypot(world.x - this.lastRenderPos.x, world.y - this.lastRenderPos.y, world.z - this.lastRenderPos.z) : 0;
+    const moving = step > 0 && step * step < SNAP_DISTANCE_SQ && !teleport;
+    if (moving) this.gaitPhase += step / AVATAR_STRIDE_M * Math.PI * 2;
+    this.suit.animate(this.gaitPhase, moving);
+    this.lastRenderPos = world;
   }
 
   /**
@@ -182,21 +156,11 @@ export class PlayerView {
   }
 
   dispose(): void {
-    for (const child of [...this.group.children]) {
-      this.group.remove(child);
-      // Backpack/package meshes share cached geometry/materials (owned by
-      // itemGeometry.ts): only the astronaut's own meshes dispose theirs.
-      if (!this.packSlots.includes(child as THREE.Mesh) && child !== this.frontCarry) {
-        const mesh = child as THREE.Mesh;
-        mesh.geometry.dispose();
-      }
-    }
+    // The suit owns its geometry; backpack meshes use the shared item cache.
+    this.group.clear();
     for (let i = 0; i < this.packSlots.length; i += 1) this.packSlots[i] = null;
     this.frontCarry = null;
     this.frontCarryId = null;
-    this.bodyMat.dispose();
-    this.helmetMat.dispose();
-    this.visorMat.dispose();
-    this.packMat.dispose();
+    this.suit.dispose();
   }
 }

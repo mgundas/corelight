@@ -1,5 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { CameraRig, CAM_DISTANCE_MAX, CAM_DISTANCE_MIN } from '../../src/player/cameraRig.js';
+import { DEFAULT_SETTINGS, updateSettings } from '../../src/core/settings.js';
+
+beforeEach(() => { updateSettings(DEFAULT_SETTINGS); });
 
 describe('CameraRig', () => {
   it('clamps zoom to [2, 8]', () => {
@@ -43,5 +46,46 @@ describe('CameraRig', () => {
     expect(rig.pitch).toBeLessThan(Math.PI / 2);
     rig.addLook(0, 100000);
     expect(rig.pitch).toBeGreaterThan(-Math.PI / 2);
+  });
+
+  it('applies sensitivity and vertical inversion to look input', () => {
+    const normal = new CameraRig();
+    const inverted = new CameraRig();
+    normal.pitch = 0;
+    normal.addLook(10, 10);
+    updateSettings({ sensitivity: 2, invertY: true });
+    inverted.pitch = 0;
+    inverted.addLook(10, 10);
+    expect(inverted.yaw).toBeCloseTo(normal.yaw * 2);
+    expect(inverted.pitch).toBeCloseTo(-normal.pitch * 2);
+  });
+
+  it('avoids walls immediately and recovers without a sudden distance jump', () => {
+    const rig = new CameraRig();
+    rig.pitch = 0;
+    const pos = { x: 0, y: 400, z: 0 };
+    const up = { x: 0, y: 1, z: 0 };
+    rig.update(pos, up, () => null, 1 / 60);
+    rig.update(pos, up, () => 2, 1 / 60);
+    expect(rig.position.x).toBeCloseTo(-1.7);
+    rig.update(pos, up, () => null, 1 / 60);
+    expect(rig.position.x).toBeLessThan(-1.7);
+    expect(rig.position.x).toBeGreaterThan(-4);
+    updateSettings({ smoothCamera: false });
+    rig.update(pos, up, () => null, 1 / 60);
+    expect(rig.position.x).toBeCloseTo(-4);
+  });
+
+  it('has the same recovery speed at 30 and 60 rendering FPS', () => {
+    function recover(fps: number): number {
+      const rig = new CameraRig();
+      rig.pitch = 0;
+      const pos = { x: 0, y: 400, z: 0 };
+      const up = { x: 0, y: 1, z: 0 };
+      rig.update(pos, up, () => 2, 1 / fps);
+      for (let i = 0; i < fps; i += 1) rig.update(pos, up, () => null, 1 / fps);
+      return rig.position.x;
+    }
+    expect(recover(30)).toBeCloseTo(recover(60), 8);
   });
 });
