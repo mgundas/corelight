@@ -14,11 +14,21 @@ import type { ToolAim } from '../player/terrainTool.js';
 import type { PlacementMode } from './placement.js';
 import { carriedPlaceable } from './placement.js';
 import { findAimedItem, findAimedStation, findAimedTether } from './pickup.js';
+import type { PackHold } from './packHold.js';
+import { primaryPackTarget } from './packTarget.js';
 
 export interface InteractDeps {
   world: World;
   playerId: EntityId | null;
   input: PlayerInput;
+  /** Fresh E edge for this tick (consumed once by the caller). */
+  interact: boolean;
+  /** True while E is physically down (hold-to-pack). */
+  interactHeld?: boolean;
+  /** Wall-clock ms for the 1 s pack gesture. */
+  nowMs?: number;
+  /** Owns hold-E timing; absent in focused unit tests (normal tap-E only). */
+  packHold?: PackHold;
   /** False while flying or while a menu/UI owns input. */
   canAct: boolean;
   aim: ToolAim;
@@ -39,15 +49,38 @@ export function hasSelectedLightstick(world: World, playerId: EntityId): boolean
 
 export function tickInteraction(deps: InteractDeps): void {
   const tab = deps.input.consumePrinter();
-  const interact = deps.input.consumeInteract();
   if (tab && deps.playerId) deps.togglePrinter();
-  if (!interact || !deps.canAct || !deps.playerId) return;
-  const { world, playerId, aim, placement } = deps;
-  // E while placing cancels the ghost (right-click does too, in PlacementMode).
-  if (placement.isActive()) {
-    placement.cancel();
+  if (!deps.canAct || !deps.playerId) {
+    deps.packHold?.reset();
     return;
   }
+  const { world, playerId, aim, placement } = deps;
+  // E while placing cancels the ghost and never starts a pack gesture.
+  if (placement.isActive()) {
+    if (deps.interact) placement.cancel();
+    return;
+  }
+  let forceInteract = deps.interact;
+  if (deps.packHold) {
+    const packTarget = primaryPackTarget(world, playerId);
+    if (packTarget && deps.interact) {
+      deps.packHold.press(packTarget, deps.nowMs ?? 0);
+    }
+    const result = deps.packHold.update(
+      deps.interactHeld === true,
+      deps.nowMs ?? 0,
+      packTarget,
+    );
+    if (result === 'hold') return;
+    if (result === 'pack') {
+      if (packTarget) {
+        world.dispatch({ type: 'packUpPlaced', playerId, entityId: packTarget });
+      }
+      return;
+    }
+    if (result === 'release') forceInteract = true;
+  }
+  if (!forceInteract) return;
   const stationId = findAimedStation(world, playerId);
   if (stationId) {
     const station = world.entities.get(stationId);

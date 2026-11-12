@@ -31,6 +31,7 @@ const ENTITY_KINDS: ReadonlySet<string> = new Set<string>([
   'engine',
   'lightstick',
   'marker',
+  'cable',
 ]);
 
 export interface SerializedEntity {

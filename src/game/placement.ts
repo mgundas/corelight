@@ -1,18 +1,21 @@
-// Client-side placement mode state (M09). The mode is presentation/input
+// Client-side placement mode state (M09/M10). The mode is presentation/input
 // state, not World state: nothing here mutates the sim. Confirming a click
 // returns a placement request; Game dispatches the placePlaceable Action and
-// the sim re-validates everything (range, slope, space, package ownership).
+// the sim re-validates everything (ground, snap/slot target, package
+// ownership). M10 platforms snap to free rim points and machines attach to
+// platform top slots.
 
 import { PLACE_RANGE_M } from '../core/constants.js';
-import { distance, type Vec3d } from '../core/math.js';
+import { distance, type Quat, type Vec3d } from '../core/math.js';
 import {
   placeableForPackageItem,
   type PlaceableDef,
 } from '../data/loadPlaceables.js';
-import type { EntityId } from '../sim/entities.js';
-import { checkPlacement } from '../sim/placeActions.js';
+import type { EntityId, SlotRef, SnapRef } from '../sim/entities.js';
+import { resolvePlacement } from '../sim/placeResolve.js';
 import type { ToolAim } from '../player/terrainTool.js';
 import type { World } from '../sim/world.js';
+import { findPlacementTarget } from './snapTarget.js';
 
 export interface CarriedPlaceable {
   placeable: PlaceableDef;
@@ -44,6 +47,8 @@ export function carriedPlaceable(world: World, playerId: EntityId): CarriedPlace
 export interface PlacementRequest {
   placeableId: string;
   position: Vec3d;
+  snap?: SnapRef;
+  slot?: SlotRef;
 }
 
 export class PlacementMode {
@@ -96,12 +101,18 @@ export class PlacementMode {
       this.activeId = null;
       return null;
     }
-    if (!digEdge || !aim.hit || !aim.planet) return null;
-    if (aim.planet.id !== player.planetId) return null;
-    if (distance(player.position, aim.hit) > PLACE_RANGE_M) return null;
-    const check = checkPlacement(world, player.planetId, this.activeId, aim.hit);
-    if (!check.ok) return null;
-    const request = { placeableId: this.activeId, position: { ...aim.hit } };
+    if (!digEdge) return null;
+    const target = findPlacementTarget(world, playerId, this.activeId, aim);
+    if (!aim.hit && !target) return null;
+    const requested = aim.hit ?? { x: 0, y: 0, z: 0 };
+    const resolved = resolvePlacement(world, player.planetId, this.activeId, requested, player.position, target);
+    if (!resolved.ok || !resolved.placement) return null;
+    const request: PlacementRequest = {
+      placeableId: this.activeId,
+      position: { ...resolved.placement.position },
+    };
+    if (resolved.snap) request.snap = { ...resolved.snap };
+    if (resolved.slot) request.slot = { ...resolved.slot };
     this.activeId = null;
     return request;
   }
@@ -112,15 +123,35 @@ export function placementCheckFor(
   world: World,
   playerId: EntityId,
   aim: ToolAim,
-): { ok: boolean; reason: string | null; position: Vec3d | null } {
+): { ok: boolean; reason: string | null; position: Vec3d | null; rotation: Quat | null } {
   const player = world.entities.get(playerId);
   const carried = carriedPlaceable(world, playerId);
-  if (!player || !player.planetId || !carried || !aim.hit || aim.planet?.id !== player.planetId) {
-    return { ok: false, reason: 'Aim at the ground', position: null };
+  if (!player || !player.planetId || !carried || aim.planet?.id !== player.planetId) {
+    return { ok: false, reason: 'Aim at the ground', position: null, rotation: null };
   }
-  if (distance(player.position, aim.hit) > PLACE_RANGE_M) {
-    return { ok: false, reason: 'Out of reach', position: { ...aim.hit } };
+  const target = findPlacementTarget(world, playerId, carried.placeable.id, aim);
+  if (!aim.hit && !target) return { ok: false, reason: 'Aim at the ground', position: null, rotation: null };
+  // Keep the old readability guard for ground placement (resolve checks the
+  // resolved snap/slot transform, which can be raised above the aim point).
+  if (!target && aim.hit && distance(player.position, aim.hit) > PLACE_RANGE_M) {
+    return { ok: false, reason: 'Out of reach', position: { ...aim.hit }, rotation: null };
   }
-  const check = checkPlacement(world, player.planetId, carried.placeable.id, aim.hit);
-  return { ok: check.ok, reason: check.reason, position: { ...aim.hit } };
+  const requested = aim.hit ?? { x: 0, y: 0, z: 0 };
+  const resolved = resolvePlacement(world, player.planetId, carried.placeable.id, requested, player.position, target);
+  if (!resolved.ok || !resolved.placement) {
+    // A failed snap/slot has no honest ghost position; hide it instead of
+    // drawing the body on the terrain behind the platform.
+    return {
+      ok: false,
+      reason: resolved.reason,
+      position: target ? null : aim.hit,
+      rotation: null,
+    };
+  }
+  return {
+    ok: true,
+    reason: null,
+    position: { ...resolved.placement.position },
+    rotation: { ...resolved.placement.rotation },
+  };
 }

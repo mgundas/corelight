@@ -5,13 +5,16 @@
 // Groups position children absolutely from world doubles (origin-managed).
 
 import * as THREE from 'three';
+import type { Quat } from '../../core/math.js';
 import { isKnownItem, itemDef } from '../../data/loadData.js';
 import {
   placeableById,
   placeableForMachineType,
+  type PlaceableDef,
   type PlaceableModel,
 } from '../../data/loadPlaceables.js';
 import type { Entity, EntityId } from '../../sim/entities.js';
+import { defForEntity } from '../../sim/snapUtils.js';
 import { toLocal } from '../floatingOrigin.js';
 import type { ItemEmitter } from './itemView.js';
 
@@ -20,24 +23,37 @@ const DARK = 0x4a525b;
 const ACCENT = 0xff8a3c;
 const PANEL = 0x3b4f6b;
 const SAMPLE = 0x6dff8a;
+const STATUS_GREEN = 0x39ff88;
+const STATUS_YELLOW = 0xffd24a;
+const STATUS_RED = 0xff4444;
+const PANEL_NORMAL = new THREE.Vector3(0, 0, 1);
+const REST_PANEL = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -0.48);
 
 export class PlaceableViews {
   readonly group = new THREE.Group();
   private readonly objects = new Map<EntityId, THREE.Group>();
+  private readonly panelHeads = new Map<EntityId, THREE.Group>();
+  private readonly statusLights = new Map<EntityId, THREE.Mesh>();
   private readonly bodyMat = new THREE.MeshStandardMaterial({ color: BODY, roughness: 0.8, metalness: 0.05, flatShading: true });
   private readonly darkMat = new THREE.MeshStandardMaterial({ color: DARK, roughness: 0.7, metalness: 0.3, flatShading: true });
   private readonly accentMat = new THREE.MeshStandardMaterial({ color: ACCENT, roughness: 0.5, metalness: 0.2, emissive: new THREE.Color(ACCENT), emissiveIntensity: 0.25, flatShading: true });
   private readonly panelMat = new THREE.MeshStandardMaterial({ color: PANEL, roughness: 0.35, metalness: 0.35, flatShading: true });
   private readonly glowMat = new THREE.MeshStandardMaterial({ color: 0x2a1206, emissive: new THREE.Color(ACCENT), emissiveIntensity: 2, flatShading: true });
   private readonly sampleMat = new THREE.MeshStandardMaterial({ color: 0x0c2a14, emissive: new THREE.Color(SAMPLE), emissiveIntensity: 1.6, flatShading: true });
+  private readonly statusGreen = new THREE.MeshStandardMaterial({ color: 0x0d2b18, emissive: new THREE.Color(STATUS_GREEN), emissiveIntensity: 1.9, flatShading: true });
+  private readonly statusYellow = new THREE.MeshStandardMaterial({ color: 0x2b220d, emissive: new THREE.Color(STATUS_YELLOW), emissiveIntensity: 1.5, flatShading: true });
+  private readonly statusRed = new THREE.MeshStandardMaterial({ color: 0x2b0d0d, emissive: new THREE.Color(STATUS_RED), emissiveIntensity: 1.9, flatShading: true });
   private readonly box = new THREE.BoxGeometry(1, 1, 1);
   private readonly cyl = new THREE.CylinderGeometry(1, 1, 1, 12);
   private readonly sphere = new THREE.SphereGeometry(1, 10, 8);
   private readonly cone = new THREE.ConeGeometry(1, 1, 8);
   private readonly capsule = new THREE.CapsuleGeometry(0.6, 1.1, 4, 10);
-  /** Scratch objects: light-stick sync runs every frame (no per-frame alloc). */
+  /** Scratch objects: light-stick/panel/status sync runs every frame. */
   private readonly tmpQuat = new THREE.Quaternion();
+  private readonly tmpQuatInverse = new THREE.Quaternion();
   private readonly tmpTip = new THREE.Vector3();
+  private readonly tmpSun = new THREE.Vector3();
+  private readonly tmpLocalSun = new THREE.Vector3();
 
   constructor() {
     this.group.name = 'placeables';
@@ -45,22 +61,55 @@ export class PlaceableViews {
   }
 
   /** Reconcile placeables/machines/shuttles/light sticks; returns emitters. */
-  sync(entities: Iterable<Entity>): ItemEmitter[] {
+  sync(entities: Iterable<Entity>, sunDirWorld?: { x: number; y: number; z: number }): ItemEmitter[] {
     const seen = new Set<EntityId>();
     const emitters: ItemEmitter[] = [];
+    const sun = this.tmpSun.set(sunDirWorld?.x ?? 0, sunDirWorld?.y ?? 1, sunDirWorld?.z ?? 0);
+    if (sun.lengthSq() < 1e-9) sun.set(0, 1, 0);
+    sun.normalize();
     for (const entity of entities) {
       const model = this.modelFor(entity);
       if (!model) continue;
       seen.add(entity.id);
       let object = this.objects.get(entity.id);
       if (!object) {
-        object = this.build(model);
+        const def = defForEntity(entity);
+        const built = this.build(model, def, entity.kind === 'machine');
+        object = built.group;
+        if (built.head) this.panelHeads.set(entity.id, built.head);
+        if (built.status) this.statusLights.set(entity.id, built.status);
         this.objects.set(entity.id, object);
         this.group.add(object);
       }
       const local = toLocal(entity.position);
       object.position.set(local.x, local.y, local.z);
       object.quaternion.set(entity.rotation.x, entity.rotation.y, entity.rotation.z, entity.rotation.w);
+      if (model === 'panel' || this.statusLights.has(entity.id)) {
+        this.tmpQuat.set(entity.rotation.x, entity.rotation.y, entity.rotation.z, entity.rotation.w);
+        this.tmpQuatInverse.copy(this.tmpQuat).invert();
+        this.tmpLocalSun.copy(sun).applyQuaternion(this.tmpQuatInverse);
+      }
+      if (model === 'panel') {
+        const head = this.panelHeads.get(entity.id);
+        if (head) {
+          if (this.tmpLocalSun.y > 0.02) {
+            head.quaternion.setFromUnitVectors(PANEL_NORMAL, this.tmpLocalSun.normalize());
+          } else {
+            head.quaternion.copy(REST_PANEL);
+          }
+        }
+      }
+      const status = this.statusLights.get(entity.id);
+      if (status) {
+        const power = entity.components.power;
+        if (power?.paused) status.material = this.statusRed;
+        else if (entity.components.printer?.recipeId) status.material = this.statusGreen;
+        else if (entity.components.machine?.machineType === 'solar_panel') {
+          status.material = this.tmpLocalSun.y > 0.02 ? this.statusGreen : this.statusYellow;
+        } else {
+          status.material = this.statusYellow;
+        }
+      }
       if (entity.kind === 'lightstick') {
         const itemId = entity.components.item?.itemId;
         if (itemId && isKnownItem(itemId)) {
@@ -85,6 +134,8 @@ export class PlaceableViews {
       if (seen.has(id)) continue;
       this.group.remove(object);
       this.objects.delete(id);
+      this.panelHeads.delete(id);
+      this.statusLights.delete(id);
     }
     return emitters;
   }
@@ -102,8 +153,14 @@ export class PlaceableViews {
     return placeableForMachineType(machineType)?.model ?? null;
   }
 
-  private build(model: PlaceableModel): THREE.Group {
+  private build(
+    model: PlaceableModel,
+    def: PlaceableDef | undefined,
+    withStatus: boolean,
+  ): { group: THREE.Group; head: THREE.Group | null; status: THREE.Mesh | null } {
     const g = new THREE.Group();
+    const heightM = def?.heightM ?? 1;
+    let head: THREE.Group | null = null;
     const part = (
       geo: THREE.BufferGeometry,
       mat: THREE.Material,
@@ -124,6 +181,11 @@ export class PlaceableViews {
         const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
         part(this.box, this.accentMat, [0.28, 0.5, 0.28], [Math.cos(a) * 1.8, 0.15, Math.sin(a) * 1.8]);
       }
+      // Slot pads come from the same JSON the placement rules use; they make
+      // "aim at the top to attach a machine" discoverable.
+      for (const slot of def?.slots ?? []) {
+        part(this.cyl, this.darkMat, [0.24, 0.025, 0.24], [slot.x, slot.y + 0.015, slot.z]);
+      }
     } else if (model === 'printer_small') {
       part(this.box, this.bodyMat, [1.15, 0.9, 1.0], [0, 0.45, 0]);
       part(this.box, this.darkMat, [0.7, 0.28, 0.5], [0, 0.55, 0.45]);
@@ -136,8 +198,18 @@ export class PlaceableViews {
       part(this.box, this.accentMat, [0.35, 0.2, 1.2], [0, 1.45, 0]);
     } else if (model === 'panel') {
       part(this.cyl, this.darkMat, [0.1, 1.6, 0.1], [0, 0.8, 0]);
-      part(this.box, this.panelMat, [1.6, 1.05, 0.08], [0, 1.75, 0], [-0.48, 0, 0]);
-      part(this.box, this.accentMat, [1.7, 0.08, 0.1], [0, 2.25, 0.05], [-0.48, 0, 0]);
+      head = new THREE.Group();
+      head.name = 'panelHead';
+      head.position.set(0, 1.75, 0);
+      head.quaternion.copy(REST_PANEL);
+      const panel = new THREE.Mesh(this.box, this.panelMat);
+      panel.scale.set(1.6, 1.05, 0.08);
+      head.add(panel);
+      const frame = new THREE.Mesh(this.box, this.accentMat);
+      frame.scale.set(1.7, 0.08, 0.1);
+      frame.position.set(0, 0.5, 0.05);
+      head.add(frame);
+      g.add(head);
       part(this.box, this.darkMat, [0.35, 0.16, 0.35], [0, 0.08, 0]);
     } else if (model === 'battery') {
       part(this.cyl, this.bodyMat, [0.48, 1.15, 0.48], [0, 0.6, 0]);
@@ -178,18 +250,31 @@ export class PlaceableViews {
       part(this.cyl, this.bodyMat, [0.07, 0.5, 0.07], [0, 0.25, 0]);
       part(this.sphere, this.accentMat, [0.11, 0.11, 0.11], [0, 0.52, 0]);
     }
-    return g;
+    let status: THREE.Mesh | null = null;
+    if (withStatus) {
+      status = new THREE.Mesh(this.sphere, this.statusYellow);
+      status.name = 'statusLight';
+      status.scale.setScalar(0.09);
+      status.position.set(0.45, Math.max(0.4, heightM * 0.88), 0.45);
+      g.add(status);
+    }
+    return { group: g, head, status };
   }
 
   dispose(): void {
     for (const object of this.objects.values()) this.group.remove(object);
     this.objects.clear();
+    this.panelHeads.clear();
+    this.statusLights.clear();
     this.bodyMat.dispose();
     this.darkMat.dispose();
     this.accentMat.dispose();
     this.panelMat.dispose();
     this.glowMat.dispose();
     this.sampleMat.dispose();
+    this.statusGreen.dispose();
+    this.statusYellow.dispose();
+    this.statusRed.dispose();
     this.box.dispose();
     this.cyl.dispose();
     this.sphere.dispose();
@@ -227,6 +312,7 @@ export class PlacementGhost {
     position: { x: number; y: number; z: number } | null,
     up: { x: number; y: number; z: number } | null,
     valid: boolean,
+    rotation: Quat | null = null,
   ): void {
     const def = placeableId ? placeableById(placeableId) : undefined;
     if (!def || !position || !up) {
@@ -235,8 +321,12 @@ export class PlacementGhost {
     }
     const local = toLocal(position);
     this.group.position.set(local.x, local.y, local.z);
-    this.upVec.set(up.x, up.y, up.z).normalize();
-    this.group.quaternion.setFromUnitVectors(this.yAxis, this.upVec);
+    if (rotation) {
+      this.group.quaternion.set(rotation.x, rotation.y, rotation.z, rotation.w);
+    } else {
+      this.upVec.set(up.x, up.y, up.z).normalize();
+      this.group.quaternion.setFromUnitVectors(this.yAxis, this.upVec);
+    }
     this.body.scale.set(def.footprintRadiusM * 1.3, def.heightM, def.footprintRadiusM * 1.3);
     this.body.position.set(0, def.heightM / 2, 0);
     this.disc.scale.set(def.footprintRadiusM, 1, def.footprintRadiusM);

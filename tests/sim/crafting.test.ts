@@ -3,7 +3,7 @@
 // stations and output timing.
 
 import { beforeEach, describe, expect, it } from 'vitest';
-import { CRAFTING_REQUIRE_POWER, SIM_DT } from '../../src/core/constants.js';
+import { SIM_DT } from '../../src/core/constants.js';
 import { events } from '../../src/core/events.js';
 import { IDENTITY_QUAT } from '../../src/core/math.js';
 import { SELA } from '../../src/planets/configs/sela.js';
@@ -271,8 +271,7 @@ describe('station printing', () => {
     expect(slotItemIds(world, playerId)[0]).toBe('silicate');
   });
 
-  it('keeps the temporary M09 flag off (stations always powered)', () => {
-    expect(CRAFTING_REQUIRE_POWER).toBe(false);
+  it('advances a job when no power system is installed (direct system path)', () => {
     const { world, playerId } = spawnWorld();
     const stationId = spawnStation(world, playerId, 'small_printer');
     expect(recipeDef('platform').power).toBeGreaterThan(0);

@@ -8,6 +8,8 @@ import { upAt } from '../../src/sim/physics/frames.js';
 import { findSpawnPosition } from '../../src/sim/physics/spawn.js';
 import { World } from '../../src/sim/world.js';
 import { createDensityField } from '../../src/terrain/density.js';
+import { spawnPlaceableEntity } from '../../src/sim/placeActions.js';
+import { createCableEntity } from '../../src/sim/snapUtils.js';
 import {
   deserializeWorld,
   migrations,
@@ -107,6 +109,45 @@ describe('save round trip', () => {
       // Float32 save blobs quantize deltas: equality holds to ~1e-7.
       expect(Math.abs(b.density(p.x, p.y, p.z) - a.density(p.x, p.y, p.z))).toBeLessThan(1e-6);
     }
+  });
+
+  it('round-trips cables, slot attachments and battery charge', () => {
+    events.clear();
+    const world = makeEditedWorld(1337);
+    const player = [...world.entities.values()].find((e) => e.kind === 'player');
+    if (!player) throw new Error('missing player');
+    const platformId = spawnPlaceableEntity(world, SELA.id, 'platform', {
+      ...player.position,
+      y: player.position.y - 1,
+    });
+    if (!platformId) throw new Error('no platform');
+    const batteryId = spawnPlaceableEntity(
+      world,
+      SELA.id,
+      'battery',
+      { ...player.position, y: player.position.y - 0.3 },
+      { attachTo: platformId, attachSlot: 1 },
+    );
+    if (!batteryId) throw new Error('no battery');
+    const power = world.entities.get(batteryId)?.components.power;
+    if (!power) throw new Error('no power');
+    power.stored = 42;
+    const cableId = createCableEntity(
+      world,
+      SELA.id,
+      { entityId: platformId, snapIndex: 0 },
+      { entityId: batteryId, snapIndex: 0 },
+    );
+    if (!cableId) throw new Error('no cable');
+    const revived = deserializeWorld(
+      JSON.parse(JSON.stringify(serializeWorld(world))) as unknown,
+      [SELA],
+    );
+    expect(revived.entities.get(cableId)?.kind).toBe('cable');
+    expect(revived.entities.get(cableId)?.components.cable?.a.entityId).toBe(platformId);
+    expect(revived.entities.get(batteryId)?.components.power?.stored).toBe(42);
+    expect(revived.entities.get(batteryId)?.components.placeable?.attachedTo).toBe(platformId);
+    expect([...revived.entities.values()].filter((e) => e.kind === 'cable')).toHaveLength(1);
   });
 
   it('two worlds with the same seed and edits agree exactly', () => {

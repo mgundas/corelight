@@ -7,8 +7,8 @@ import { BACKPACK_SLOTS, PICKUP_RANGE_M } from '../core/constants.js';
 import { events } from '../core/events.js';
 import { distance, IDENTITY_QUAT } from '../core/math.js';
 import { isKnownItem } from '../data/loadData.js';
-import { placeableForPackageItem } from '../data/loadPlaceables.js';
-import type { EntityId } from './entities.js';
+import { isPlaceable, placeableDef, placeableForPackageItem } from '../data/loadPlaceables.js';
+import type { Entity, EntityId } from './entities.js';
 import { moveBasis, upAt } from './physics/frames.js';
 import type { World } from './world.js';
 
@@ -32,6 +32,64 @@ export function inventoryFor(
 export function isLargePackage(itemId: string): boolean {
   const placeable = placeableForPackageItem(itemId);
   return placeable?.size === 'large';
+}
+
+/**
+ * Give a crafted/packed output to a player: normal items and small packages
+ * go into a free backpack slot, large packages are front-carried, and a full
+ * pack (or occupied hands) drops the output loose at the player's feet.
+ * Shared by station collects and M10 pack-up.
+ */
+export function giveItemToPlayer(world: World, player: Entity, outputId: string): void {
+  const playerComp = player.components.player;
+  const inventory = player.components.inventory;
+  const packageItem = isPlaceable(outputId) ? placeableDef(outputId).packageItem : outputId;
+  const large = isLargePackage(packageItem);
+  const id = world.nextId('item');
+  const planet = world.planets.find((p) => p.id === player.planetId);
+  const upVec = planet ? upAt(planet, player.position) : { x: 0, y: 1, z: 0 };
+  const basePos = {
+    x: player.position.x + upVec.x * 0.8,
+    y: player.position.y + upVec.y * 0.8,
+    z: player.position.z + upVec.z * 0.8,
+  };
+  if (large && playerComp && !playerComp.carryingLarge) {
+    playerComp.carryingLarge = id;
+    world.entities.set(id, {
+      id,
+      kind: 'item',
+      planetId: player.planetId,
+      position: { ...player.position },
+      rotation: { ...IDENTITY_QUAT },
+      components: { item: { itemId: packageItem, holder: player.id } },
+    });
+    return;
+  }
+  // Large packages never occupy backpack slots: with hands full they drop
+  // loose at the player's feet instead.
+  const free = large || !inventory ? -1 : inventory.slots.indexOf(null);
+  if (inventory && free !== -1) {
+    inventory.slots[free] = id;
+    // Fresh outputs are held, so E (place/deposit) acts on them immediately.
+    inventory.selectedSlot = free;
+    world.entities.set(id, {
+      id,
+      kind: 'item',
+      planetId: player.planetId,
+      position: { ...player.position },
+      rotation: { ...IDENTITY_QUAT },
+      components: { item: { itemId: packageItem, holder: player.id } },
+    });
+    return;
+  }
+  world.entities.set(id, {
+    id,
+    kind: 'item',
+    planetId: player.planetId,
+    position: basePos,
+    rotation: { ...IDENTITY_QUAT },
+    components: { item: { itemId: packageItem } },
+  });
 }
 
 export function pickUpItem(world: World, playerId: EntityId, itemId: EntityId): void {

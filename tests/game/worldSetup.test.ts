@@ -4,6 +4,8 @@
 
 import { beforeAll, describe, expect, it } from 'vitest';
 import { SELA } from '../../src/planets/configs/sela.js';
+import { distance } from '../../src/core/math.js';
+import { snapWorld } from '../../src/sim/snapUtils.js';
 import type { PlayerInput } from '../../src/player/input.js';
 import { tickBackpackInput } from '../../src/game/backpackWiring.js';
 import { tickInteraction } from '../../src/game/interactWiring.js';
@@ -45,9 +47,12 @@ function stubInput(overrides: Partial<Record<'select' | 'drop' | 'interact' | 't
   } as unknown as PlayerInput;
 }
 
-function freshWorld(devTethers: boolean): { world: World; playerId: EntityId } {
+function freshWorld(devTethers: boolean, devBuild = false): { world: World; playerId: EntityId } {
   const world = new World(1337, { planets: [SELA] });
-  const setup = setupWorldSystems(world, [SELA], stubPool(), 1337, undefined, { devTethers });
+  const setup = setupWorldSystems(world, [SELA], stubPool(), 1337, undefined, {
+    devTethers,
+    devBuild,
+  });
   if (!setup.playerId) throw new Error('no player spawned');
   return { world, playerId: setup.playerId };
 }
@@ -70,18 +75,37 @@ describe('fresh-game setup', () => {
     expect(player?.planetId).toBe(SELA.id);
   });
 
-  it('pre-places the starting platform and small printer', () => {
+  it('pre-places the starting platform, slot-attached printer and power cable', () => {
     const { world } = freshWorld(false);
     const platforms = [...world.entities.values()].filter((e) => e.kind === 'platform');
     const printers = [...world.entities.values()].filter(
       (e) => e.kind === 'machine' && e.components.machine?.machineType === 'small_printer',
     );
+    const habitats = [...world.entities.values()].filter(
+      (e) => e.kind === 'machine' && e.components.machine?.machineType === 'habitat',
+    );
     expect(platforms).toHaveLength(1);
     expect(printers).toHaveLength(1);
+    expect(habitats).toHaveLength(1);
     const printer = printers[0];
+    const platform = platforms[0];
     expect(printer?.components.printer?.recipeId).toBe(null);
     expect(printer?.components.printer?.inputs).toEqual([]);
     expect(printer?.components.printer?.outputReady).toBe(null);
+    // M10: the printer sits on the platform's center slot and inherits its
+    // rotation; both structures are power network members.
+    expect(printer?.components.placeable?.attachedTo).toBe(platform?.id);
+    expect(printer?.components.placeable?.attachedSlot).toBe(0);
+    expect(printer?.components.power).toBeDefined();
+    expect(platform?.components.power).toBeDefined();
+    // The habitat's 1/s powers the starter printer from tick one; the link is
+    // a real cable entity that can be cut with the cable tool.
+    const cables = [...world.entities.values()].filter((e) => e.kind === 'cable');
+    expect(cables).toHaveLength(1);
+    const cable = cables[0]?.components.cable;
+    const ends = [cable?.a.entityId, cable?.b.entityId];
+    expect(ends).toContain(platform?.id);
+    expect(ends).toContain(habitats[0]?.id);
   });
 
   it('heals an M08 save with a habitat but no printer', () => {
@@ -126,6 +150,32 @@ describe('fresh-game setup', () => {
     expect(tetherItems(withoutDev.world, withoutDev.playerId)).toHaveLength(0);
   });
 
+  it('links the starter habitat on multiple seeds within the cable limit', () => {
+    for (const seed of [1, 42, 2024]) {
+      const world = new World(seed, { planets: [SELA] });
+      setupWorldSystems(world, [SELA], stubPool(), seed, undefined);
+      const cables = [...world.entities.values()].filter((e) => e.kind === 'cable');
+      expect(cables, `seed ${seed}`).toHaveLength(1);
+      const ends = cables[0]?.components.cable;
+      const a = ends ? world.entities.get(ends.a.entityId) : undefined;
+      const b = ends ? world.entities.get(ends.b.entityId) : undefined;
+      if (!a || !b || !ends) throw new Error('starter cable endpoints missing');
+      const aPos = snapWorld(a, ends.a.snapIndex);
+      const bPos = snapWorld(b, ends.b.snapIndex);
+      if (!aPos || !bPos) throw new Error('starter cable snap missing');
+      expect(distance(aPos, bPos), `seed ${seed}`).toBeLessThanOrEqual(10);
+    }
+  });
+
+  it('?build=1 grants platform, solar and battery packages', () => {
+    const { world, playerId } = freshWorld(false, true);
+    const slots = world.entities.get(playerId)?.components.inventory?.slots ?? [];
+    const ids = slots.map((id) => (id ? world.entities.get(id)?.components.item?.itemId : null));
+    expect(ids.filter((id) => id === 'platform_package')).toHaveLength(2);
+    expect(ids).toContain('solar_panel_package');
+    expect(ids).toContain('battery_package');
+  });
+
   it('T spends a dev tether on a post (Game tick wiring)', () => {
     const { world, playerId } = freshWorld(true);
     tickBackpackInput(world, playerId, stubInput({ tether: true }), true);
@@ -146,7 +196,8 @@ describe('fresh-game setup', () => {
     tickInteraction({
       world,
       playerId,
-      input: stubInput({ interact: true }),
+      input: stubInput({}),
+      interact: true,
       canAct: true,
       aim: { hit: null, normal: null, planet: null },
       placement: new PlacementMode(),

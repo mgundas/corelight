@@ -9,7 +9,7 @@ import type { EntityId } from '../sim/entities.js';
 import type { World } from '../sim/world.js';
 
 /** Bump on every user-visible fix so stale tabs are instantly detectable. */
-export const DEBUG_BUILD = 'm09-print';
+export const DEBUG_BUILD = 'm10-power';
 
 export interface ViewItemStat {
   type: string;
@@ -33,6 +33,7 @@ export interface ViewGroupLike {
 
 export interface SceneStat {
   tethers: ViewGroupStat;
+  cables: ViewGroupStat;
   habitats: ViewGroupStat;
   markers: ViewGroupStat;
   placeables: ViewGroupStat;
@@ -80,6 +81,7 @@ export function installDebugHandle(  world: World,
     flying: () => boolean;
     views?: () => {
       tethers: ViewGroupLike;
+      cables: ViewGroupLike;
       habitats: ViewGroupLike;
       markers: ViewGroupLike;
       placeables: ViewGroupLike;
@@ -126,6 +128,7 @@ export function installDebugHandle(  world: World,
       const empty: ViewGroupStat = { count: -1, items: [] };
       return {
         tethers: v ? statGroup(v.tethers) : empty,
+        cables: v ? statGroup(v.cables) : empty,
         habitats: v ? statGroup(v.habitats) : empty,
         markers: v ? statGroup(v.markers) : empty,
         placeables: v ? statGroup(v.placeables) : empty,

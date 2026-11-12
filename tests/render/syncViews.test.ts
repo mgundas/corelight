@@ -1,8 +1,7 @@
 // Fan-out regression test (M08 invisible-tether bug): the frame loop hands
-// ONE shared iterator (map.values()) to all five entity views. Map
-// iterators are single-use — passing one iterator straight through starved
-// every view after the first, leaving their groups permanently empty with
-// no error. syncEntityViews snapshots first, so one iterator feeds all five.
+// ONE shared iterator (map.values()) to every entity view. Map iterators are
+// single-use — passing one straight through starved every view after the
+// first. syncEntityViews snapshots first, so one iterator feeds all views.
 
 import { describe, expect, it } from 'vitest';
 import { SELA } from '../../src/planets/configs/sela.js';
@@ -13,6 +12,7 @@ import { ItemViews } from '../../src/render/views/itemView.js';
 import { NodeViews } from '../../src/render/views/nodeView.js';
 import { HabitatViews, MarkerViews, TetherViews } from '../../src/render/views/tetherView.js';
 import { PlaceableViews } from '../../src/render/views/placeableView.js';
+import { CableViews } from '../../src/render/views/cableViews.js';
 import { syncEntityViews } from '../../src/render/views/syncViews.js';
 
 function makeWorld(): Map<EntityId, Entity> {
@@ -90,6 +90,19 @@ function makeWorld(): Map<EntityId, Entity> {
     rotation: { ...IDENTITY_QUAT },
     components: { item: { itemId: 'light_stick' } },
   });
+  add({
+    id: 'cable_1',
+    kind: 'cable',
+    planetId: SELA.id,
+    position: at(2, 0, -4),
+    rotation: { ...IDENTITY_QUAT },
+    components: {
+      cable: {
+        a: { entityId: 'platform_1', snapIndex: 0 },
+        b: { entityId: 'machine_1', snapIndex: 0 },
+      },
+    },
+  });
   return entities;
 }
 
@@ -103,6 +116,7 @@ describe('syncEntityViews', () => {
       tetherViews: new TetherViews(),
       habitatViews: new HabitatViews(),
       markerViews: new MarkerViews(),
+      cableViews: new CableViews(),
     };
     // Exactly the production shape: a single map.values() iterator shared
     // by every view. Pre-fix this left 4 of 5 groups empty.
@@ -113,6 +127,7 @@ describe('syncEntityViews', () => {
     expect(views.tetherViews.group.children.length).toBe(1);
     expect(views.habitatViews.group.children.length).toBe(1);
     expect(views.markerViews.group.children.length).toBe(1);
+    expect(views.cableViews.group.children.length).toBe(1);
     // The glowing crystal still reports its light through the same path,
     // and the placed light stick joins the same emitter list.
     expect(itemEmitters.length).toBe(1);
@@ -124,5 +139,6 @@ describe('syncEntityViews', () => {
     views.tetherViews.dispose();
     views.habitatViews.dispose();
     views.markerViews.dispose();
+    views.cableViews.dispose();
   });
 });

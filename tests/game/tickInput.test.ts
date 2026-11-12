@@ -11,6 +11,7 @@ import type { EntityId } from '../../src/sim/entities.js';
 import type { PlayerInput } from '../../src/player/input.js';
 import { TerrainTool } from '../../src/player/terrainTool.js';
 import { PlacementMode } from '../../src/game/placement.js';
+import { CableMode } from '../../src/game/cableMode.js';
 import { dispatchTickInput } from '../../src/game/tickInput.js';
 
 function flatPlanet(): PlanetConfig {
@@ -62,6 +63,8 @@ function input(opts: {
   interact?: boolean;
   printer?: boolean;
   headlamp?: boolean;
+  cable?: boolean;
+  interactHeld?: boolean;
 }): PlayerInput {
   return {
     consumeHeadlampToggle: () => opts.headlamp === true,
@@ -70,6 +73,8 @@ function input(opts: {
     consumeTether: () => false,
     consumeInteract: () => opts.interact === true,
     consumePrinter: () => opts.printer === true,
+    consumeCableToggle: () => opts.cable === true,
+    isInteractHeld: () => opts.interactHeld === true,
     move: () => ({ x: 0, z: 0 }),
     consumeJump: () => false,
     sprint: () => false,
@@ -81,6 +86,7 @@ function run(
   opts: {
     input: PlayerInput;
     placement?: PlacementMode;
+    cable?: CableMode;
     flying?: boolean;
     uiOpen?: boolean;
     toolActive?: boolean;
@@ -100,6 +106,7 @@ function run(
     flying: opts.flying === true,
     uiOpen: opts.uiOpen === true,
     placement: opts.placement ?? new PlacementMode(),
+    cable: opts.cable,
     openStation: () => undefined,
     togglePrinter: () => {
       if (opts.toggles) opts.toggles.count += 1;
@@ -138,5 +145,24 @@ describe('tick input dispatch', () => {
     const ctx = setup();
     run(ctx, { input: input({ headlamp: true }), flying: true });
     expect(ctx.world.entities.get(ctx.playerId)?.components.player?.headlampOn).toBe(false);
+  });
+
+  it('C toggles the cable tool and consumes the dig click', () => {
+    const ctx = setup();
+    const cable = new CableMode();
+    run(ctx, { input: input({ cable: true }), cable, toolActive: true });
+    expect(cable.isActive()).toBe(true);
+    expect(ctx.world.terrainEdits.sampleCount).toBe(0);
+    run(ctx, { input: input({ cable: true }), cable });
+    expect(cable.isActive()).toBe(false);
+  });
+
+  it('E exits the cable tool without editing terrain', () => {
+    const ctx = setup();
+    const cable = new CableMode();
+    cable.activate();
+    run(ctx, { input: input({ interact: true }), cable, toolActive: true });
+    expect(cable.isActive()).toBe(false);
+    expect(ctx.world.terrainEdits.sampleCount).toBe(0);
   });
 });

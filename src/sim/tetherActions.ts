@@ -3,7 +3,7 @@
 // backpack spend/refund) lives here, dispatch stays in applyAction.
 
 import { distance, dot, IDENTITY_QUAT, normalize, quatFromTo, sub } from '../core/math.js';
-import { PICKUP_RANGE_M, TETHER_GROUND_SEARCH_M, TETHER_PLACE_AHEAD_M, TETHER_SEAT_TOP_M } from '../core/constants.js';
+import { HABITAT_CAPACITY, PICKUP_RANGE_M, TETHER_GROUND_SEARCH_M, TETHER_PLACE_AHEAD_M, TETHER_SEAT_TOP_M } from '../core/constants.js';
 import { events } from '../core/events.js';
 import type { PlanetConfig } from '../planets/PlanetConfig.js';
 import { createDensityField, type DensityField } from '../terrain/density.js';
@@ -39,11 +39,15 @@ export function baseFieldFor(world: World, planetId: string): DensityField {
 }
 
 /** Create the habitat dome entity for a spawnHabitat action. */
-export function spawnHabitatEntity(world: World, planetId: string, position: { x: number; y: number; z: number }): void {
+export function spawnHabitatEntity(
+  world: World,
+  planetId: string,
+  position: { x: number; y: number; z: number },
+): EntityId | null {
   const planet = world.planets.find((p) => p.id === planetId);
   if (!planet) {
     events.emit('actionApplied', { type: 'spawnHabitat' });
-    return;
+    return null;
   }
   const id = world.nextId('machine');
   world.entities.set(id, {
@@ -53,9 +57,17 @@ export function spawnHabitatEntity(world: World, planetId: string, position: { x
     position: { ...position },
     // Dome +Y maps onto the local up so the door sits level anywhere.
     rotation: { ...quatFromTo({ x: 0, y: 1, z: 0 }, upAt(planet, position)) },
-    components: { machine: { machineType: 'habitat' } },
+    components: {
+      machine: { machineType: 'habitat' },
+      // The dome is a power source (1/s, 20 internal) and exposes the
+      // habitat kit's cable snap. It is not packable (packUpPlaced excludes
+      // machineType habitat) because it is a fixed base anchor.
+      placeable: { placeableId: 'habitat_kit' },
+      power: { stored: 0, capacity: HABITAT_CAPACITY, paused: false, networkId: null },
+    },
   });
   events.emit('actionApplied', { type: 'spawnHabitat' });
+  return id;
 }
 
 /**

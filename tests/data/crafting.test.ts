@@ -157,6 +157,11 @@ describe('placeable catalog', () => {
     // Carry rule inputs: platform is large (front carry), the printer small.
     expect(placeableDef('platform').size).toBe('large');
     expect(placeableDef('small_printer').size).toBe('small');
+    // M10: platforms carry four rim cable snaps and four top machine slots.
+    expect(placeableDef('platform').snapPoints).toHaveLength(4);
+    expect(placeableDef('platform').slots).toHaveLength(4);
+    // Machines have no top slots (they are not platforms).
+    expect(placeableDef('small_printer').slots).toEqual([]);
     // Back-reference helpers used by carry/render code.
     expect(placeableForPackageItem('platform_package')?.id).toBe('platform');
     expect(placeableForMachineType('small_printer')?.id).toBe('small_printer');
@@ -174,8 +179,12 @@ describe('placeable catalog', () => {
     expect(() => parsePlaceableDef({ ...VALID_PLACEABLE, footprintRadiusM: 0 })).toThrow();
     expect(() => parsePlaceableDef({ ...VALID_PLACEABLE, heightM: -1 })).toThrow();
     expect(() => parsePlaceableDef({ ...VALID_PLACEABLE, snapPoints: [{ x: 0, y: Number.NaN, z: 0 }] })).toThrow();
+    expect(() => parsePlaceableDef({ ...VALID_PLACEABLE, slots: 'nope' })).toThrow();
+    expect(() => parsePlaceableDef({ ...VALID_PLACEABLE, slots: [{ x: 0, y: Number.NaN, z: 0 }] })).toThrow();
     expect(() => parsePlaceableDef({ ...VALID_PLACEABLE, description: '' })).toThrow();
     expect(() => loadPlaceables([VALID_PLACEABLE, VALID_PLACEABLE])).toThrow();
+    // Missing slots are valid (machines have none) and default to [].
+    expect(parsePlaceableDef(VALID_PLACEABLE).slots).toEqual([]);
   });
 });
 

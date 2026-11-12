@@ -10,9 +10,11 @@ import type { EntityId } from '../sim/entities.js';
 import type { ToolAim } from '../player/terrainTool.js';
 import type { Hud } from '../ui/hud.js';
 import type { PlacementMode } from './placement.js';
+import type { CableMode } from './cableMode.js';
 import { carriedPlaceable, placementCheckFor } from './placement.js';
 import { backpackFrame } from './backpackWiring.js';
 import { oxygenStatusFor } from './oxygenStatus.js';
+import { powerStatusFor } from './powerStatus.js';
 import { interactPrompt } from './prompts.js';
 import { upAt } from '../sim/physics/frames.js';
 
@@ -25,6 +27,7 @@ export interface FrameHudDeps {
   focusWorld: Vec3d;
   aim: ToolAim;
   placement: PlacementMode;
+  cable?: CableMode;
 }
 
 /** Render synced entity views and refresh the HUD slot bar + oxygen meter. */
@@ -32,21 +35,24 @@ export function updateFrameHud(deps: FrameHudDeps): void {
   const activePlayer = deps.flying ? null : deps.playerId;
   const frame = backpackFrame(deps.world, activePlayer, deps.flying);
   const o2 = oxygenStatusFor(deps.world, activePlayer);
+  const power = powerStatusFor(deps.world, activePlayer);
   deps.renderer.renderEntities(
     deps.world.entities.values(),
     deps.focusWorld,
     frame.carriedItemIds,
     frame.frontCarryItemId,
+    deps.world.sunDirection,
   );
   deps.hud.update({
     slots: frame.slotDefs,
     selectedSlot: frame.selectedSlot,
     soil: frame.soil,
-    prompt: interactPrompt(deps.world, activePlayer, deps.aim, deps.placement),
+    prompt: interactPrompt(deps.world, activePlayer, deps.aim, deps.placement, deps.cable),
     oxygen: o2?.oxygen ?? 100,
     onNetwork: o2?.onNetwork ?? true,
     habitatHint: o2?.habitat ?? null,
     deathHint: o2?.deathMarker ?? null,
+    power: power?.status ?? null,
   });
 }
 
@@ -61,7 +67,7 @@ export interface PlacementGhostDeps {
 
 /** Show the placement ghost + validity colour for the active mode. */
 export function updatePlacementGhost(deps: PlacementGhostDeps): void {
-  if (deps.flying || !deps.playerId || !deps.placement.isActive() || !deps.aim.hit || !deps.aim.planet) {
+  if (deps.flying || !deps.playerId || !deps.placement.isActive() || !deps.aim.planet) {
     deps.renderer.setPlacementGhost(null, null, null, false);
     return;
   }
@@ -71,11 +77,13 @@ export function updatePlacementGhost(deps: PlacementGhostDeps): void {
     return;
   }
   const check = placementCheckFor(deps.world, deps.playerId, deps.aim);
+  const up = deps.aim.hit ? upAt(deps.aim.planet, deps.aim.hit) : { x: 0, y: 1, z: 0 };
   deps.renderer.setPlacementGhost(
     carried.placeable.id,
     check.position,
-    upAt(deps.aim.planet, deps.aim.hit),
+    up,
     check.ok,
+    check.rotation,
   );
 }
 

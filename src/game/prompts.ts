@@ -1,5 +1,6 @@
-// Interaction prompt assembly (M09): mirrors interactWiring's priority chain
-// so the HUD always says what E will do next. Read-only.
+// Interaction prompt assembly (M09/M10): mirrors interactWiring's priority
+// chain so the HUD always says what E will do next. M10 adds the cable tool
+// and the hold-E pack gesture. Read-only.
 
 import { STATION_INPUT_SLOTS } from '../core/constants.js';
 import { isKnownItem, itemDef } from '../data/loadData.js';
@@ -7,10 +8,14 @@ import { placeableById, placeableForMachineType } from '../data/loadPlaceables.j
 import type { EntityId } from '../sim/entities.js';
 import type { World } from '../sim/world.js';
 import { depositCandidate, printerFor } from '../sim/craftingActions.js';
+import { cableOnSnap, snapFree } from '../sim/snapUtils.js';
 import type { ToolAim } from '../player/terrainTool.js';
+import type { CableMode } from './cableMode.js';
 import { hasSelectedLightstick } from './interactWiring.js';
 import { findAimedItem, findAimedStation, findAimedTether } from './pickup.js';
 import { carriedPlaceable, placementCheckFor, type PlacementMode } from './placement.js';
+import { primaryPackTarget } from './packTarget.js';
+import { findAimedSnap } from './snapTarget.js';
 
 function nameForId(id: string): string {
   if (isKnownItem(id)) return itemDef(id).name;
@@ -23,15 +28,34 @@ export function interactPrompt(
   playerId: EntityId | null,
   aim: ToolAim,
   placement: PlacementMode,
+  cable?: CableMode,
 ): string | null {
   if (!playerId) return null;
+  if (cable?.isActive()) {
+    const aimed = findAimedSnap(world, playerId, aim);
+    if (aimed && cableOnSnap(world, aimed)) return 'Cable: click to cut this cable (E: exit)';
+    if (aimed && !snapFree(world, aimed)) return 'Cable: snap point is occupied (E: exit)';
+    if (cable.pendingRef()) return 'Cable: click a target snap within 10 m (E: exit)';
+    return 'Cable: click a snap point (E: exit)';
+  }
   if (placement.isActive()) {
     const carried = carriedPlaceable(world, playerId);
     if (!carried) return null;
     const check = placementCheckFor(world, playerId, aim);
-    if (!check.position) return `Aim at the ground to place ${carried.placeable.name} (E: cancel)`;
+    if (!check.position) {
+      return check.reason && check.reason !== 'Aim at the ground'
+        ? `${carried.placeable.name}: ${check.reason} (E: cancel)`
+        : `Aim at the ground to place ${carried.placeable.name} (E: cancel)`;
+    }
     if (!check.ok) return `${carried.placeable.name}: ${check.reason} (E: cancel)`;
     return `Click: place ${carried.placeable.name} (E: cancel)`;
+  }
+  const packTarget = primaryPackTarget(world, playerId);
+  if (packTarget) {
+    const placeableId = world.entities.get(packTarget)?.components.placeable?.placeableId;
+    const def = placeableId ? placeableById(placeableId) : undefined;
+    const isStation = findAimedStation(world, playerId) === packTarget;
+    return `Hold E: pack up ${def?.name ?? 'structure'}${isStation ? ' (tap E: open)' : ''}`;
   }
   const stationId = findAimedStation(world, playerId);
   if (stationId) {

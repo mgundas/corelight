@@ -149,7 +149,7 @@ async function boot(): Promise<void> {
   const hint = document.createElement('div');
   hint.id = 'hint';
   hint.textContent =
-    'Corelight M09 — walk with WASD, mouse look (click), Space jump, Shift sprint, wheel zoom, LMB dig, RMB add, F flatten, Ctrl+wheel brush size, E interact (pick up / tether / station / place), Tab printer, Q drop, 1-8 slots, T tether, L headlamp, Esc menu, F1 overlay, F3 fly, F4 wireframe, F5 chunk bounds';
+    'Corelight M10 — WASD move, click look, Space jump, Shift sprint, wheel zoom, LMB dig, RMB add, F flatten, Ctrl+wheel brush size, E interact, hold E pack up, Tab printer, C cable tool (click snap, click target; click a cabled snap to cut), Q drop, 1-8 slots, T tether, L headlamp, Esc menu, F1 overlay, F3 fly, F4 wireframe, F5 chunk bounds. Dev: ?dev=1 tethers, ?build=1 power-base packages';
   app.appendChild(hint);
 
   const { prebuilt } = await runBootSafe(bootSeed, params.skipBoot);

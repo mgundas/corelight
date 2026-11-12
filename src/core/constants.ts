@@ -213,9 +213,6 @@ export const STATION_INPUT_SLOTS = 8;
  * and counts change on actions, so 10 Hz is plenty and avoids per-frame
  * state/string allocation. */
 export const PRINTER_UI_SYNC_INTERVAL_MS = 100;
-/** M09 temporary power flag: stations run without a power network until M10
- * wires the real system. M10 deletes this constant and the `if` it guards. */
-export const CRAFTING_REQUIRE_POWER = false;
 /** Large front-carried items slow movement to this multiplier (30% slower). */
 export const CARRY_SLOW_MULT = 0.7;
 /** Placement rejects ground whose normal is more than this off local up. */
@@ -224,3 +221,21 @@ export const PLACE_MAX_SLOPE_DEG = 20;
 export const PLACE_RANGE_M = TOOL_RANGE_M + TOOL_RANGE_SLACK_M;
 /** Live density at the ghost must be near the surface (abs density <= this). */
 export const PLACE_SURFACE_TOLERANCE = 0.6;
+
+/** Base power (M10). Habitat generation and solar peak (power/s). */
+export const POWER_HABITAT_GEN = 1;
+export const POWER_SOLAR_GEN = 2;
+/** Storage capacities (power units). */
+export const BATTERY_CAPACITY = 100;
+export const HABITAT_CAPACITY = 20;
+/** Look range for the HUD power readout (m). */
+export const POWER_VIEW_RANGE_M = 6;
+
+/** Cable tool (M10): max cable length and player-to-snap reach (m). */
+export const CABLE_MAX_LENGTH_M = 10;
+export const CABLE_REACH_M = 10;
+/** Ray-to-snap pick radius for cable clicks and placement snapping (m). */
+export const CABLE_SNAP_RADIUS_M = 1.5;
+export const SNAP_PLACE_RADIUS_M = 2;
+/** Hold E this long on an empty machine/platform to pack it up (ms). */
+export const PACK_HOLD_MS = 1000;

@@ -13,7 +13,8 @@ export type EntityKind =
   | 'sample'
   | 'engine'
   | 'lightstick'
-  | 'marker';
+  | 'marker'
+  | 'cable';
 
 // Component stubs. Later milestones fill these with real fields.
 export interface Components {
@@ -28,6 +29,7 @@ export interface Components {
   tether: TetherComponent;
   machine: MachineComponent;
   placeable: PlaceableComponent;
+  cable: CableComponent;
 }
 
 export interface OxygenComponent {
@@ -40,8 +42,20 @@ export interface InventoryComponent {
   selectedSlot: number;
 }
 
+/**
+ * Power network member (M10). Storage lives on batteries and habitats;
+ * `paused` is set for working machines the network cannot afford. The
+ * network totals are a per-tick HUD projection written by the power system.
+ */
 export interface PowerComponent {
   stored: number;
+  capacity: number;
+  paused: boolean;
+  networkId: string | null;
+  generation?: number;
+  demand?: number;
+  networkStored?: number;
+  networkCapacity?: number;
 }
 
 /** Printing job state for a station machine (M09). */
@@ -94,6 +108,33 @@ export interface MachineComponent {
 /** Places an entity back to its data catalog entry (M09 placeables). */
 export interface PlaceableComponent {
   placeableId: string;
+  /** Machine attached to a platform top slot (M10). */
+  attachedTo?: EntityId | null;
+  attachedSlot?: number;
+  /** Platform edge-snapped to another platform (M10). */
+  snappedTo?: EntityId | null;
+  /** Snap index used on the target platform. */
+  snappedToSnap?: number;
+  /** Snap index used on this platform (its own side of the join). */
+  snappedOwnSnap?: number;
+}
+
+/** One catalog snap point on an entity (cable endpoint). */
+export interface SnapRef {
+  entityId: EntityId;
+  snapIndex: number;
+}
+
+/** One platform top slot (machine attachment). */
+export interface SlotRef {
+  entityId: EntityId;
+  slotIndex: number;
+}
+
+/** A cable entity: two snap points joined by a sagging line (M10). */
+export interface CableComponent {
+  a: SnapRef;
+  b: SnapRef;
 }
 /** A mineable resource deposit placed deterministically per LOD0 chunk. */
 export interface NodeComponent {

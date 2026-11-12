@@ -1,12 +1,13 @@
-// Station printing system (M09): advances active job timers and exposes the
-// finished output on the printer component. Power is wired in M10; while
-// CRAFTING_REQUIRE_POWER is false every station is considered powered.
+// Station printing system (M09/M10): advances active job timers and exposes
+// the finished output on the printer component. M10 replaces the temporary
+// always-powered flag with the power network's per-machine `paused` bit: a
+// brownout freezes the whole job (no partial progress) and it resumes when
+// the network can afford it.
 //
-// Runs after actions in the tick (worldSetup order) so a job started this
-// tick already accumulates its first dt, and saves only ever see entities
-// with consistent printer state.
+// Runs after actions and after the power system (worldSetup order) so a job
+// started this tick already has a power verdict and accumulates its first dt,
+// and saves only ever see entities with consistent printer state.
 
-import { CRAFTING_REQUIRE_POWER } from '../../core/constants.js';
 import { recipeById } from '../../data/loadRecipes.js';
 import type { World } from '../world.js';
 import { printerFor } from '../craftingActions.js';
@@ -24,9 +25,9 @@ export function updateCrafting(world: World, dt: number): void {
       printer.progressS = 0;
       continue;
     }
-    if (CRAFTING_REQUIRE_POWER && recipe.power > 0 && (entity.components.power?.stored ?? 0) <= 0) {
-      continue;
-    }
+    // Missing power components (direct unit-test paths) mean no power system
+    // is running: keep the old unpowered behavior instead of freezing jobs.
+    if (entity.components.power?.paused === true) continue;
     printer.progressS += dt;
     if (printer.progressS >= recipe.time) {
       printer.recipeId = null;

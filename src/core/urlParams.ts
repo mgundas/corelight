@@ -7,6 +7,8 @@ export interface UrlParams {
   time: number | null;
   /** Dev shortcut (?dev=1): spawn with 8 tethers for oxygen testing. */
   dev: boolean;
+  /** Dev shortcut (?build=1): spawn with power-base packages for testing. */
+  build: boolean;
 }
 
 export function parseUrlParams(search: string): UrlParams {
@@ -28,12 +30,13 @@ export function parseUrlParams(search: string): UrlParams {
     skipBoot: params.get('skipBoot') === '1',
     time,
     dev: params.get('dev') === '1',
+    build: params.get('build') === '1',
   };
 }
 
 export function getUrlParams(): UrlParams {
   if (typeof window === 'undefined' || !window.location) {
-    return { seed: null, skipBoot: false, time: null, dev: false };
+    return { seed: null, skipBoot: false, time: null, dev: false, build: false };
   }
   return parseUrlParams(window.location.search);
 }

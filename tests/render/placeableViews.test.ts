@@ -56,6 +56,65 @@ describe('placeable views', () => {
   });
 });
 
+describe('M10 machine views', () => {
+  it('tilts the panel head toward the sun and back to rest at night', () => {
+    const views = new PlaceableViews();
+    const panel = entity(
+      'machine',
+      {
+        machine: { machineType: 'solar_panel' },
+        placeable: { placeableId: 'solar_panel' },
+        power: { stored: 0, capacity: 0, paused: false, networkId: null },
+      },
+      'panel',
+    );
+    const sun = new THREE.Vector3(1, 0.5, 0).normalize();
+    views.sync([panel], { x: sun.x, y: sun.y, z: sun.z });
+    const group = views.group.children[0];
+    const head = group?.getObjectByName('panelHead');
+    if (!head) throw new Error('no panel head');
+    const normal = new THREE.Vector3(0, 0, 1).applyQuaternion(head.quaternion);
+    expect(normal.dot(sun)).toBeGreaterThan(0.99);
+    // Night: the sun is below the local horizon, so the panel rests.
+    views.sync([panel], { x: 0, y: -1, z: 0 });
+    const restNormal = new THREE.Vector3(0, 0, 1).applyQuaternion(head.quaternion);
+    expect(restNormal.y).toBeGreaterThan(-0.6);
+    views.dispose();
+  });
+
+  it('colors the status light green working, yellow idle, red paused', () => {
+    const views = new PlaceableViews();
+    const printer = entity(
+      'machine',
+      {
+        machine: { machineType: 'small_printer' },
+        placeable: { placeableId: 'small_printer' },
+        printer: { recipeId: 'platform', progressS: 0, inputs: [], outputReady: null },
+        power: { stored: 0, capacity: 0, paused: false, networkId: null },
+      },
+      'printer',
+    );
+    views.sync([printer]);
+    let light = views.group.children[0]?.getObjectByName('statusLight') as THREE.Mesh | undefined;
+    let mat = light?.material as THREE.MeshStandardMaterial | undefined;
+    expect(mat?.emissive.getHex()).toBe(0x39ff88);
+    const comp = printer.components.power;
+    if (!comp) throw new Error('no power');
+    comp.paused = true;
+    views.sync([printer]);
+    light = views.group.children[0]?.getObjectByName('statusLight') as THREE.Mesh | undefined;
+    mat = light?.material as THREE.MeshStandardMaterial | undefined;
+    expect(mat?.emissive.getHex()).toBe(0xff4444);
+    comp.paused = false;
+    printer.components.printer = { recipeId: null, progressS: 0, inputs: [], outputReady: null };
+    views.sync([printer]);
+    light = views.group.children[0]?.getObjectByName('statusLight') as THREE.Mesh | undefined;
+    mat = light?.material as THREE.MeshStandardMaterial | undefined;
+    expect(mat?.emissive.getHex()).toBe(0xffd24a);
+    views.dispose();
+  });
+});
+
 describe('placement ghost', () => {
   it('shows a green or red translucent volume and hides on null', () => {
     const ghost = new PlacementGhost();

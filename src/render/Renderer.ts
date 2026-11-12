@@ -19,6 +19,7 @@ import { disposeItemCaches } from './views/itemGeometry.js';
 import { syncEntityViews } from './views/syncViews.js';
 import { ItemViews } from './views/itemView.js';
 import { NodeViews } from './views/nodeView.js';
+import { CableViews } from './views/cableViews.js';
 import { LightingRig } from './lighting.js';
 import { Sky } from './sky.js';
 import { PlayerView } from './views/playerView.js';
@@ -69,6 +70,7 @@ export class Renderer {
   readonly itemViews = new ItemViews();
   readonly nodeViews = new NodeViews();
   readonly tetherViews = new TetherViews();
+  readonly cableViews = new CableViews();
   readonly habitatViews = new HabitatViews();
   readonly markerViews = new MarkerViews();
   readonly placeableViews = new PlaceableViews();
@@ -116,6 +118,7 @@ export class Renderer {
     this.scene.add(this.itemViews.group);
     this.scene.add(this.nodeViews.group);
     this.scene.add(this.tetherViews.group);
+    this.scene.add(this.cableViews.group);
     this.scene.add(this.habitatViews.group);
     this.scene.add(this.markerViews.group);
     this.scene.add(this.placeableViews.group);
@@ -150,6 +153,7 @@ export class Renderer {
     this.itemViews.dispose();
     this.nodeViews.dispose();
     this.tetherViews.dispose();
+    this.cableViews.dispose();
     this.habitatViews.dispose();
     this.markerViews.dispose();
     this.placeableViews.dispose();
@@ -282,8 +286,9 @@ export class Renderer {
     positionWorld: Vec3d | null,
     upWorld: Vec3d | null,
     valid: boolean,
+    rotation: Quat | null = null,
   ): void {
-    this.placementGhost.set(placeableId, positionWorld, upWorld, valid);
+    this.placementGhost.set(placeableId, positionWorld, upWorld, valid, rotation);
   }
 
   /**
@@ -299,8 +304,13 @@ export class Renderer {
     focusWorld: Vec3d,
     carried: (string | null)[],
     frontCarry: string | null,
+    sunDirWorld?: Vec3d,
   ): void {
-    const { itemEmitters, nodeEmitters, placeableEmitters } = syncEntityViews(this, entities);
+    const { itemEmitters, nodeEmitters, placeableEmitters } = syncEntityViews(
+      this,
+      entities,
+      sunDirWorld,
+    );
     this.itemLights.update(focusWorld, [...itemEmitters, ...nodeEmitters, ...placeableEmitters]);
     this.playerView.renderBackpack(
       carried.map((id) => (id && isKnownItem(id) ? itemDef(id) : null) as ItemDef | null),

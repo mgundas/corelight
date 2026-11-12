@@ -3,6 +3,7 @@
 // Game rebuilds the state every frame; update() reconciles cheaply.
 
 import type { ItemDef } from '../data/loadData.js';
+import type { PowerStatus } from '../game/powerStatus.js';
 import { arrowForBearing, type NavHint } from '../game/oxygenStatus.js';
 
 export interface HudState {
@@ -20,6 +21,8 @@ export interface HudState {
   habitatHint: NavHint | null;
   /** Where the lost pack waits, else null. */
   deathHint: NavHint | null;
+  /** Network stats for the aimed machine, else null. */
+  power: PowerStatus | null;
 }
 
 function hintText(hint: NavHint | null): string {
@@ -32,6 +35,7 @@ export class Hud {
   private readonly slotsEl: HTMLDivElement;
   private readonly slotEls: HTMLDivElement[] = [];
   private readonly soilEl: HTMLDivElement;
+  private readonly powerEl: HTMLDivElement;
   private readonly promptEl: HTMLDivElement;
   private readonly oxygenEl: HTMLDivElement;
   private readonly oxygenFill: HTMLDivElement;
@@ -62,11 +66,21 @@ export class Hud {
     this.tetherEl.id = 'hud-tether';
     this.soilEl = document.createElement('div');
     this.soilEl.id = 'hud-soil';
+    this.powerEl = document.createElement('div');
+    this.powerEl.id = 'hud-power';
     this.promptEl = document.createElement('div');
     this.promptEl.id = 'hud-prompt';
     this.navEl = document.createElement('div');
     this.navEl.id = 'hud-nav';
-    this.root.append(this.oxygenEl, this.tetherEl, this.slotsEl, this.soilEl, this.promptEl, this.navEl);
+    this.root.append(
+      this.oxygenEl,
+      this.tetherEl,
+      this.slotsEl,
+      this.soilEl,
+      this.powerEl,
+      this.promptEl,
+      this.navEl,
+    );
     document.body.appendChild(this.root);
     // Fullscreen fade for oxygen death (M08): shown on playerDied, then
     // eases back out while the player wakes at the habitat.
@@ -90,6 +104,7 @@ export class Hud {
   }
 
   update(state: HudState): void {
+    const power = state.power;
     // Cheap key skips DOM writes when nothing visible changed.
     const key = [
       state.selectedSlot,
@@ -99,6 +114,9 @@ export class Hud {
       state.onNetwork,
       hintText(state.habitatHint),
       hintText(state.deathHint),
+      power
+        ? `${power.generation.toFixed(1)}:${power.demand.toFixed(1)}:${power.stored.toFixed(1)}:${power.capacity}:${power.state}`
+        : '',
       ...state.slots.map((d) => d?.id ?? ''),
     ].join('|');
     if (key === this.lastKey) return;
@@ -113,6 +131,16 @@ export class Hud {
       el.style.setProperty('--slot-color', def ? def.color : 'transparent');
     }
     this.soilEl.textContent = `Soil ${state.soil}`;
+    if (power) {
+      const label = power.state === 'paused' ? 'paused: no power' : power.state;
+      this.powerEl.textContent =
+        `⚡ ${power.generation.toFixed(1)}/s in · ${power.demand.toFixed(1)}/s out · ` +
+        `${Math.round(power.stored)}/${Math.round(power.capacity)} stored · ${label}`;
+      this.powerEl.style.display = 'block';
+      this.powerEl.classList.toggle('paused', power.state === 'paused');
+    } else {
+      this.powerEl.style.display = 'none';
+    }
     this.promptEl.textContent = state.prompt ?? '';
     this.promptEl.style.display = state.prompt ? 'block' : 'none';
     // Oxygen bar: red and pulsing below 25.

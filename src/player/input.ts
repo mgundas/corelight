@@ -13,7 +13,10 @@ export class PlayerInput {
   private dropQueued = false;
   private tetherQueued = false;
   private printerQueued = false;
+  private cableQueued = false;
   private selectQueued: number | null = null;
+  /** True while E is physically down (hold-to-pack). */
+  private interactHeld = false;
   private enabled = true;
   private canvas: HTMLCanvasElement | null = null;
   private lookTarget: { addLook: (dx: number, dy: number) => void } | null = null;
@@ -68,7 +71,9 @@ export class PlayerInput {
     this.dropQueued = false;
     this.tetherQueued = false;
     this.printerQueued = false;
+    this.cableQueued = false;
     this.selectQueued = null;
+    this.interactHeld = false;
     this.dragging = false;
   }
 
@@ -106,6 +111,18 @@ export class PlayerInput {
     const interact = this.interactQueued;
     this.interactQueued = false;
     return interact;
+  }
+
+  /** True while E is held (1 s pack-up affordance). */
+  isInteractHeld(): boolean {
+    return this.interactHeld;
+  }
+
+  /** Edge-triggered: true once per C keydown (toggle the cable tool). */
+  consumeCableToggle(): boolean {
+    const cable = this.cableQueued;
+    this.cableQueued = false;
+    return cable;
   }
 
   /** Edge-triggered: true once per Q keydown (drop the selected slot). */
@@ -148,6 +165,7 @@ export class PlayerInput {
   private handleBlur = (): void => {
     this.keys.clear();
     this.mouseButtons.clear();
+    this.interactHeld = false;
     this.dragging = false;
   };
 
@@ -161,7 +179,14 @@ export class PlayerInput {
     if (!this.enabled) return;
     if (e.code.startsWith('F')) return;
     if (e.code === 'KeyE') {
-      if (!e.repeat) this.interactQueued = true;
+      if (!e.repeat) {
+        this.interactQueued = true;
+        this.interactHeld = true;
+      }
+      return;
+    }
+    if (e.code === 'KeyC') {
+      if (!e.repeat) this.cableQueued = true;
       return;
     }
     if (e.code === 'KeyQ') {
@@ -195,6 +220,7 @@ export class PlayerInput {
   };
 
   private handleKeyUp = (e: KeyboardEvent): void => {
+    if (e.code === 'KeyE') this.interactHeld = false;
     this.keys.delete(e.code);
   };
 

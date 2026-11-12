@@ -259,6 +259,19 @@ body {
   border-radius: 6px;
 }
 
+#hud-power {
+  display: none;
+  font-size: 12px;
+  color: #b9e7ff;
+  background: rgb(0 0 0 / 60%);
+  padding: 4px 12px;
+  border-radius: 6px;
+}
+
+#hud-power.paused {
+  color: #ff8f8f;
+}
+
 #death-fade {
   position: fixed;
   inset: 0;

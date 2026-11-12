@@ -49,6 +49,9 @@ export function aimFromOrbitCamera(headPos: Vec3d, cameraPos: Vec3d): { origin: 
 export function computeAim(input: AimInput): ToolAim {
   const { origin, viewDir, planet, field } = input;
   if (viewDir.x === 0 && viewDir.y === 0 && viewDir.z === 0) return { ...NO_AIM };
+  // The view ray is useful even when the terrain ray misses (platforms have
+  // no colliders, so cable snapping must project onto them directly).
+  const ray = { origin: { ...origin }, dir: { ...viewDir } };
   const toi = input.castRay(origin, viewDir, TOOL_RANGE_M);
   if (toi !== null && toi <= TOOL_RANGE_M) {
     const hit: Vec3d = {
@@ -56,9 +59,9 @@ export function computeAim(input: AimInput): ToolAim {
       y: origin.y + viewDir.y * toi,
       z: origin.z + viewDir.z * toi,
     };
-    return { hit, normal: input.detailed ? surfaceNormal(field, planet, hit) : null, planet };
+    return { hit, normal: input.detailed ? surfaceNormal(field, planet, hit) : null, planet, ray };
   }
-  if (!input.detailed) return { ...NO_AIM };
+  if (!input.detailed) return { ...NO_AIM, ray, planet };
   // Fallback march along the ray (quarter-meter steps). When the origin
   // itself starts inside rock, report t = 0 so the brush (and preview)
   // keep working instead of vanishing.
@@ -71,7 +74,7 @@ export function computeAim(input: AimInput): ToolAim {
   let prevT = 0;
   let prevD = field.density(start.x, start.y, start.z);
   if (prevD >= 0) {
-    return { hit: { ...origin }, normal: surfaceNormal(field, planet, origin), planet };
+    return { hit: { ...origin }, normal: surfaceNormal(field, planet, origin), planet, ray };
   }
   for (let t = 0.25; t <= TOOL_RANGE_M; t += 0.25) {
     const p = at(t);
@@ -84,12 +87,12 @@ export function computeAim(input: AimInput): ToolAim {
         y: origin.y + viewDir.y * ht,
         z: origin.z + viewDir.z * ht,
       };
-      return { hit, normal: surfaceNormal(field, planet, hit), planet };
+      return { hit, normal: surfaceNormal(field, planet, hit), planet, ray };
     }
     prevT = t;
     prevD = d;
   }
-  return { ...NO_AIM };
+  return { ...NO_AIM, ray, planet };
 }
 
 /** Outward surface normal at a world-space hit (air side of the density). */

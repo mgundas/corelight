@@ -109,6 +109,8 @@ Each core chamber holds an ancient engine with an activation socket. Sela's engi
 | Left mouse | Use tool (dig) |
 | Right mouse | Tool alt (add terrain) |
 | Middle mouse or F | Tool flatten mode |
+| C | Cable tool: click a snap, click a target; click a cabled snap to cut |
+| Hold E | Pack up an empty machine/platform |
 | E | Interact / pick up / enter shuttle |
 | Tab | Backpack and printer UI |
 | Q | Drop held item |

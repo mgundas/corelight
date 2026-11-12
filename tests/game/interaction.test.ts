@@ -14,6 +14,7 @@ import type { ToolAim } from '../../src/player/terrainTool.js';
 import { placeableDef } from '../../src/data/loadPlaceables.js';
 import { PlacementMode, carriedPlaceable } from '../../src/game/placement.js';
 import { tickInteraction } from '../../src/game/interactWiring.js';
+import { PackHold } from '../../src/game/packHold.js';
 
 interface Ctx {
   world: World;
@@ -119,7 +120,8 @@ function interact(ctx: Ctx, placement = new PlacementMode()): {
   tickInteraction({
     world: ctx.world,
     playerId: ctx.playerId,
-    input: fakeInput({ interact: true }),
+    input: fakeInput({}),
+    interact: true,
     canAct: true,
     aim: ctx.aim,
     placement,
@@ -267,6 +269,7 @@ describe('interaction priority', () => {
       world: ctx.world,
       playerId: ctx.playerId,
       input: fakeInput({ printer: true }),
+      interact: false,
       canAct: false,
       aim: { hit: null, normal: null, planet: null },
       placement: new PlacementMode(),
@@ -276,6 +279,70 @@ describe('interaction priority', () => {
       },
     });
     expect(toggles).toBe(1);
+  });
+});
+
+describe('M10 hold-to-pack interaction', () => {
+  function packableStation(ctx: Ctx): EntityId {
+    const id = addStation(ctx, 'small_printer');
+    const station = ctx.world.entities.get(id);
+    if (!station) throw new Error('no station');
+    station.components.placeable = { placeableId: 'small_printer' };
+    return id;
+  }
+
+  function tickHold(
+    ctx: Ctx,
+    packHold: PackHold,
+    interact: boolean,
+    held: boolean,
+    nowMs: number,
+    opens: EntityId[],
+  ): void {
+    tickInteraction({
+      world: ctx.world,
+      playerId: ctx.playerId,
+      input: fakeInput({}),
+      interact,
+      interactHeld: held,
+      nowMs,
+      packHold,
+      canAct: true,
+      aim: ctx.aim,
+      placement: new PlacementMode(),
+      openStation: (id) => opens.push(id),
+      togglePrinter: () => undefined,
+    });
+  }
+
+  it('packs an empty printer after 1 s and does not open its panel', () => {
+    const ctx = context();
+    const stationId = packableStation(ctx);
+    const packHold = new PackHold();
+    const opens: EntityId[] = [];
+    tickHold(ctx, packHold, true, true, 0, opens);
+    expect(opens).toHaveLength(0);
+    expect(ctx.world.entities.has(stationId)).toBe(true);
+    tickHold(ctx, packHold, false, true, 500, opens);
+    expect(ctx.world.entities.has(stationId)).toBe(true);
+    tickHold(ctx, packHold, false, true, 1000, opens);
+    ctx.world.tick();
+    expect(ctx.world.entities.has(stationId)).toBe(false);
+    const inv = ctx.world.entities.get(ctx.playerId)?.components.inventory;
+    const items = (inv?.slots ?? []).map((id) =>
+      id ? ctx.world.entities.get(id)?.components.item?.itemId : null,
+    );
+    expect(items).toContain('small_printer_package');
+  });
+
+  it('a tap still opens the empty station panel', () => {
+    const ctx = context();
+    const stationId = packableStation(ctx);
+    const packHold = new PackHold();
+    const opens: EntityId[] = [];
+    tickHold(ctx, packHold, true, false, 0, opens);
+    expect(opens).toEqual([stationId]);
+    expect(ctx.world.entities.has(stationId)).toBe(true);
   });
 });
 

@@ -1,5 +1,5 @@
 import type { Vec3d } from '../core/math.js';
-import { distance, IDENTITY_QUAT, rotateVector } from '../core/math.js';
+import { distance, IDENTITY_QUAT } from '../core/math.js';
 import {
   BACKPACK_SLOTS,
   OXYGEN_MAX,
@@ -10,18 +10,21 @@ import {
   TOOL_RANGE_SLACK_M,
 } from '../core/constants.js';
 import { events } from '../core/events.js';
-import { isKnownItem } from '../data/loadData.js';
 import { layerAt } from '../terrain/density.js';
 import type { EditMode, FlattenPlane } from '../terrain/edits.js';
-import type { EntityId } from './entities.js';
+import type { EntityId, SnapRef } from './entities.js';
 import {
   collectStation,
   depositToStation,
   printAtStation,
   printBackpack,
 } from './craftingActions.js';
+import { connectCable, disconnectCable } from './cableActions.js';
 import { dropItem, pickUpItem } from './inventoryActions.js';
+import { mineNodes } from './mining.js';
+import { packUpPlaced } from './packActions.js';
 import { placeLightstick, placePlaceable } from './placeActions.js';
+import type { PlacementTarget } from './placeResolve.js';
 import { baseFieldFor, placeTether, removeTether, spawnHabitatEntity } from './tetherActions.js';
 import type { World } from './world.js';
 
@@ -61,11 +64,22 @@ export type Action =
   | { type: 'spawnHabitat'; planetId: string; position: Vec3d }
   | { type: 'placeTether'; playerId: EntityId }
   | { type: 'removeTether'; playerId: EntityId; tetherId: EntityId }
+  | { type: 'connectCable'; playerId: EntityId; from: SnapRef; to: SnapRef }
+  | { type: 'disconnectCable'; playerId: EntityId; cableId: EntityId }
+  | { type: 'packUpPlaced'; playerId: EntityId; entityId: EntityId }
   | { type: 'printBackpack'; playerId: EntityId; recipeId: string }
   | { type: 'depositToStation'; playerId: EntityId; stationId: EntityId }
   | { type: 'printAtStation'; playerId: EntityId; stationId: EntityId; recipeId: string }
   | { type: 'collectStation'; playerId: EntityId; stationId: EntityId }
-  | { type: 'placePlaceable'; playerId: EntityId; placeableId: string; position: Vec3d }
+  | {
+      type: 'placePlaceable';
+      playerId: EntityId;
+      placeableId: string;
+      position: Vec3d;
+      /** Platform rim snap or top slot chosen by the client (re-validated). */
+      snap?: PlacementTarget['snap'];
+      slot?: PlacementTarget['slot'];
+    }
   | { type: 'placeLightstick'; playerId: EntityId };
 
 function clampAxis(v: number): number {
@@ -323,6 +337,18 @@ export function applyAction(world: World, action: Action): void {
       removeTether(world, action.playerId, action.tetherId);
       return;
     }
+    case 'connectCable': {
+      connectCable(world, action.playerId, action.from, action.to);
+      return;
+    }
+    case 'disconnectCable': {
+      disconnectCable(world, action.playerId, action.cableId);
+      return;
+    }
+    case 'packUpPlaced': {
+      packUpPlaced(world, action.playerId, action.entityId);
+      return;
+    }
     case 'printBackpack': {
       printBackpack(world, action.playerId, action.recipeId);
       return;
@@ -340,54 +366,14 @@ export function applyAction(world: World, action: Action): void {
       return;
     }
     case 'placePlaceable': {
-      placePlaceable(world, action.playerId, action.placeableId, action.position);
+      const target: PlacementTarget | null =
+        action.snap || action.slot ? { snap: action.snap, slot: action.slot } : null;
+      placePlaceable(world, action.playerId, action.placeableId, action.position, target);
       return;
     }
     case 'placeLightstick': {
       placeLightstick(world, action.playerId);
       return;
-    }
-  }
-}
-
-/**
- * Dig strokes overlapping a node shake one charge loose per stroke bit as a
- * physical item beside the node. Exhausted nodes are removed and recorded in
- * depletedNodes so the deterministic placer never brings them back.
- */
-function mineNodes(world: World, planetId: string, center: Vec3d, radius: number): void {
-  if (!world.planets.some((p) => p.id === planetId)) return;
-  for (const [id, entity] of [...world.entities]) {
-    if (entity.kind !== 'node' || entity.planetId !== planetId) continue;
-    const node = entity.components.node;
-    if (!node || node.charges <= 0 || !isKnownItem(node.resourceId)) continue;
-    if (distance(entity.position, center) > radius + 1.5) continue;
-    node.charges -= 1;
-    // Partial progress persists across far despawns (reapplied on respawn).
-    // Full-charge nodes need no record (placement already derives them).
-    if (node.charges !== node.maxCharges) world.nodeCharges.set(id, node.charges);
-    else world.nodeCharges.delete(id);
-    // Pop the item out along the node's own surface normal (its rotation's
-    // +Y): ceiling nodes hang overhead, so radial up would bury the drop in
-    // rock. Falls back to radial up when the rotation is missing.
-    const normal = rotateVector({ x: 0, y: 1, z: 0 }, entity.rotation);
-    const itemId = world.nextId('item');
-    world.entities.set(itemId, {
-      id: itemId,
-      kind: 'item',
-      planetId,
-      position: {
-        x: entity.position.x + normal.x * 1.0,
-        y: entity.position.y + normal.y * 1.0,
-        z: entity.position.z + normal.z * 1.0,
-      },
-      rotation: { ...IDENTITY_QUAT },
-      components: { item: { itemId: node.resourceId } },
-    });
-    if (node.charges <= 0) {
-      world.entities.delete(id);
-      world.nodeCharges.delete(id);
-      world.depletedNodes.add(id);
     }
   }
 }

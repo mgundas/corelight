@@ -24,6 +24,8 @@ export interface ToolAim {
   hit: Vec3d | null;
   normal: Vec3d | null;
   planet: PlanetConfig | null;
+  /** View ray (head + direction) for snap/cable picking; null while flying. */
+  ray?: { origin: Vec3d; dir: Vec3d } | null;
 }
 
 export class TerrainTool {

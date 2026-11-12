@@ -5,21 +5,18 @@
 // Backpack prints are instant and consume carried items. Station jobs take
 // inputs from the station's own input slots (E deposits the selected item),
 // consume them at job start, and expose the output once `time` has passed;
-// E near the station collects it. Power is stubbed by CRAFTING_REQUIRE_POWER
-// (M10 replaces the flag with the real network).
+// E near the station collects it. M10: a job may start on an unpowered
+// network; the power system pauses progress (whole machine) until the
+// network can afford it.
 
 import {
-  CRAFTING_REQUIRE_POWER,
   STATION_INPUT_SLOTS,
   STATION_RANGE_M,
 } from '../core/constants.js';
 import { events } from '../core/events.js';
-import { distance, IDENTITY_QUAT } from '../core/math.js';
+import { distance } from '../core/math.js';
 import { isKnownItem } from '../data/loadData.js';
-import {
-  isPlaceable,
-  placeableDef,
-} from '../data/loadPlaceables.js';
+import { isPlaceable } from '../data/loadPlaceables.js';
 import {
   isRecipeUnlocked,
   recipeById,
@@ -28,8 +25,7 @@ import {
   type RecipeStation,
 } from '../data/loadRecipes.js';
 import type { Entity, EntityId, PrinterComponent } from './entities.js';
-import { inventoryFor, isLargePackage } from './inventoryActions.js';
-import { upAt } from './physics/frames.js';
+import { giveItemToPlayer, inventoryFor } from './inventoryActions.js';
 import type { World } from './world.js';
 
 const STATION_MACHINE_TYPES: ReadonlySet<string> = new Set([
@@ -104,63 +100,6 @@ export function recipeInputsAvailable(
   return recipe.inputs.every((input) => count(input.item) >= input.count);
 }
 
-/**
- * Create the recipe output for a player: normal items and small packages go
- * into a free backpack slot, large packages are front-carried, and a full
- * pack drops the output loose at the player's feet (prompt wording).
- */
-function giveOutput(world: World, player: Entity, outputId: string): void {
-  const playerComp = player.components.player;
-  const inventory = player.components.inventory;
-  const packageItem = isPlaceable(outputId) ? placeableDef(outputId).packageItem : outputId;
-  const large = isLargePackage(packageItem);
-  const id = world.nextId('item');
-  const up = world.planets.find((p) => p.id === player.planetId);
-  const upVec = up ? upAt(up, player.position) : { x: 0, y: 1, z: 0 };
-  const basePos = {
-    x: player.position.x + upVec.x * 0.8,
-    y: player.position.y + upVec.y * 0.8,
-    z: player.position.z + upVec.z * 0.8,
-  };
-  if (large && playerComp && !playerComp.carryingLarge) {
-    playerComp.carryingLarge = id;
-    world.entities.set(id, {
-      id,
-      kind: 'item',
-      planetId: player.planetId,
-      position: { ...player.position },
-      rotation: { ...IDENTITY_QUAT },
-      components: { item: { itemId: packageItem, holder: player.id } },
-    });
-    return;
-  }
-  // Large packages never occupy backpack slots: with hands full they drop
-  // loose at the player's feet instead.
-  const free = large || !inventory ? -1 : inventory.slots.indexOf(null);
-  if (inventory && free !== -1) {
-    inventory.slots[free] = id;
-    // Fresh outputs are held, so E (place/deposit) acts on them immediately.
-    inventory.selectedSlot = free;
-    world.entities.set(id, {
-      id,
-      kind: 'item',
-      planetId: player.planetId,
-      position: { ...player.position },
-      rotation: { ...IDENTITY_QUAT },
-      components: { item: { itemId: packageItem, holder: player.id } },
-    });
-    return;
-  }
-  world.entities.set(id, {
-    id,
-    kind: 'item',
-    planetId: player.planetId,
-    position: basePos,
-    rotation: { ...IDENTITY_QUAT },
-    components: { item: { itemId: packageItem } },
-  });
-}
-
 /** Consume the recipe's inputs from the backpack slots. */
 function consumeBackpackInputs(
   world: World,
@@ -223,7 +162,7 @@ export function printBackpack(world: World, playerId: EntityId, recipeId: string
     return;
   }
   consumeBackpackInputs(world, inventory.slots, recipe);
-  giveOutput(world, player, recipe.output);
+  giveItemToPlayer(world, player, recipe.output);
   events.emit('actionApplied', { type: 'printBackpack' });
 }
 
@@ -269,13 +208,11 @@ export function printAtStation(
     events.emit('actionApplied', { type: 'printAtStation' });
     return;
   }
-  const powered = !CRAFTING_REQUIRE_POWER || (station.components.power?.stored ?? 0) > 0;
   if (
     !stationMatches(station, recipe) ||
     !isRecipeUnlocked(recipe) ||
     printer.recipeId !== null ||
     printer.outputReady !== null ||
-    !powered ||
     !recipeInputsAvailable(recipe, (itemId) => countInStation(world, printer, itemId))
   ) {
     events.emit('actionApplied', { type: 'printAtStation' });
@@ -308,7 +245,7 @@ export function collectStation(world: World, playerId: EntityId, stationId: Enti
     events.emit('actionApplied', { type: 'collectStation' });
     return;
   }
-  giveOutput(world, player, outputId);
+  giveItemToPlayer(world, player, outputId);
   printer.outputReady = null;
   events.emit('actionApplied', { type: 'collectStation' });
 }

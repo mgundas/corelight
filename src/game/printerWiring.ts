@@ -74,10 +74,13 @@ function stationState(world: World, playerId: EntityId, stationId: EntityId): Pr
     return itemId && isKnownItem(itemId) ? itemDef(itemId).name : null;
   });
   while (slots.length < STATION_INPUT_SLOTS) slots.push(null);
+  const paused = station.components.power?.paused === true;
   const hint = printer.outputReady
     ? 'Output ready — press E or Collect.'
     : jobRecipe
-      ? 'Printing… (power arrives in M10; stations currently always run).'
+      ? paused
+        ? 'Paused — no power. Progress resumes when the network can afford it.'
+        : `Printing… (${jobRecipe.power} power/s while working)`
       : 'Press E while holding an input to load it. Tab closes.';
   return {
     mode: 'station',

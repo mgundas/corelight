@@ -57,8 +57,10 @@ export interface PlaceableDef {
   model: PlaceableModel;
   footprintRadiusM: number;
   heightM: number;
-  /** Local-space cable snap points (M10 consumes these). */
+  /** Local-space cable snap points (M10). */
   snapPoints: SnapPoint[];
+  /** Local-space top slots machines attach to (M10; empty for machines). */
+  slots: SnapPoint[];
   description: string;
 }
 
@@ -66,8 +68,8 @@ function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
 
-function parseSnapPoint(data: unknown, id: string, index: number): SnapPoint {
-  if (!isRecord(data)) throw new Error(`bad placeable ${id}: snapPoints[${index}] must be an object`);
+function parseSnapPoint(data: unknown, id: string, field: string, index: number): SnapPoint {
+  if (!isRecord(data)) throw new Error(`bad placeable ${id}: ${field}[${index}] must be an object`);
   const { x, y, z } = data;
   if (
     typeof x !== 'number' ||
@@ -77,7 +79,7 @@ function parseSnapPoint(data: unknown, id: string, index: number): SnapPoint {
     !Number.isFinite(y) ||
     !Number.isFinite(z)
   ) {
-    throw new Error(`bad placeable ${id}: snapPoints[${index}] needs finite x/y/z`);
+    throw new Error(`bad placeable ${id}: ${field}[${index}] needs finite x/y/z`);
   }
   return { x, y, z };
 }
@@ -85,7 +87,7 @@ function parseSnapPoint(data: unknown, id: string, index: number): SnapPoint {
 /** Validate one raw entry; throws a clear error naming the bad field. */
 export function parsePlaceableDef(data: unknown): PlaceableDef {
   if (!isRecord(data)) throw new Error('bad placeable: entry is not an object');
-  const { id, name, size, packageItem, entityKind, machineType, model, footprintRadiusM, heightM, snapPoints, description } = data;
+  const { id, name, size, packageItem, entityKind, machineType, model, footprintRadiusM, heightM, snapPoints, slots, description } = data;
   if (typeof id !== 'string' || !/^[a-z0-9_]+$/.test(id)) {
     throw new Error(`bad placeable: id must be lowercase snake_case, got ${String(id)}`);
   }
@@ -112,6 +114,9 @@ export function parsePlaceableDef(data: unknown): PlaceableDef {
     throw new Error(`bad placeable ${id}: heightM must be a positive number`);
   }
   if (!Array.isArray(snapPoints)) throw new Error(`bad placeable ${id}: snapPoints must be an array`);
+  if (slots !== undefined && !Array.isArray(slots)) {
+    throw new Error(`bad placeable ${id}: slots must be an array when present`);
+  }
   if (typeof description !== 'string' || description.length === 0) {
     throw new Error(`bad placeable ${id}: description missing`);
   }
@@ -125,7 +130,8 @@ export function parsePlaceableDef(data: unknown): PlaceableDef {
     model: model as PlaceableModel,
     footprintRadiusM,
     heightM,
-    snapPoints: snapPoints.map((point, i) => parseSnapPoint(point, id, i)),
+    snapPoints: snapPoints.map((point, i) => parseSnapPoint(point, id, 'snapPoints', i)),
+    slots: Array.isArray(slots) ? slots.map((point, i) => parseSnapPoint(point, id, 'slots', i)) : [],
     description,
   };
 }

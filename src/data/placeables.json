@@ -15,7 +15,13 @@
       { "x": -2.0, "y": 0.4, "z": 0 },
       { "x": 0, "y": 0.4, "z": -2.0 }
     ],
-    "description": "Octagonal foundation slab; cable snap points at the four rim faces."
+    "slots": [
+      { "x": 0, "y": 0.7, "z": 0 },
+      { "x": 1.2, "y": 0.7, "z": 0 },
+      { "x": -0.6, "y": 0.7, "z": 1.04 },
+      { "x": -0.6, "y": 0.7, "z": -1.04 }
+    ],
+    "description": "Octagonal foundation slab; four rim cable snaps and four top machine slots."
   },
   {
     "id": "small_printer",

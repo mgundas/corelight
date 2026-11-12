@@ -4,10 +4,10 @@
 // the forward comes from the player's yaw/pitch, so the client and any
 // future server agree on what "looking at" means.
 
-import { PICKUP_RANGE_M, STATION_RANGE_M } from '../core/constants.js';
+import { PICKUP_RANGE_M, POWER_VIEW_RANGE_M, STATION_RANGE_M } from '../core/constants.js';
 import { distance, dot, normalize, sub, type Vec3d } from '../core/math.js';
 import { placeableForMachineType } from '../data/loadPlaceables.js';
-import type { EntityId } from '../sim/entities.js';
+import type { Entity, EntityId } from '../sim/entities.js';
 import { isStationMachine } from '../sim/craftingActions.js';
 import { moveBasis, upAt } from '../sim/physics/frames.js';
 import type { World } from '../sim/world.js';
@@ -36,6 +36,20 @@ export function findAimedTether(world: World, playerId: EntityId): EntityId | nu
  * of a printer registers.
  */
 export function findAimedStation(world: World, playerId: EntityId): EntityId | null {
+  return findAimedMachineMatching(world, playerId, STATION_RANGE_M, (entity) => isStationMachine(entity));
+}
+
+/** Nearest machine (any type) for the HUD power readout. */
+export function findAimedMachine(world: World, playerId: EntityId): EntityId | null {
+  return findAimedMachineMatching(world, playerId, POWER_VIEW_RANGE_M, () => true);
+}
+
+function findAimedMachineMatching(
+  world: World,
+  playerId: EntityId,
+  range: number,
+  accepts: (entity: Entity) => boolean,
+): EntityId | null {
   const player = world.entities.get(playerId);
   const playerComp = player?.components.player;
   if (!player || player.kind !== 'player' || !playerComp) return null;
@@ -46,11 +60,11 @@ export function findAimedStation(world: World, playerId: EntityId): EntityId | n
   let best: EntityId | null = null;
   let bestDist = Infinity;
   for (const entity of world.entities.values()) {
-    if (entity.planetId !== planet.id || !isStationMachine(entity)) continue;
+    if (entity.planetId !== planet.id || entity.kind !== 'machine' || !accepts(entity)) continue;
     // Range is base-to-player (the same measure the sim actions use); the
     // wider mid-height point is only for the look-cone direction.
     const baseDist = distance(entity.position, player.position);
-    if (baseDist > STATION_RANGE_M) continue;
+    if (baseDist > range) continue;
     const def = placeableForMachineType(entity.components.machine?.machineType ?? '');
     const center: Vec3d = {
       x: entity.position.x + up.x * ((def?.heightM ?? 1) * 0.5),

@@ -25,15 +25,15 @@ import { installDebugHandle, uninstallDebugHandle } from './debugHandle.js';
 import { setupWorldSystems } from './worldSetup.js';
 import { updateDebugOverlay } from './debugStats.js';
 import { PlacementMode } from './placement.js';
+import { CableMode } from './cableMode.js';
+import { PackHold } from './packHold.js';
 import { dispatchTickInput } from './tickInput.js';
 import { createPrinterUi, updatePrinterUi } from './printerWiring.js';
 import type { PrinterUi } from '../ui/printerUi.js';
 import { updateCameraAndEnvironment } from './frameCamera.js';
 
-// Game owns World + Renderer and wires the fixed-timestep loop:
-// sim advances at 30 Hz with an accumulator; rendering interpolates
-// every animation frame. M03: third-person astronaut by default, F3 for
-// the free-fly debug camera; input becomes playerInput Actions per tick.
+// Game owns World + Renderer and wires the fixed-timestep loop: sim runs at
+// 30 Hz, rendering interpolates, and input becomes Actions per tick.
 
 export class Game {
   readonly world: World;
@@ -44,6 +44,8 @@ export class Game {
   readonly tool = new TerrainTool();
   readonly overlay = new DebugOverlay();
   readonly placement = new PlacementMode();
+  readonly cable = new CableMode();
+  readonly packHold = new PackHold();
   private readonly hud = new Hud();
   private readonly printerUi: PrinterUi;
 
@@ -84,14 +86,12 @@ export class Game {
   ) {
     this.planets = planets;
     if (existingWorld) {
-      // Continue path: the world already carries planets, clock, entities
-      // and edits. It must reach the streamer before the first frame (the
-      // edit source below reads it live) so edited ground never flashes
-      // unedited. Seeding/spawning is skipped; the clock stays exact.
+      // Continue: the world must reach the streamer before the first frame
+      // so edited ground never flashes; seeding/spawning is skipped.
       this.world = existingWorld;
     } else {
-      // Fresh setup goes through the constructor: no direct World field
-      // assignment (hard rule 2), only dispatch() + systems after this.
+      // Fresh setup goes through the constructor (hard rule 2: no direct
+      // World field assignment), only dispatch() + systems after this.
       this.world = new World(seed, { planets, time: initialTimeS });
     }
 
@@ -101,9 +101,12 @@ export class Game {
     // restored save brings its own), never from boot/URL params.
     const worldSeed = this.world.seed;
     const setup = setupWorldSystems(this.world, planets, this.colliderPool, seed, existingWorld, {
-      // Dev shortcut: a fresh ?dev=1 run starts with a full tether pack for
-      // oxygen testing. Continue keeps the stored backpack instead.
+      // Dev shortcuts: ?dev=1 starts with a full tether pack for oxygen
+      // testing; ?build=1 starts with power-base packages for the M10
+      // acceptance (solar/battery recipes are M11-gated). Continue keeps the
+      // stored backpack instead.
       devTethers: !existingWorld && getUrlParams().dev,
+      devBuild: !existingWorld && getUrlParams().build,
     });
     this.colliders = setup.colliders;
     this.playerId = setup.playerId;
@@ -143,6 +146,7 @@ export class Game {
       flying: () => this.flyCamera.enabled,
       views: () => ({
         tethers: this.renderer.tetherViews.group,
+        cables: this.renderer.cableViews.group,
         habitats: this.renderer.habitatViews.group,
         markers: this.renderer.markerViews.group,
         placeables: this.renderer.placeableViews.group,
@@ -167,12 +171,7 @@ export class Game {
     }
   };
 
-  /**
-   * Aim the terrain tool from the orbit camera through the crosshair.
-   * Computed once per frame from render state; strokes bake it into
-   * Actions. Detailed (march + normal) only while a brush button is held;
-   * idle frames keep the cheap collider ray for the preview.
-   */
+  /** Aim the tool from the orbit camera; strokes bake it into Actions. */
   private computeToolAim(alpha: number, detailed: boolean): void {
     const followed = findFollowed(this.world, this.planets, this.playerId);
     this.toolAim = buildToolAim({
@@ -192,6 +191,8 @@ export class Game {
   /** F3: free-fly debug camera. Leaving it drops the player at the camera. */
   private toggleFly(): void {
     this.flyCamera.enabled = !this.flyCamera.enabled;
+    this.packHold.reset();
+    this.cable.cancel();
     const player = this.playerId ? this.world.entities.get(this.playerId) : undefined;
     if (this.flyCamera.enabled) {
       if (player) this.flyCamera.position = { ...player.position };
@@ -204,7 +205,6 @@ export class Game {
       }
     }
   }
-
   /** Freeze sim ticks (pause menu); rendering continues behind the menu. */
   setPaused(paused: boolean): void {
     this.paused = paused;
@@ -213,6 +213,8 @@ export class Game {
     // drains anything queued by the menu itself (including the L bypass).
     if (paused) {
       this.input.setEnabled(false);
+      this.packHold.reset();
+      this.cable.cancel();
       this.printerUi.close();
     } else {
       this.input.setEnabled(!this.flyCamera.enabled);
@@ -222,7 +224,6 @@ export class Game {
   isPaused(): boolean {
     return this.paused;
   }
-
   /** Current world as a save payload (autosave / Save now). */
   snapshot(): SaveData {
     return serializeWorld(this.world);
@@ -304,6 +305,8 @@ export class Game {
           flying,
           uiOpen: this.printerUi.isOpen(),
           placement: this.placement,
+          cable: this.cable,
+          packHold: this.packHold,
           openStation: (stationId) => this.printerUi.openStation(stationId),
           togglePrinter: () => {
             if (this.printerUi.isOpen()) this.printerUi.close();
@@ -356,6 +359,7 @@ export class Game {
       focusWorld,
       aim: this.toolAim,
       placement: this.placement,
+      cable: this.cable,
     });
     updatePlacementGhost({
       renderer: this.renderer,
