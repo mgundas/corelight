@@ -40,6 +40,22 @@ describe('moveBasis', () => {
 });
 
 describe('orientationForUpYaw', () => {
+  it('faces the model along movement at poles, equator and tilted ground for every heading', () => {
+    const normals = [vec3(0, 1, 0), vec3(0, -1, 0), vec3(1, 0, 0), vec3(0, 0, -1), normalize(vec3(0.3, 1, -0.2))];
+    for (const up of normals) {
+      for (const yaw of [0, Math.PI / 2, -Math.PI / 2, Math.PI, 0.73]) {
+        const q = orientationForUpYaw(up, yaw);
+        const facing = rotateVector(vec3(0, 0, 1), q);
+        const expected = moveBasis(up, yaw, 0).forward;
+        expect(facing.x).toBeCloseTo(expected.x, 6);
+        expect(facing.y).toBeCloseTo(expected.y, 6);
+        expect(facing.z).toBeCloseTo(expected.z, 6);
+        const actualUp = rotateVector(vec3(0, 1, 0), q);
+        expect(dot(actualUp, up)).toBeCloseTo(1, 6);
+      }
+    }
+  });
+
   it('maps local +Y onto up', () => {
     const up = normalize(vec3(0.3, 1, -0.2));
     const q = orientationForUpYaw(up, 0.9);

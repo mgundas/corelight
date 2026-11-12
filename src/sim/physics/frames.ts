@@ -7,10 +7,12 @@
 import {
   add,
   cross,
+  dot,
   normalize,
   quatFromAxisAngle,
   quatFromTo,
   quatMultiply,
+  rotateVector,
   scale,
   sub,
   type Quat,
@@ -66,8 +68,14 @@ export function moveBasis(up: Vec3d, yaw: number, pitch: number): { forward: Vec
   return { forward, right };
 }
 
-/** Orientation quaternion: local +Y maps to `up`, then yawed around up. */
+/** Local +Y is radial up; local +Z faces the same way as ground movement. */
 export function orientationForUpYaw(up: Vec3d, yaw: number): Quat {
-  const align = quatFromTo({ x: 0, y: 1, z: 0 }, normalize(up));
-  return quatMultiply(quatFromAxisAngle(normalize(up), yaw), align);
+  const normal = normalize(up);
+  const align = quatFromTo({ x: 0, y: 1, z: 0 }, normal);
+  // Aligning up alone leaves an arbitrary heading that differs from the
+  // tangent frame used by the camera. Resolve that twist from the same basis.
+  const alignedForward = rotateVector({ x: 0, y: 0, z: 1 }, align);
+  const { forward } = moveBasis(normal, yaw, 0);
+  const twist = Math.atan2(dot(normal, cross(alignedForward, forward)), dot(alignedForward, forward));
+  return quatMultiply(quatFromAxisAngle(normal, twist), align);
 }
