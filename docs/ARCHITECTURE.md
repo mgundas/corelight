@@ -154,7 +154,7 @@ interface Entity {
 - `Renderer` subscribes to world state each frame and keeps a `Map<EntityId, Object3D>` of views.
 - Materials: `MeshStandardMaterial` with `vertexColors: true`; terrain uses smooth worker gradient normals (`flatShading: false`), while props use flat shading. Fog color matches the sky.
 - Lighting underground: ambient intensity scales with depth below the surface (1.0 at surface, 0.08 below 25 m). Headlamp = SpotLight attached to the camera. Light sticks and lumen crystals = PointLights, at most 12 active, nearest first.
-- Atmosphere: back-side sphere shell at `1.25 * radius` with a simple scattering-style gradient shader. Sky color fades to black as altitude rises, stars appear in space.
+- Atmosphere: a back-side proxy sphere at `radius + atmosphere.height` bounds single Rayleigh/Mie scattering (`render/atmosphereShader.ts`). Density decays exponentially and reaches zero at the proxy edge; view/sun optical depths, planet shadow and phase functions produce the limb instead of coloring the sphere surface. Entry-point logarithmic fragment depth preserves terrain occlusion. Planet center/sun uniforms re-sync with the floating origin; cave depth suppresses scattering. Sky and fog fade over 0.5–2 configured atmosphere heights (30–120 m for the current planets), exposing black space and stars promptly.
 - Logarithmic depth buffer on (needed for space to ground scale).
 
 ## Saving

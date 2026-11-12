@@ -1,40 +1,11 @@
-// M05 atmosphere: a BackSide shell above the planet with a gradient
-// shader. It is brighter on the sunlit side and reads as a rim glow from
-// space. Positions re-sync from world doubles every frame (cheap: one mesh
-// per planet), so origin shifts can never desync it.
-
+// A proxy volume for single-scattered sunlight, not a colored bubble.
+// Positions and uniforms use floating-origin coordinates every frame.
 import * as THREE from 'three';
 import type { PlanetConfig } from '../planets/PlanetConfig.js';
-import { ATMOSPHERE_SHELL_MULT } from '../core/constants.js';
-import type { Vec3d } from '../core/math.js';
+import { ATMOSPHERE, DEPTH_FULL_DARK_M } from '../core/constants.js';
+import { smoothstep, type Vec3d } from '../core/math.js';
 import { toLocal } from './floatingOrigin.js';
-
-const VERT = /* glsl */ `
-varying vec3 vWorldNormal;
-varying vec3 vWorldPos;
-void main() {
-  vWorldNormal = normalize(mat3(modelMatrix) * normal);
-  vec4 wp = modelMatrix * vec4(position, 1.0);
-  vWorldPos = wp.xyz;
-  gl_Position = projectionMatrix * viewMatrix * wp;
-}
-`;
-
-const FRAG = /* glsl */ `
-uniform vec3 sunDirection;
-uniform vec3 skyColor;
-uniform vec3 groundColor;
-varying vec3 vWorldNormal;
-varying vec3 vWorldPos;
-void main() {
-  vec3 V = normalize(cameraPosition - vWorldPos);
-  vec3 N = normalize(vWorldNormal);
-  float rim = pow(1.0 - abs(dot(N, V)), 2.5);
-  float day = clamp(dot(N, sunDirection) * 0.5 + 0.5, 0.0, 1.0);
-  vec3 col = mix(groundColor, skyColor, day) * (0.3 + 0.7 * day);
-  gl_FragColor = vec4(col, rim * (0.25 + 0.75 * day));
-}
-`;
+import { ATMOSPHERE_FRAGMENT, ATMOSPHERE_VERTEX } from './atmosphereShader.js';
 
 interface Shell {
   planet: PlanetConfig;
@@ -44,34 +15,39 @@ interface Shell {
 
 export class Atmosphere {
   private readonly shells: Shell[] = [];
-
   constructor(private readonly scene: THREE.Scene) {}
 
   addPlanet(planet: PlanetConfig): void {
+    const height = planet.atmosphere.height;
+    const scaleHeight = height * ATMOSPHERE.scaleHeightFraction;
+    // Keep the planet palette, but preferentially scatter blue wavelengths.
+    const tint = planet.atmosphere.sky;
     const material = new THREE.ShaderMaterial({
-      vertexShader: VERT,
-      fragmentShader: FRAG,
+      vertexShader: ATMOSPHERE_VERTEX,
+      fragmentShader: ATMOSPHERE_FRAGMENT,
       uniforms: {
+        planetCenter: { value: new THREE.Vector3() },
         sunDirection: { value: new THREE.Vector3(0, 1, 0) },
-        skyColor: {
-          value: new THREE.Color(planet.atmosphere.sky[0], planet.atmosphere.sky[1], planet.atmosphere.sky[2]),
-        },
-        groundColor: {
-          value: new THREE.Color(
-            planet.atmosphere.ground[0],
-            planet.atmosphere.ground[1],
-            planet.atmosphere.ground[2],
-          ),
-        },
+        planetRadius: { value: planet.radius },
+        atmosphereHeight: { value: height },
+        scaleHeight: { value: scaleHeight },
+        rayleigh: { value: new THREE.Vector3(...ATMOSPHERE.rayleighOpticalDepth)
+          .multiply(new THREE.Vector3(tint[0], tint[1], tint[2])).divideScalar(scaleHeight) },
+        mie: { value: ATMOSPHERE.mieOpticalDepth / scaleHeight },
+        visibility: { value: 1 },
       },
       side: THREE.BackSide,
       transparent: true,
       depthWrite: false,
+      // Output is preintegrated radiance plus transmittance, not RGB * alpha.
+      blending: THREE.CustomBlending,
+      blendSrc: THREE.OneFactor,
+      blendDst: THREE.OneMinusSrcAlphaFactor,
+      blendEquation: THREE.AddEquation,
     });
-    const mesh = new THREE.Mesh(
-      new THREE.SphereGeometry(planet.radius * ATMOSPHERE_SHELL_MULT, 48, 32),
-      material,
-    );
+    const mesh = new THREE.Mesh(new THREE.SphereGeometry(
+      planet.radius + height, ATMOSPHERE.sphereSegments, ATMOSPHERE.sphereRings,
+    ), material);
     mesh.userData['originManaged'] = true;
     mesh.renderOrder = 10;
     mesh.frustumCulled = false;
@@ -79,13 +55,16 @@ export class Atmosphere {
     this.shells.push({ planet, mesh, material });
   }
 
-  /** Reposition from world doubles and refresh the sunlit side. */
-  update(sunDirWorld: Vec3d): void {
+  update(sunDirWorld: Vec3d, depthBelowM = 0): void {
     for (const shell of this.shells) {
       const local = toLocal(shell.planet.center);
       shell.mesh.position.set(local.x, local.y, local.z);
+      const center = shell.material.uniforms['planetCenter'] as { value: THREE.Vector3 };
+      center.value.set(local.x, local.y, local.z);
       const sun = shell.material.uniforms['sunDirection'] as { value: THREE.Vector3 };
-      sun.value.set(sunDirWorld.x, sunDirWorld.y, sunDirWorld.z);
+      sun.value.set(sunDirWorld.x, sunDirWorld.y, sunDirWorld.z).normalize();
+      const visibility = shell.material.uniforms['visibility'] as { value: number };
+      visibility.value = 1 - smoothstep(0, DEPTH_FULL_DARK_M, depthBelowM);
     }
   }
 

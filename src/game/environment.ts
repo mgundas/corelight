@@ -65,5 +65,6 @@ export function computeEnvironment(
     skyTint: skyPlanet.atmosphere.sky,
     groundTint: skyPlanet.atmosphere.ground,
     dayColor: skyPlanet.atmosphere.sky,
+    atmosphereHeightM: skyPlanet.atmosphere.height,
   };
 }

@@ -159,16 +159,24 @@ export const SHADOW_MAP_SIZE = 2048;
 export const FOG_SURFACE_DENSITY = 0.0011;
 export const FOG_CAVE_DENSITY = 0.028;
 /** Altitude where fog starts fading out toward space. */
-export const FOG_SPACE_START_M = 400;
+export const FOG_SPACE_START_M = 30;
 /** Altitude where fog is gone (distant planet stays crisp). */
-export const FOG_SPACE_END_M = 2000;
+export const FOG_SPACE_END_M = 120;
 /** Altitude where the sky background starts fading to black (space). */
-export const SKY_SPACE_START_M = 400;
+export const SKY_SPACE_START_M = 30;
 /** Altitude where the fade to black is complete. */
-export const SKY_SPACE_END_M = 2000;
+export const SKY_SPACE_END_M = 120;
 
-/** Atmosphere shell radius as a multiple of the planet radius. */
-export const ATMOSPHERE_SHELL_MULT = 1.35;
+/** Scattering is integrated in planet-scaled meters; optical depths are
+ * dimensionless so the same shader works on both small planets. */
+export const ATMOSPHERE = {
+  referenceHeight: 60, scaleHeightFraction: 0.08,
+  rayleighOpticalDepth: [0.065, 0.14, 0.32] as const,
+  mieOpticalDepth: 0.018, mieScaleHeightFraction: 0.4,
+  mieAnisotropy: 0.76, sunIntensity: 8,
+  viewSamples: 16, sunSamples: 6,
+  sphereSegments: 96, sphereRings: 64,
+} as const;
 
 /** Headlamp spotlight tuning (SpotLight attached to the camera). */
 export const HEADLAMP_COLOR = 0xfff1d6;

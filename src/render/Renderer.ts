@@ -58,6 +58,7 @@ export interface EnvironmentUpdate {
   skyTint: Rgb;
   groundTint: Rgb;
   dayColor: Rgb;
+  atmosphereHeightM?: number;
 }
 
 export class Renderer {
@@ -220,8 +221,9 @@ export class Renderer {
       altitudeM: u.altitudeM,
       depthBelowM: u.depthBelowM,
       dayColor: u.dayColor,
+      atmosphereHeightM: u.atmosphereHeightM,
     });
-    this.atmosphere.update(u.sunDirWorld);
+    this.atmosphere.update(u.sunDirWorld, u.depthBelowM);
   }
 
   /** Third-person view: camera behind `camWorld`, looking at `headWorld`. */

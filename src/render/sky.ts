@@ -6,6 +6,7 @@
 
 import * as THREE from 'three';
 import {
+  ATMOSPHERE,
   DEPTH_FULL_DARK_M,
   FOG_CAVE_DENSITY,
   FOG_SPACE_END_M,
@@ -51,8 +52,10 @@ export function skyStateFor(
   altitudeM: number,
   depthBelowM: number,
   dayColor: Rgb,
+  atmosphereHeightM: number = ATMOSPHERE.referenceHeight,
 ): SkyState {
-  const spaceF = smoothstep(SKY_SPACE_START_M, SKY_SPACE_END_M, altitudeM);
+  const heightScale = atmosphereHeightM / ATMOSPHERE.referenceHeight;
+  const spaceF = smoothstep(SKY_SPACE_START_M * heightScale, SKY_SPACE_END_M * heightScale, altitudeM);
   const dayF = smoothstep(-0.06, 0.3, elevation);
   const duskF = clampScalar(1 - Math.abs(elevation) / 0.18, 0, 1);
   let col = mix3(NIGHT, dayColor, dayF);
@@ -61,7 +64,7 @@ export function skyStateFor(
 
   const caveF = smoothstep(0, DEPTH_FULL_DARK_M, depthBelowM);
   const fogColor: Rgb = [col[0] * (1 - caveF * 0.85), col[1] * (1 - caveF * 0.85), col[2] * (1 - caveF * 0.85)];
-  const spaceFogF = smoothstep(FOG_SPACE_START_M, FOG_SPACE_END_M, altitudeM);
+  const spaceFogF = smoothstep(FOG_SPACE_START_M * heightScale, FOG_SPACE_END_M * heightScale, altitudeM);
   const fogDensity =
     (FOG_SURFACE_DENSITY + (FOG_CAVE_DENSITY - FOG_SURFACE_DENSITY) * caveF) * (1 - spaceFogF);
 
@@ -76,6 +79,7 @@ export interface SkyUpdate {
   altitudeM: number;
   depthBelowM: number;
   dayColor: Rgb;
+  atmosphereHeightM?: number;
 }
 
 export class Sky {
@@ -135,7 +139,7 @@ export class Sky {
   }
 
   update(u: SkyUpdate): void {
-    const state = skyStateFor(u.elevation, u.altitudeM, u.depthBelowM, u.dayColor);
+    const state = skyStateFor(u.elevation, u.altitudeM, u.depthBelowM, u.dayColor, u.atmosphereHeightM);
     this.bgColor.setRGB(state.bg[0], state.bg[1], state.bg[2]);
     this.fog.color.setRGB(state.fogColor[0], state.fogColor[1], state.fogColor[2]);
     this.fog.density = state.fogDensity;

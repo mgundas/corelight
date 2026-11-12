@@ -39,8 +39,8 @@ describe('skyStateFor', () => {
     expect(s.fogDensity).toBeCloseTo(0, 6);
   });
 
-  it('goes dark soon after leaving the planet (fade done by 2000 m)', () => {
-    const s = skyStateFor(1, 2000, -2000, DAY);
+  it('goes dark shortly after leaving the configured atmosphere', () => {
+    const s = skyStateFor(1, 120, -120, DAY);
     expect(s.bg[0]).toBeCloseTo(0, 6);
     expect(s.bg[1]).toBeCloseTo(0, 6);
     expect(s.bg[2]).toBeCloseTo(0, 6);
@@ -48,12 +48,21 @@ describe('skyStateFor', () => {
     expect(s.fogDensity).toBeCloseTo(0, 6);
   });
 
-  it('keeps the day sky on low high-flights (below 400 m)', () => {
-    const s = skyStateFor(1, 300, -300, DAY);
+  it('keeps the day sky while still low in the atmosphere', () => {
+    const s = skyStateFor(1, 20, -20, DAY);
     expect(s.bg[0]).toBeCloseTo(DAY[0] as number, 2);
     expect(s.bg[1]).toBeCloseTo(DAY[1] as number, 2);
     expect(s.bg[2]).toBeCloseTo(DAY[2] as number, 2);
     expect(s.stars).toBe(0);
+  });
+
+  it('scales the sky-to-space transition with the planet atmosphere height', () => {
+    const normal = skyStateFor(1, 75, -75, DAY, 60);
+    const thicker = skyStateFor(1, 150, -150, DAY, 120);
+    expect(thicker).toEqual(normal);
+    expect(normal.stars).toBeGreaterThan(0);
+    expect(normal.stars).toBeLessThan(1);
+    expect(normal.bg[2]).toBeGreaterThan(0);
   });
 
   it('night is near-black, not grey-blue', () => {

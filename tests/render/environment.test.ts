@@ -5,8 +5,7 @@ import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { SELA } from '../../src/planets/configs/sela.js';
 import { VORN } from '../../src/planets/configs/vorn.js';
-import { ATMOSPHERE_SHELL_MULT } from '../../src/core/constants.js';
-import { FOG_CAVE_DENSITY, FOG_SURFACE_DENSITY } from '../../src/core/constants.js';
+import { ATMOSPHERE, FOG_CAVE_DENSITY, FOG_SURFACE_DENSITY } from '../../src/core/constants.js';
 import { nodeKey, nodeOrigin } from '../../src/terrain/octree.js';
 import type { MeshResult } from '../../src/terrain/workerPool.js';
 import { maybeShiftOrigin, resetOrigin, toLocal } from '../../src/render/floatingOrigin.js';
@@ -151,6 +150,29 @@ describe('Sky', () => {
 });
 
 describe('Atmosphere', () => {
+  it('uses a thin blue scattering profile without an opaque shell or depth writes', () => {
+    const scene = new THREE.Scene();
+    const atmosphere = new Atmosphere(scene);
+    atmosphere.addPlanet(SELA);
+    const mesh = scene.children[0] as THREE.Mesh;
+    const mat = mesh.material as THREE.ShaderMaterial;
+    expect(mat.depthWrite).toBe(false);
+    expect(mat.depthTest).toBe(true);
+    expect(mat.blendSrc).toBe(THREE.OneFactor);
+    expect(mat.blendDst).toBe(THREE.OneMinusSrcAlphaFactor);
+    expect(mat.uniforms['atmosphereHeight']?.value).toBe(SELA.atmosphere.height);
+    expect(mat.uniforms['scaleHeight']?.value).toBeCloseTo(SELA.atmosphere.height * ATMOSPHERE.scaleHeightFraction);
+    const beta = mat.uniforms['rayleigh']?.value as THREE.Vector3;
+    expect(beta.z).toBeGreaterThan(beta.y);
+    expect(beta.y).toBeGreaterThan(beta.x);
+    atmosphere.update({ x: 0, y: 2, z: 0 }, 40);
+    expect(mat.uniforms['visibility']?.value).toBe(0);
+    expect((mat.uniforms['sunDirection']?.value as THREE.Vector3).length()).toBeCloseTo(1);
+    atmosphere.update({ x: 0, y: 1, z: 0 }, 0);
+    expect(mat.uniforms['visibility']?.value).toBe(1);
+    atmosphere.dispose();
+  });
+
   it('tracks the planet center and the sun direction', () => {
     resetOrigin();
     const scene = new THREE.Scene();
@@ -159,10 +181,10 @@ describe('Atmosphere', () => {
     atmosphere.update({ x: 0, y: 1, z: 0 });
     const mesh = scene.children[0] as THREE.Mesh;
     expect(mesh.position.length()).toBe(0);
-    // Shell sits just off the surface (multiplier, not a loose bubble).
+    // Proxy follows configured air height; its outer edge has zero density.
     mesh.geometry.computeBoundingSphere();
     expect(mesh.geometry.boundingSphere?.radius).toBeCloseTo(
-      SELA.radius * ATMOSPHERE_SHELL_MULT,
+      SELA.radius + SELA.atmosphere.height,
       0,
     );
     const mat = mesh.material as THREE.ShaderMaterial;
@@ -182,6 +204,12 @@ describe('Atmosphere', () => {
     expect(maybeShiftOrigin(VORN.center)).not.toBe(null);
     atmosphere.update({ x: 0, y: 1, z: 0 });
     const positions = scene.children.map((child) => (child as THREE.Mesh).position.clone());
+    for (const child of scene.children) {
+      const mesh = child as THREE.Mesh;
+      const material = mesh.material as THREE.ShaderMaterial;
+      const uniformCenter = material.uniforms['planetCenter']?.value as THREE.Vector3;
+      expect(uniformCenter.distanceTo(mesh.position)).toBeLessThan(1e-6);
+    }
     const vornLocal = toLocal(VORN.center);
     const selaLocal = toLocal(SELA.center);
     const near = (p: THREE.Vector3, q: { x: number; y: number; z: number }): number =>
