@@ -111,7 +111,7 @@ describe('cable tool', () => {
     expect(request).toEqual({ type: 'disconnect', cableId });
   });
 
-  it('keeps the pending source on a non-primary tick (RMB is unbound)', () => {
+  it('keeps the pending source on a non-primary tick (RMB is camera orbit)', () => {
     const ctx = context();
     const mode = new CableMode();
     mode.activate();

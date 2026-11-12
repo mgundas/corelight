@@ -1,11 +1,11 @@
 // Player keyboard/mouse state, sampled once per sim tick by Game and sent as
 // a playerInput Action (ARCHITECTURE.md hard rule 2).
 //
-// Cursor model: the pointer is NOT captured during normal play. Hold middle
-// mouse to orbit the camera; only then is the pointer locked (fixed in place)
-// so movement is unbounded. Right mouse is unbound everywhere. Q equips the
-// terrain tool, X toggles dig/add while equipped; with the tool off LMB is
-// grab-carry (handled by Game/tickInput).
+// Cursor model: the pointer is NOT captured during normal play. Hold right
+// mouse (or middle mouse) to orbit the camera; only then is the pointer
+// locked (fixed in place) so movement is unbounded. Right mouse has no other
+// binding. Q equips the terrain tool, X toggles dig/add while equipped; with
+// the tool off LMB is grab-carry (handled by Game/tickInput).
 
 import { BACKPACK_SLOTS } from '../core/constants.js';
 
@@ -24,9 +24,8 @@ export class PlayerInput {
   private selectQueued: number | null = null;
   /** True while E is physically down (hold-to-pack). */
   private interactHeld = false;
-  /** True while middle mouse (orbit) is held. */
-  private orbiting = false;
-  private enabled = true;
+  /** True while right/middle mouse (camera orbit) is held. */
+  private orbiting = false;  private enabled = true;
   private canvas: HTMLCanvasElement | null = null;
   private lookTarget: { addLook: (dx: number, dy: number) => void } | null = null;
   private zoomTarget: { zoom: (delta: number) => void } | null = null;
@@ -187,14 +186,14 @@ export class PlayerInput {
     return select;
   }
 
-  /** True while the middle mouse button (camera orbit) is held. */
+  /** True while the right (or middle) mouse button (camera orbit) is held. */
   isOrbiting(): boolean {
     return this.orbiting;
   }
 
   /**
    * Tool buttons: left = primary brush (dig or add, chosen by ToolMode),
-   * F = flatten. Right mouse is unbound and never reports here.
+   * F = flatten. Right mouse is camera-only and never reports here.
    */
   toolButtons(): { primary: boolean; flatten: boolean } {
     return {
@@ -290,14 +289,11 @@ export class PlayerInput {
 
   private handleMouseDown = (e: MouseEvent): void => {
     if (!this.enabled) return;
-    // Right mouse is deliberately unbound (no add brush, no menu action);
-    // the context menu is still suppressed by handleContextMenu.
-    if (e.button === 2) return;
     this.mouseButtons.add(e.button);
     if (e.button === 0) this.primaryQueued = true;
-    if (e.button === 1) {
-      // Middle mouse: orbit. Lock the pointer only for the duration of the
-      // hold so the cursor is fixed while looking around.
+    if (e.button === 1 || e.button === 2) {
+      // Right (or middle) mouse: camera orbit only. Lock the pointer for the
+      // duration of the hold so the cursor is fixed while looking around.
       e.preventDefault();
       this.orbiting = true;
       this.dragging = true;
@@ -315,7 +311,7 @@ export class PlayerInput {
   };
 
   private handleContextMenu = (e: MouseEvent): void => {
-    // Never let a stray right click open the browser menu over the game.
+    // Right mouse is camera orbit, not a browser menu.
     e.preventDefault();
   };
 
@@ -341,7 +337,7 @@ export class PlayerInput {
 
   private handleMouseUp = (e: MouseEvent): void => {
     this.mouseButtons.delete(e.button);
-    if (e.button === 1) this.releaseOrbit();
+    if (e.button === 1 || e.button === 2) this.releaseOrbit();
   };
 
   private handleWheel = (e: WheelEvent): void => {

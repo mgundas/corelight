@@ -103,7 +103,7 @@ Each core chamber holds an ancient engine with an activation socket. Sela's engi
 | Key | Action |
 |---|---|
 | WASD | Move |
-| Hold middle mouse | Look (pointer is free otherwise; right mouse is unbound) |
+| Hold right mouse | Look (pointer is free otherwise; right mouse is camera-only) |
 | Space | Jump / thrust up in jetpack-free low gravity / shuttle thrust |
 | Shift | Sprint |
 | Q | Equip / stow the terrain tool |

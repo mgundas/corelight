@@ -381,7 +381,7 @@ describe('placement mode confirmation', () => {
     expect(placement.tick(ctx.world, ctx.playerId, ctx.aim, true)).not.toBe(null);
   });
 
-  it('does not cancel on a non-primary tick (RMB is unbound)', () => {
+  it('does not cancel on a non-primary tick (RMB is camera orbit)', () => {
     const ctx = context();
     give(ctx.world, ctx.playerId, 'platform_package');
     const placement = new PlacementMode();
