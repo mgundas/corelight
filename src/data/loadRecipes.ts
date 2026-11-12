@@ -1,8 +1,8 @@
 // Recipe catalog (M09): every craftable from PROJECT.md, validated at load.
 // Changing costs/times/outputs is a JSON-only edit (ARCHITECTURE.md hard
-// rule 8). M11 will replace the `unlockedByDefault` check with research
-// progression; every M09 caller goes through isRecipeUnlocked() so that
-// swap needs no call-site changes.
+// rule 8). M11 adds research progression: every caller goes through
+// isRecipeUnlocked(recipe, unlockedRecipeSet) so starter recipes stay
+// available and everything else is gated by the research tree.
 
 import rawRecipes from './recipes.json' with { type: 'json' };
 import { isKnownItem } from './loadData.js';
@@ -146,10 +146,18 @@ export function recipesForStation(station: RecipeStation): RecipeDef[] {
   return byStation.get(station) ?? [];
 }
 
+/** Stable empty set for callers that only need the starter recipes. */
+const STARTER_ONLY: ReadonlySet<string> = new Set<string>();
+
 /**
- * M09 locking: starter recipes only. M11 replaces this with the research
- * tree; keeping the check funneled through here makes that a one-file change.
+ * M11 locking: starter recipes are always available; everything else needs
+ * its research entry. `unlockedRecipes` is the recipe-id set built from
+ * `world.research.unlocked` (data/loadResearch.ts), so every caller stays a
+ * pure lookup and the World never leaks into the data layer.
  */
-export function isRecipeUnlocked(recipe: RecipeDef): boolean {
-  return recipe.unlockedByDefault;
+export function isRecipeUnlocked(
+  recipe: RecipeDef,
+  unlockedRecipes: ReadonlySet<string> = STARTER_ONLY,
+): boolean {
+  return recipe.unlockedByDefault || unlockedRecipes.has(recipe.id);
 }

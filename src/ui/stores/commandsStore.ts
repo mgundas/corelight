@@ -13,6 +13,10 @@ export interface UiCommands {
   printStation(stationId: string, recipeId: string): void;
   collectStation(stationId: string): void;
   closePrinter(): void;
+  unlockResearch(id: string): void;
+  depositResearchSample(stationId: string): void;
+  collectResearch(stationId: string): void;
+  closeResearch(): void;
 }
 
 interface CommandsStoreState {

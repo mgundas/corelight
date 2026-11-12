@@ -2,10 +2,17 @@
 // projection; this class diffs it and writes the zustand store. The React
 // component renders the store — no DOM is owned here.
 
+import { TOAST_DURATION_MS } from '../core/constants.js';
 import type { ItemDef } from '../data/loadData.js';
 import type { PowerStatus } from '../game/powerStatus.js';
 import type { NavHint } from '../game/oxygenStatus.js';
-import { resetHudView, setHudView, triggerDeathFade } from './stores/hudStore.js';
+import {
+  clearHudToast,
+  resetHudView,
+  setHudView,
+  showHudToast,
+  triggerDeathFade,
+} from './stores/hudStore.js';
 
 export interface HudState {
   /** Resolved definitions per slot (null = empty). */
@@ -31,10 +38,21 @@ export interface HudState {
 
 export class Hud {
   private lastKey = '';
+  private toastTimer: ReturnType<typeof setTimeout> | null = null;
 
   /** Black out, then fade back (the respawn already happened sim-side). */
   showDeathFade(): void {
     triggerDeathFade();
+  }
+
+  /** Short unlock/notification toast; a new toast restarts the timer. */
+  showToast(text: string): void {
+    showHudToast(text);
+    if (this.toastTimer !== null) clearTimeout(this.toastTimer);
+    this.toastTimer = setTimeout(() => {
+      this.toastTimer = null;
+      clearHudToast();
+    }, TOAST_DURATION_MS);
   }
 
   update(state: HudState): void {
@@ -75,6 +93,10 @@ export class Hud {
   }
 
   dispose(): void {
+    if (this.toastTimer !== null) {
+      clearTimeout(this.toastTimer);
+      this.toastTimer = null;
+    }
     resetHudView();
     this.lastKey = '';
   }

@@ -8,7 +8,7 @@ import { events } from '../core/events.js';
 import { distance, IDENTITY_QUAT } from '../core/math.js';
 import { isKnownItem } from '../data/loadData.js';
 import { isPlaceable, placeableDef, placeableForPackageItem } from '../data/loadPlaceables.js';
-import type { Entity, EntityId } from './entities.js';
+import { isItemLike, type Entity, type EntityId } from './entities.js';
 import { moveBasis, upAt } from './physics/frames.js';
 import type { World } from './world.js';
 
@@ -98,7 +98,7 @@ export function pickUpItem(world: World, playerId: EntityId, itemId: EntityId): 
   if (!playerEntity || !inventory) return;
   const item = world.entities.get(itemId);
   const itemComp = item?.components.item;
-  if (!item || item.kind !== 'item' || !itemComp || !isKnownItem(itemComp.itemId)) {
+  if (!item || !isItemLike(item) || !itemComp || !isKnownItem(itemComp.itemId)) {
     events.emit('actionApplied', { type: 'pickUp' });
     return;
   }
@@ -148,6 +148,9 @@ export function pickUpItem(world: World, playerId: EntityId, itemId: EntityId): 
   // New pickups become the held slot so E (deposit/place) acts on them.
   inventory.selectedSlot = free;
   itemComp.holder = playerId;
+  // Sample pods are one-shot world placements: record the pickup so the
+  // deterministic streamer never respawns this id (dropped pods persist).
+  if (item.kind === 'sample') world.depletedSamples.add(itemId);
   events.emit('actionApplied', { type: 'pickUp' });
 }
 
@@ -201,7 +204,7 @@ export function dropItem(world: World, playerId: EntityId, slot: number): void {
   const planet = world.planets.find((p) => p.id === playerEntity.planetId);
   const item = world.entities.get(dropId);
   const itemComp = item?.components.item;
-  if (!planet || !player || !item || item.kind !== 'item' || !itemComp) {
+  if (!planet || !player || !item || !isItemLike(item) || !itemComp) {
     if (carriedId) inventory.slots[slot] = null;
     if (largeId && player) player.carryingLarge = null;
     events.emit('actionApplied', { type: 'drop' });

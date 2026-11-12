@@ -10,6 +10,8 @@ export type EventMap = {
   terrainEdited: { planetId: string; keys: string[] };
   /** Emitted by the oxygen system when a player hits 0 oxygen and respawns. */
   playerDied: { playerId: EntityId };
+  /** Emitted by unlockResearch: drives the "New blueprint" toast. */
+  researchUnlocked: { id: string; recipeIds: string[] };
 };
 
 export type EventName = keyof EventMap;

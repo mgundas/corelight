@@ -9,6 +9,11 @@ import type { Vec3d } from '../core/math.js';
 import type { EntityId } from '../sim/entities.js';
 import type { World } from '../sim/world.js';
 import { depositCandidate, printerFor } from '../sim/craftingActions.js';
+import {
+  isResearchStation,
+  researchFor,
+  researchSampleCandidate,
+} from '../sim/researchActions.js';
 import type { PlayerInput } from '../player/input.js';
 import type { ToolAim } from '../player/terrainTool.js';
 import type { PlacementMode } from './placement.js';
@@ -35,6 +40,8 @@ export interface InteractDeps {
   placement: PlacementMode;
   /** Open the station recipe panel (the UI module owns presentation). */
   openStation(stationId: EntityId): void;
+  /** Open the research tree panel (optional in focused tests). */
+  openResearch?: (stationId: EntityId) => void;
   /** Tab: toggle the backpack printer panel (caller decides fly mode). */
   togglePrinter(): void;
 }
@@ -84,8 +91,22 @@ export function tickInteraction(deps: InteractDeps): void {
   const stationId = findAimedStation(world, playerId);
   if (stationId) {
     const station = world.entities.get(stationId);
-    const printer = station ? printerFor(station) : null;
     const inventory = world.entities.get(playerId)?.components.inventory;
+    // Research station (M11): collect Data > load a sample > open the tree.
+    if (isResearchStation(station)) {
+      const research = station ? researchFor(station) : null;
+      if (research && research.dataReady > 0) {
+        world.dispatch({ type: 'collectResearch', playerId, stationId });
+        return;
+      }
+      if (research && research.inputId === null && inventory && researchSampleCandidate(world, inventory)) {
+        world.dispatch({ type: 'depositResearchSample', playerId, stationId });
+        return;
+      }
+      deps.openResearch?.(stationId);
+      return;
+    }
+    const printer = station ? printerFor(station) : null;
     if (!station || !printer) {
       deps.openStation(stationId);
       return;

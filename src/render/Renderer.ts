@@ -19,6 +19,7 @@ import { disposeItemCaches } from './views/itemGeometry.js';
 import { syncEntityViews } from './views/syncViews.js';
 import { ItemViews } from './views/itemView.js';
 import { NodeViews } from './views/nodeView.js';
+import { SampleViews } from './views/sampleView.js';
 import { CableViews } from './views/cableViews.js';
 import { LightingRig } from './lighting.js';
 import { Sky } from './sky.js';
@@ -69,6 +70,7 @@ export class Renderer {
   readonly playerView = new PlayerView();
   readonly itemViews = new ItemViews();
   readonly nodeViews = new NodeViews();
+  readonly sampleViews = new SampleViews();
   readonly tetherViews = new TetherViews();
   readonly cableViews = new CableViews();
   readonly habitatViews = new HabitatViews();
@@ -120,6 +122,7 @@ export class Renderer {
     this.scene.add(this.playerView.group);
     this.scene.add(this.itemViews.group);
     this.scene.add(this.nodeViews.group);
+    this.scene.add(this.sampleViews.group);
     this.scene.add(this.tetherViews.group);
     this.scene.add(this.cableViews.group);
     this.scene.add(this.habitatViews.group);
@@ -155,6 +158,7 @@ export class Renderer {
     this.playerView.dispose();
     this.itemViews.dispose();
     this.nodeViews.dispose();
+    this.sampleViews.dispose();
     this.tetherViews.dispose();
     this.cableViews.dispose();
     this.habitatViews.dispose();
@@ -336,12 +340,17 @@ export class Renderer {
     frontCarry: string | null,
     sunDirWorld?: Vec3d,
   ): void {
-    const { itemEmitters, nodeEmitters, placeableEmitters } = syncEntityViews(
+    const { itemEmitters, nodeEmitters, sampleEmitters, placeableEmitters } = syncEntityViews(
       this,
       entities,
       sunDirWorld,
     );
-    this.itemLights.update(focusWorld, [...itemEmitters, ...nodeEmitters, ...placeableEmitters]);
+    this.itemLights.update(focusWorld, [
+      ...itemEmitters,
+      ...nodeEmitters,
+      ...sampleEmitters,
+      ...placeableEmitters,
+    ]);
     this.playerView.renderBackpack(
       carried.map((id) => (id && isKnownItem(id) ? itemDef(id) : null) as ItemDef | null),
     );

@@ -84,7 +84,7 @@
     ],
     "time": 3,
     "power": 1,
-    "unlockedByDefault": false
+    "unlockedByDefault": true
   },
   {
     "id": "medium_printer",

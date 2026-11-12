@@ -30,6 +30,8 @@ export interface Components {
   machine: MachineComponent;
   placeable: PlaceableComponent;
   cable: CableComponent;
+  sample: SampleComponent;
+  research: ResearchComponent;
 }
 
 export interface OxygenComponent {
@@ -82,6 +84,12 @@ export interface ItemComponent {
   holder?: EntityId;
   /** Player entity id grab-carrying this item (cursor mode). */
   grabbedBy?: EntityId;
+  /**
+   * Data value of a research sample (M11). Node-mined samples carry their
+   * origin value here; dedicated sample pods also store it in `sample`.
+   * Missing on old M07 saves, which read as crust value.
+   */
+  sampleValue?: number;
 }
 
 /** A tether post: oxygen relay when live (connected back to a habitat). */
@@ -149,6 +157,24 @@ export interface NodeComponent {
   chunkKey: string;
 }
 
+/** A glowing research pod (kind 'sample') placed deterministically per chunk. */
+export interface SampleComponent {
+  /** Data value when processed (10 crust / 20 mantle / 40 core). */
+  value: number;
+  /** LOD0 chunk key this pod was placed from (respawn bookkeeping). */
+  chunkKey: string;
+}
+
+/** Research station job (M11): one sample in, Data out. */
+export interface ResearchComponent {
+  /** Sample entity currently being analyzed, or null. */
+  inputId: EntityId | null;
+  /** Seconds of analysis progress. */
+  progressS: number;
+  /** Finished Data waiting for collection. */
+  dataReady: number;
+}
+
 /** One-shot movement intent for the current tick (cleared when consumed). */
 export interface PlayerInputState {
   /** Strafe right (+x) / left (-x), each in [-1, 1]. */
@@ -201,4 +227,18 @@ export interface Entity {
   position: Vec3d;
   rotation: Quat;
   components: Partial<Components>;
+}
+
+/**
+ * True for entities that behave like a carried/loose item: regular items and
+ * research sample pods (kind 'sample' with an item component). Samples stay
+ * distinct for their own deterministic streaming/render view while sharing
+ * the pickup, drop, grab and item-physics paths.
+ */
+export function isItemLike(entity: Entity | undefined): boolean {
+  return (
+    entity !== undefined &&
+    (entity.kind === 'item' || entity.kind === 'sample') &&
+    entity.components.item !== undefined
+  );
 }

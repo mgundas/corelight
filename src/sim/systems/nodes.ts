@@ -13,50 +13,14 @@
 // chunk (+ live edits).
 
 import { NODE_DESPAWN_RANGE_M } from '../../core/constants.js';
-import { events } from '../../core/events.js';
 import { distance } from '../../core/math.js';
 import type { PlanetConfig } from '../../planets/PlanetConfig.js';
-import { createDensityField, type DensityField } from '../../terrain/density.js';
-import { parseChunkKey } from '../../terrain/chunkKey.js';
 import type { World } from '../world.js';
 import { l0ChunksNear, nodeChunkKey, nodesForChunk } from '../nodes.js';
+import { dirtyL0ChunksFor } from './editedChunks.js';
+import { baseFieldFor, liveFieldFor } from './fields.js';
 
-const fieldCache = new WeakMap<World, Map<string, DensityField>>();
 const settledCache = new WeakMap<World, Set<string>>();
-const dirtyCache = new WeakMap<World, Set<string>>();
-
-function fieldFor(world: World, planet: PlanetConfig): DensityField {
-  let perWorld = fieldCache.get(world);
-  if (!perWorld) {
-    perWorld = new Map();
-    fieldCache.set(world, perWorld);
-  }
-  let field = perWorld.get(planet.id);
-  if (!field) {
-    field = createDensityField(planet, world.seed, (x, y, z) =>
-      world.terrainEdits.deltaAt(planet, planet.id, x, y, z),
-    );
-    perWorld.set(planet.id, field);
-  }
-  return field;
-}
-
-const baseFieldCache = new WeakMap<World, Map<string, DensityField>>();
-
-/** Unedited placement field: identity (spot + resource) never sees digs. */
-function baseFieldFor(world: World, planet: PlanetConfig): DensityField {
-  let perWorld = baseFieldCache.get(world);
-  if (!perWorld) {
-    perWorld = new Map();
-    baseFieldCache.set(world, perWorld);
-  }
-  let field = perWorld.get(planet.id);
-  if (!field) {
-    field = createDensityField(planet, world.seed);
-    perWorld.set(planet.id, field);
-  }
-  return field;
-}
 
 function settledFor(world: World): Set<string> {
   let settled = settledCache.get(world);
@@ -65,34 +29,6 @@ function settledFor(world: World): Set<string> {
     settledCache.set(world, settled);
   }
   return settled;
-}
-
-/**
- * Subscribe once per world to terrain edits (WeakRef: the handler must not
- * keep a dead session's world alive). Edited LOD0 chunks land in the
- * per-world dirty set, drained at the next updateNodes tick.
- */
-function ensureEditSubscription(world: World): Set<string> {
-  let dirty = dirtyCache.get(world);
-  if (!dirty) {
-    dirty = new Set();
-    dirtyCache.set(world, dirty);
-    const ref = new WeakRef(world);
-    events.on('terrainEdited', ({ keys }) => {
-      const live = ref.deref();
-      if (!live) return;
-      const liveDirty = dirtyCache.get(live);
-      if (!liveDirty) return;
-      for (const key of keys) {
-        try {
-          if (parseChunkKey(key).level === 0) liveDirty.add(key);
-        } catch {
-          // Malformed keys never match a chunk; ignore them.
-        }
-      }
-    });
-  }
-  return dirty;
 }
 
 /** Stash partial progress (full-charge nodes need no record). */
@@ -106,7 +42,7 @@ export function updateNodes(world: World, planets: PlanetConfig[]): void {
   const players = [...world.entities.values()].filter((e) => e.kind === 'player');
   if (players.length === 0) return;
   const settled = settledFor(world);
-  const dirty = ensureEditSubscription(world);
+  const dirty = dirtyL0ChunksFor(world, 'nodes');
   // Edited chunks re-seat the same tick: drop their nodes (stashing partial
   // charges) and forget the placement so the spawn loop recomputes it from
   // the live edited field below.
@@ -125,7 +61,7 @@ export function updateNodes(world: World, planets: PlanetConfig[]): void {
   for (const player of players) {
     const planet = planets.find((p) => p.id === player.planetId);
     if (!planet) continue;
-    const field = fieldFor(world, planet);
+    const field = liveFieldFor(world, planet);
     const base = baseFieldFor(world, planet);
     for (const coord of l0ChunksNear(player.position, planet)) {
       // Placement marches are the expensive part: run them once per visit.

@@ -7,14 +7,14 @@ import type { FreeFlyCamera } from '../player/freeFlyCamera.js';
 import type { PlayerInput } from '../player/input.js';
 import type { CableMode } from './cableMode.js';
 import type { PackHold } from './packHold.js';
-import type { PrinterUi } from '../ui/printerUi.js';
 import { resetDragStore } from '../ui/stores/dragStore.js';
 
 export interface PauseDeps {
   input: PlayerInput;
   packHold: PackHold;
   cable: CableMode;
-  printerUi: PrinterUi;
+  /** Close every transient station panel (printer + research). */
+  closeAllUi(): void;
   flyCamera: FreeFlyCamera;
 }
 
@@ -23,7 +23,7 @@ export function applyPaused(deps: PauseDeps, paused: boolean): void {
     deps.input.setEnabled(false);
     deps.packHold.reset();
     deps.cable.cancel();
-    deps.printerUi.close();
+    deps.closeAllUi();
     resetDragStore();
   } else {
     deps.input.setEnabled(!deps.flyCamera.enabled);

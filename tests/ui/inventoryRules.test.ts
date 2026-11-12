@@ -87,6 +87,10 @@ describe('inventory drag rules', () => {
       printStation: () => undefined,
       collectStation: () => undefined,
       closePrinter: () => undefined,
+      unlockResearch: () => undefined,
+      depositResearchSample: () => undefined,
+      collectResearch: () => undefined,
+      closeResearch: () => undefined,
     };
     applyInventoryDrop({ zone: 'bag', index: 0 }, { zone: 'bag', index: 2 }, commands);
     applyInventoryDrop({ zone: 'bag', index: 1 }, null, commands);

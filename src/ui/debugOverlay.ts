@@ -43,6 +43,9 @@ export interface OverlayStats {
   /** Terrain tool equipped (Q) and add/deform sub-mode (X). */
   toolMode?: 'cursor' | 'deform';
   brushMode?: 'dig' | 'add';
+  /** Research progression (M11): unspent Data and bought cards. */
+  researchData?: number;
+  researchUnlocked?: number;
 }
 
 /** Pure formatter (unit-testable; no DOM). */
@@ -92,11 +95,15 @@ export function formatOverlayStats(stats: OverlayStats): string {
     ].filter((part) => part !== null);
     o2 = `\n${o2Parts.join(' | ')}`;
   }
+  let research = '';
+  if (stats.researchData !== undefined) {
+    research = `\nresearch: ${stats.researchData} Data, ${stats.researchUnlocked ?? 0} blueprints`;
+  }
   return (
     `FPS: ${stats.fps.toFixed(0)} | tick: ${stats.tickMs.toFixed(2)} ms | draws: ${stats.drawCalls}\n` +
     `cam: ${c.x.toFixed(1)}, ${c.y.toFixed(1)}, ${c.z.toFixed(1)}\n` +
     `origin: ${o.x.toFixed(0)}, ${o.y.toFixed(0)}, ${o.z.toFixed(0)} (shifts: ${stats.originShifts})\n` +
-    `fly speed: ${stats.flySpeed.toFixed(1)} m/s${sun}${place}${player}${tool}${o2}${terrain}`
+    `fly speed: ${stats.flySpeed.toFixed(1)} m/s${sun}${place}${player}${tool}${o2}${research}${terrain}`
   );
 }
 

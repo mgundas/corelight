@@ -26,6 +26,11 @@ import {
 } from '../data/loadRecipes.js';
 import type { Entity, EntityId, PrinterComponent } from './entities.js';
 import { giveItemToPlayer, inventoryFor } from './inventoryActions.js';
+import {
+  depositResearchSample,
+  isResearchStation,
+  unlockedRecipesFor,
+} from './researchActions.js';
 import type { World } from './world.js';
 
 const STATION_MACHINE_TYPES: ReadonlySet<string> = new Set([
@@ -155,7 +160,7 @@ export function printBackpack(world: World, playerId: EntityId, recipeId: string
   }
   if (
     recipe.station !== 'backpack' ||
-    !isRecipeUnlocked(recipe) ||
+    !isRecipeUnlocked(recipe, unlockedRecipesFor(world)) ||
     !recipeInputsAvailable(recipe, (itemId) => countInBackpack(world, inventory.slots, itemId))
   ) {
     events.emit('actionApplied', { type: 'printBackpack' });
@@ -200,6 +205,14 @@ export function depositSlotToStation(
   stationId: EntityId,
   slot: number,
 ): void {
+  // Research stations have one sample slot and no printer recipes; route the
+  // drag-and-drop load through the research action instead of the generic
+  // printer input path.
+  const target = world.entities.get(stationId);
+  if (isResearchStation(target)) {
+    depositResearchSample(world, playerId, stationId, slot);
+    return;
+  }
   const player = world.entities.get(playerId);
   const station = world.entities.get(stationId);
   const inventory = player ? inventoryFor(world, playerId) : null;
@@ -255,7 +268,7 @@ export function printAtStation(
   }
   if (
     !stationMatches(station, recipe) ||
-    !isRecipeUnlocked(recipe) ||
+    !isRecipeUnlocked(recipe, unlockedRecipesFor(world)) ||
     printer.recipeId !== null ||
     printer.outputReady !== null ||
     !recipeInputsAvailable(recipe, (itemId) => countInStation(world, printer, itemId))

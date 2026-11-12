@@ -15,6 +15,7 @@
 import {
   POWER_HABITAT_GEN,
   POWER_SOLAR_GEN,
+  RESEARCH_POWER,
 } from '../../core/constants.js';
 import { dot } from '../../core/math.js';
 import { recipeById } from '../../data/loadRecipes.js';
@@ -63,6 +64,13 @@ function consumersFor(members: Entity[]): Consumer[] {
   const consumers: Consumer[] = [];
   for (const entity of members) {
     if (entity.kind !== 'machine') continue;
+    // Research stations analyze samples at a fixed 1 power/s (M11).
+    if (entity.components.machine?.machineType === 'research_station') {
+      if (entity.components.research?.inputId != null) {
+        consumers.push({ entity, power: RESEARCH_POWER, rank: powerPriority(entity) });
+      }
+      continue;
+    }
     const printer = entity.components.printer;
     if (!printer || printer.recipeId === null) continue;
     const recipe = recipeById(printer.recipeId);

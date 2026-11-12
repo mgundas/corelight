@@ -27,6 +27,10 @@ export interface HudViewState {
   brushMode: 'dig' | 'add';
   /** Incremented on death; the fade element remounts per token. */
   deathFadeToken: number;
+  /** Short "New blueprint: …" message (M11), null when hidden. */
+  toast: string | null;
+  /** Incremented per toast so the CSS animation replays. */
+  toastToken: number;
 }
 
 const INITIAL: HudViewState = {
@@ -42,16 +46,28 @@ const INITIAL: HudViewState = {
   toolMode: 'cursor',
   brushMode: 'dig',
   deathFadeToken: 0,
+  toast: null,
+  toastToken: 0,
 };
 
 export const useHudStore = create<HudViewState>(() => ({ ...INITIAL }));
 
-export function setHudView(state: Omit<HudViewState, 'deathFadeToken'>): void {
+export function setHudView(
+  state: Omit<HudViewState, 'deathFadeToken' | 'toast' | 'toastToken'>,
+): void {
   useHudStore.setState(state);
 }
 
 export function triggerDeathFade(): void {
   useHudStore.setState((s) => ({ deathFadeToken: s.deathFadeToken + 1 }));
+}
+
+export function showHudToast(text: string): void {
+  useHudStore.setState((s) => ({ toast: text, toastToken: s.toastToken + 1 }));
+}
+
+export function clearHudToast(): void {
+  useHudStore.setState({ toast: null });
 }
 
 export function resetHudView(): void {

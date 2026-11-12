@@ -17,6 +17,11 @@ import { grabItem, releaseGrabbed } from './grabActions.js';
 import { packUpPlaced } from './packActions.js';
 import { placeLightstick, placePlaceable } from './placeActions.js';
 import type { PlacementTarget } from './placeResolve.js';
+import {
+  collectResearch,
+  depositResearchSample,
+  unlockResearch,
+} from './researchActions.js';
 import { applyTerrainEdit } from './terrainEditAction.js';
 import { placeTether, removeTether, spawnHabitatEntity } from './tetherActions.js';
 import type { World } from './world.js';
@@ -87,7 +92,10 @@ export type Action =
       snap?: PlacementTarget['snap'];
       slot?: PlacementTarget['slot'];
     }
-  | { type: 'placeLightstick'; playerId: EntityId };
+  | { type: 'placeLightstick'; playerId: EntityId }
+  | { type: 'unlockResearch'; playerId: EntityId; id: string }
+  | { type: 'depositResearchSample'; playerId: EntityId; stationId: EntityId; slot?: number }
+  | { type: 'collectResearch'; playerId: EntityId; stationId: EntityId };
 
 function clampAxis(v: number): number {
   return Math.min(1, Math.max(-1, v));
@@ -293,6 +301,18 @@ export function applyAction(world: World, action: Action): void {
     }
     case 'placeLightstick': {
       placeLightstick(world, action.playerId);
+      return;
+    }
+    case 'unlockResearch': {
+      unlockResearch(world, action.playerId, action.id);
+      return;
+    }
+    case 'depositResearchSample': {
+      depositResearchSample(world, action.playerId, action.stationId, action.slot);
+      return;
+    }
+    case 'collectResearch': {
+      collectResearch(world, action.playerId, action.stationId);
       return;
     }
   }

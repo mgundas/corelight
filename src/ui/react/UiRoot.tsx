@@ -7,12 +7,14 @@ import { DragGhost } from './DragGhost.js';
 import { HudView } from './HudView.js';
 import { MenuViews } from './MenuViews.js';
 import { PrinterPanel } from './PrinterPanel.js';
+import { ResearchPanel } from './ResearchPanel.js';
 
 export function UiRoot() {
   return (
     <>
       <HudView />
       <PrinterPanel />
+      <ResearchPanel />
       <DebugOverlayView />
       <MenuViews />
       <DragGhost />

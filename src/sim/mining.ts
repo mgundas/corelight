@@ -6,6 +6,7 @@
 import { distance, rotateVector, type Vec3d } from '../core/math.js';
 import { isKnownItem } from '../data/loadData.js';
 import { IDENTITY_QUAT } from '../core/math.js';
+import { sampleValueAt } from './samples.js';
 import type { World } from './world.js';
 
 export function mineNodes(world: World, planetId: string, center: Vec3d, radius: number): void {
@@ -25,6 +26,11 @@ export function mineNodes(world: World, planetId: string, center: Vec3d, radius:
     // rock. Falls back to radial up when the rotation is missing.
     const normal = rotateVector({ x: 0, y: 1, z: 0 }, entity.rotation);
     const itemId = world.nextId('item');
+    // Node-mined research samples carry their origin value so the research
+    // station pays the right Data (a mantle crystal is worth 20, not 10).
+    const planet = world.planets.find((p) => p.id === planetId);
+    const sampleValue =
+      node.resourceId === 'research_sample' && planet ? sampleValueAt(planet, entity.position) : undefined;
     world.entities.set(itemId, {
       id: itemId,
       kind: 'item',
@@ -35,7 +41,9 @@ export function mineNodes(world: World, planetId: string, center: Vec3d, radius:
         z: entity.position.z + normal.z * 1.0,
       },
       rotation: { ...IDENTITY_QUAT },
-      components: { item: { itemId: node.resourceId } },
+      components: {
+        item: sampleValue === undefined ? { itemId: node.resourceId } : { itemId: node.resourceId, sampleValue },
+      },
     });
     if (node.charges <= 0) {
       world.entities.delete(id);

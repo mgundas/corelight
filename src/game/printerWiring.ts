@@ -17,16 +17,21 @@ import {
 import type { EntityId } from '../sim/entities.js';
 import type { World } from '../sim/world.js';
 import { countInBackpack, countInStation, printerFor } from '../sim/craftingActions.js';
-import { PrinterUi } from '../ui/printerUi.js';
-import type { PrinterRow, PrinterUiState } from '../ui/printerUi.js';
+import { unlockedRecipesFor } from '../sim/researchActions.js';
+import type { PrinterRow, PrinterUi, PrinterUiState } from '../ui/printerUi.js';
 
 function nameForId(id: string): string {
   if (isKnownItem(id)) return itemDef(id).name;
   return placeableById(id)?.name ?? id;
 }
 
-function rowFor(recipe: RecipeDef, count: (itemId: string) => number, stationBusy: boolean): PrinterRow {
-  const locked = !isRecipeUnlocked(recipe);
+function rowFor(
+  recipe: RecipeDef,
+  count: (itemId: string) => number,
+  stationBusy: boolean,
+  unlocked: ReadonlySet<string>,
+): PrinterRow {
+  const locked = !isRecipeUnlocked(recipe, unlocked);
   const inputs = recipe.inputs.map((input) => ({
     name: isKnownItem(input.item) ? itemDef(input.item).name : input.item,
     need: input.count,
@@ -45,6 +50,7 @@ function rowFor(recipe: RecipeDef, count: (itemId: string) => number, stationBus
 
 function backpackState(world: World, playerId: EntityId): PrinterUiState {
   const inventory = world.entities.get(playerId)?.components.inventory;
+  const unlocked = unlockedRecipesFor(world);
   const count = (itemId: string): number =>
     inventory ? countInBackpack(world, inventory.slots, itemId) : 0;
   return {
@@ -52,7 +58,7 @@ function backpackState(world: World, playerId: EntityId): PrinterUiState {
     title: 'Backpack printer',
     hint: 'Instant. Print with the materials you carry. Tab closes.',
     station: null,
-    rows: recipesForStation('backpack').map((recipe) => rowFor(recipe, count, false)),
+    rows: recipesForStation('backpack').map((recipe) => rowFor(recipe, count, false, unlocked)),
   };
 }
 
@@ -67,6 +73,7 @@ function stationState(world: World, playerId: EntityId, stationId: EntityId): Pr
   }
   const stationDef = placeableForMachineType(machineType);
   const busy = printer.recipeId !== null || printer.outputReady !== null;
+  const unlocked = unlockedRecipesFor(world);
   const count = (itemId: string): number => countInStation(world, printer, itemId);
   const jobRecipe = printer.recipeId ? recipeById(printer.recipeId) : undefined;
   const slots: (string | null)[] = printer.inputs.map((id) => {
@@ -105,7 +112,7 @@ function stationState(world: World, playerId: EntityId, stationId: EntityId): Pr
       outputName: printer.outputReady ? nameForId(printer.outputReady) : null,
     },
     rows: stationRecipes.map((recipe) =>
-      rowFor(recipe, count, busy),
+      rowFor(recipe, count, busy, unlocked),
     ),
   };
 }
@@ -149,10 +156,4 @@ export function updatePrinterUi(
     return;
   }
   ui.sync(state);
-}
-
-/** Build the panel controller. Buttons dispatch Actions via the UI command
- * bridge installed by Game (ui/stores/commandsStore.ts). */
-export function createPrinterUi(): PrinterUi {
-  return new PrinterUi();
 }

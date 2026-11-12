@@ -16,7 +16,7 @@ export interface FlyToggleDeps {
   input: PlayerInput;
   cable: CableMode;
   packHold: PackHold;
-  closePrinter(): void;
+  closeAllUi(): void;
 }
 
 export function toggleFly(deps: FlyToggleDeps): void {
@@ -28,7 +28,7 @@ export function toggleFly(deps: FlyToggleDeps): void {
   if (flyCamera.enabled) {
     if (player) flyCamera.position = { ...player.position };
     input.setEnabled(false);
-    deps.closePrinter();
+    deps.closeAllUi();
   } else {
     input.setEnabled(true);
     if (player && playerId) {

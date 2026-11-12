@@ -77,6 +77,9 @@ export function spawnPlaceableEntity(
     if (def.machineType === 'small_printer' || def.machineType === 'medium_printer' || def.machineType === 'furnace' || def.machineType === 'refinery') {
       components.printer = { recipeId: null, progressS: 0, inputs: [], outputReady: null };
     }
+    if (def.machineType === 'research_station') {
+      components.research = { inputId: null, progressS: 0, dataReady: 0 };
+    }
   }
   world.entities.set(id, {
     id,

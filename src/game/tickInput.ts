@@ -42,6 +42,8 @@ export interface TickInputDeps {
   cable?: CableMode;
   packHold?: PackHold;
   openStation(stationId: EntityId): void;
+  /** Open the research tree panel (M11; optional in focused tests). */
+  openResearch?: (stationId: EntityId) => void;
   togglePrinter(): void;
 }
 
@@ -123,6 +125,7 @@ export function dispatchTickInput(deps: TickInputDeps): void {
       aim: deps.toolAim,
       placement: deps.placement,
       openStation: deps.openStation,
+      openResearch: deps.openResearch,
       togglePrinter: deps.togglePrinter,
     });
     if (!canAct || !deps.playerId) return;
@@ -141,6 +144,7 @@ export function dispatchTickInput(deps: TickInputDeps): void {
     aim: deps.toolAim,
     placement: deps.placement,
     openStation: deps.openStation,
+    openResearch: deps.openResearch,
     togglePrinter: deps.togglePrinter,
   });
   if (!canAct || !deps.playerId) return;

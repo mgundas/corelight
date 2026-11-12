@@ -7,6 +7,7 @@
 import { GRAB_DISTANCE_M, GRAB_LEVITATE_M } from '../../core/constants.js';
 import { sub, type Vec3d } from '../../core/math.js';
 import type { PlanetConfig } from '../../planets/PlanetConfig.js';
+import { isItemLike } from '../entities.js';
 import { moveBasis, upAt } from '../physics/frames.js';
 import { baseFieldFor } from '../tetherActions.js';
 import type { World } from '../world.js';
@@ -21,7 +22,7 @@ export function updateGrab(world: World, planets: PlanetConfig[]): void {
     if (
       !item ||
       !itemComp ||
-      item.kind !== 'item' ||
+      !isItemLike(item) ||
       itemComp.grabbedBy !== player.id ||
       !planet
     ) {

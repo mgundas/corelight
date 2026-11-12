@@ -281,8 +281,10 @@ body {
   z-index: 40;
 }
 
-/* M09 printer panel: backpack (Tab) and station (E) recipe lists. */
-#printer-ui {
+/* M09 printer panel: backpack (Tab) and station (E) recipe lists.
+   M11 research reuses the same shell. */
+#printer-ui,
+#research-ui {
   position: fixed;
   left: 50%;
   top: 50%;
@@ -299,8 +301,70 @@ body {
   pointer-events: auto;
 }
 
-#printer-ui[hidden] {
+#printer-ui[hidden],
+#research-ui[hidden] {
   display: none;
+}
+
+/* M11 research panel: sample slot + unlock tree. */
+#research-ui {
+  width: min(640px, 94vw);
+}
+
+.research-slot-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.research-slot-row .printer-slot {
+  flex: 0 0 220px;
+}
+
+.research-slot-label {
+  font-size: 12px;
+  color: #9fb0cc;
+}
+
+.research-cost {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #ffd9a8;
+  white-space: nowrap;
+}
+
+.research-state {
+  opacity: 0.7;
+  font-size: 11px;
+}
+
+.printer-row.research-locked {
+  opacity: 0.55;
+}
+
+/* M11 unlock toast (short, above the nav hints). */
+#hud-toast {
+  font-size: 14px;
+  font-weight: bold;
+  color: #0b1a0f;
+  background: #7dff6a;
+  padding: 6px 14px;
+  border-radius: 6px;
+  box-shadow: 0 0 18px rgb(125 255 106 / 55%);
+  animation: hud-toast-in 0.18s ease-out;
+}
+
+@keyframes hud-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 #printer-header {

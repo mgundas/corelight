@@ -21,8 +21,10 @@ import { updateGrab } from '../sim/systems/grab.js';
 import { updateCrafting } from '../sim/systems/crafting.js';
 import { updateLightsticks } from '../sim/systems/lightsticks.js';
 import { updateNodes } from '../sim/systems/nodes.js';
+import { updateSamples } from '../sim/systems/samples.js';
 import { updateOxygen } from '../sim/systems/oxygen.js';
 import { updatePower } from '../sim/systems/power.js';
+import { updateResearch } from '../sim/systems/research.js';
 import { updateTethers } from '../sim/systems/tethers.js';
 import { updateSun } from '../sim/systems/sun.js';
 import { TerrainColliders } from '../sim/physics/terrainColliders.js';
@@ -204,9 +206,8 @@ function grantDevTethers(world: World, player: Entity): void {
 
 /**
  * Fill empty backpack slots with the packages needed for the M10 acceptance
- * base (?build=1). Recruit-gated recipes (solar/battery) cannot be printed
- * until M11 research, so this keeps milestone testing possible without
- * changing progression data.
+ * base (?build=1). Solar/battery are research-gated since M11; this dev-only
+ * grant deliberately bypasses the tree so base/power testing stays possible.
  */
 function grantDevBuild(world: World, player: Entity): void {
   const inventory = player.components.inventory;
@@ -269,6 +270,8 @@ export function setupWorldSystems(
   );
   // Deterministic resource nodes stream in around each player.
   world.addSystem((tickWorld) => updateNodes(tickWorld, planets));
+  // Deterministic research sample pods (rarer, deeper-weighted).
+  world.addSystem((tickWorld) => updateSamples(tickWorld, planets));
   // Grab-carry follow (cursor mode): levitating item tracks the aim.
   world.addSystem((tickWorld) => updateGrab(tickWorld, planets));
   // Tether graph (recomputed only on topology/nearby-edit changes).
@@ -280,6 +283,8 @@ export function setupWorldSystems(
   world.addSystem((tickWorld, dt) => updatePower(tickWorld, dt));
   // Station print jobs (M09): advances timers, exposes finished outputs.
   world.addSystem((tickWorld, dt) => updateCrafting(tickWorld, dt));
+  // Research station analysis (M11): one sample -> Data, power-gated above.
+  world.addSystem((tickWorld, dt) => updateResearch(tickWorld, dt));
   // Placed light sticks follow terrain edits (dig out from under them).
   world.addSystem((tickWorld) => updateLightsticks(tickWorld));
   // Environment clock (order-free: only re-derives sunDirection from time).

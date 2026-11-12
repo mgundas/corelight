@@ -5,6 +5,7 @@ import { useCommandsStore } from '../stores/commandsStore.js';
 import { useDragStore, type DragPayload } from '../stores/dragStore.js';
 import { useHudStore, type HudSlotView } from '../stores/hudStore.js';
 import { usePrinterStore } from '../stores/printerStore.js';
+import { useResearchStore } from '../stores/researchStore.js';
 import { beginSlotPress, slotHoverKey, type DragRules } from '../drag/inventoryDrag.js';
 
 /** Drag rules backed by the presentation stores (never the World). */
@@ -14,11 +15,15 @@ export function bagDragRules(): DragRules {
       bagItemId: (index) => useHudStore.getState().slots[index]?.itemId ?? null,
       stationAccepts: (stationId, itemId) => {
         const station = usePrinterStore.getState().view?.station;
-        return station?.stationId === stationId && station.acceptsItemIds.includes(itemId);
+        if (station?.stationId === stationId) return station.acceptsItemIds.includes(itemId);
+        const research = useResearchStore.getState().view?.station;
+        return research?.stationId === stationId && research.acceptsItemIds.includes(itemId);
       },
       stationHasRoom: (stationId) => {
         const station = usePrinterStore.getState().view?.station;
-        return station?.stationId === stationId && station.slots.includes(null);
+        if (station?.stationId === stationId) return station.slots.includes(null);
+        const research = useResearchStore.getState().view?.station;
+        return research?.stationId === stationId && research.slots.includes(null);
       },
     }),
     stillThere: (source, itemId) => useHudStore.getState().slots[source.index]?.itemId === itemId,

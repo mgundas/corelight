@@ -174,15 +174,64 @@ describe('save round trip', () => {
     expect(() => deserializeWorld(badComponents, [SELA])).toThrow();
   });
 
-  it('ships version 2 with a v1 migration for depleted nodes', () => {
-    expect(SAVE_VERSION).toBe(2);
-    expect(Object.keys(migrations)).toEqual(['1']);
+  it('ships version 3 with v1/v2 migrations', () => {
+    expect(SAVE_VERSION).toBe(3);
+    expect(Object.keys(migrations)).toEqual(['1', '2']);
     const v1 = { ...serializeWorld(makeEditedWorld(5)), version: 1 } as unknown as Record<string, unknown>;
     delete v1['depleted'];
     delete v1['nodeCharges'];
+    delete v1['research'];
+    delete v1['depletedSamples'];
     const revived = deserializeWorld(v1, [SELA]);
     expect(revived.depletedNodes.size).toBe(0);
     expect(revived.nodeCharges.size).toBe(0);
+    expect(revived.research).toEqual({ data: 0, unlocked: [] });
+    expect(revived.depletedSamples.size).toBe(0);
+  });
+
+  it('migrates v2 saves with default research state', () => {
+    const v2 = { ...serializeWorld(makeEditedWorld(5)), version: 2 } as unknown as Record<string, unknown>;
+    delete v2['research'];
+    delete v2['depletedSamples'];
+    const revived = deserializeWorld(v2, [SELA]);
+    expect(revived.research.data).toBe(0);
+    expect(revived.research.unlocked).toEqual([]);
+    expect(revived.depletedSamples.size).toBe(0);
+  });
+
+  it('round-trips research Data, unlocks and depleted samples', () => {
+    events.clear();
+    const world = makeEditedWorld(77);
+    world.research.data = 35;
+    world.research.unlocked = ['power_basics', 'drill_mk2'];
+    world.depletedSamples.add('sample_sela_0_16_23_16');
+    world.depletedSamples.add('sample_sela_0_17_24_16');
+    const data = serializeWorld(world);
+    expect(data.research).toEqual({ data: 35, unlocked: ['power_basics', 'drill_mk2'] });
+    expect(data.depletedSamples).toHaveLength(2);
+    const revived = deserializeWorld(JSON.parse(JSON.stringify(data)) as unknown, [SELA]);
+    expect(revived.research).toEqual({ data: 35, unlocked: ['power_basics', 'drill_mk2'] });
+    expect([...revived.depletedSamples].sort()).toEqual([
+      'sample_sela_0_16_23_16',
+      'sample_sela_0_17_24_16',
+    ]);
+  });
+
+  it('drops unknown research ids and rejects malformed research on load', () => {
+    const good = serializeWorld(makeEditedWorld(5));
+    const unknown = JSON.parse(JSON.stringify(good)) as typeof good;
+    unknown.research = { data: 10, unlocked: ['power_basics', 'gone_entry'] };
+    const revived = deserializeWorld(unknown, [SELA]);
+    expect(revived.research.unlocked).toEqual(['power_basics']);
+    for (const research of [
+      { data: -1, unlocked: [] },
+      { data: Number.NaN, unlocked: [] },
+      { data: 5, unlocked: [3] },
+      { data: 5 },
+      null,
+    ]) {
+      expect(() => deserializeWorld({ ...good, research } as unknown, [SELA])).toThrow();
+    }
   });
 
   it('round-trips habitats, tethers, oxygen and death markers exactly', () => {
@@ -229,6 +278,44 @@ describe('save round trip', () => {
     for (const [id, entity] of world.entities) {
       expect(revived.entities.get(id)).toEqual(entity);
     }
+  });
+
+  it('round-trips a research station job and a sample pod (M11)', () => {
+    events.clear();
+    const world = makeEditedWorld(1337);
+    const player = [...world.entities.values()].find((e) => e.kind === 'player');
+    if (!player) throw new Error('missing player');
+    const stationId = spawnPlaceableEntity(world, SELA.id, 'research_station', {
+      ...player.position,
+      y: player.position.y - 0.3,
+    });
+    if (!stationId) throw new Error('no station');
+    const sampleId = world.nextId('sample');
+    world.entities.set(sampleId, {
+      id: sampleId,
+      kind: 'sample',
+      planetId: SELA.id,
+      position: { ...player.position },
+      rotation: { x: 0, y: 0, z: 0, w: 1 },
+      components: {
+        sample: { value: 20, chunkKey: 'sela:0:16:23:16' },
+        item: { itemId: 'research_sample', holder: stationId },
+      },
+    });
+    const research = world.entities.get(stationId)?.components.research;
+    if (!research) throw new Error('no research component');
+    research.inputId = sampleId;
+    research.progressS = 7.5;
+    research.dataReady = 40;
+    world.depletedSamples.add(sampleId);
+    const revived = deserializeWorld(JSON.parse(JSON.stringify(serializeWorld(world))) as unknown, [SELA]);
+    expect(revived.entities.get(stationId)?.components.research).toEqual({
+      inputId: sampleId,
+      progressS: 7.5,
+      dataReady: 40,
+    });
+    expect(revived.entities.get(sampleId)).toEqual(world.entities.get(sampleId));
+    expect(revived.depletedSamples.has(sampleId)).toBe(true);
   });
 
   it('round-trips M09 printer jobs and front-carried packages', () => {
@@ -285,7 +372,7 @@ describe('save round trip', () => {
     const playerComp = player.components.player;
     if (playerComp) playerComp.carryingLarge = packageId;
     const revived = deserializeWorld(JSON.parse(JSON.stringify(serializeWorld(world))) as unknown, [SELA]);
-    expect(SAVE_VERSION).toBe(2);
+    expect(SAVE_VERSION).toBe(3);
     expect(revived.entities.get(stationId)).toEqual(world.entities.get(stationId));
     expect(revived.entities.get(playerId)?.components.player?.carryingLarge).toBe(packageId);
     expect(revived.entities.get(inputId)?.components.item?.holder).toBe(stationId);

@@ -1,0 +1,66 @@
+[
+  {
+    "id": "power_basics",
+    "name": "Power basics",
+    "description": "Print solar panels and batteries to run a base through the night.",
+    "recipeIds": ["solar_panel", "battery"],
+    "cost": 20,
+    "requires": []
+  },
+  {
+    "id": "smelting",
+    "name": "Smelting",
+    "description": "Build a furnace and refine ore into iron and copper.",
+    "recipeIds": ["furnace", "smelt_iron", "smelt_copper", "polymer"],
+    "cost": 20,
+    "requires": []
+  },
+  {
+    "id": "adv_printing",
+    "name": "Advanced printing",
+    "description": "Print the medium printer for the larger blueprints.",
+    "recipeIds": ["medium_printer"],
+    "cost": 30,
+    "requires": []
+  },
+  {
+    "id": "drill_mk2",
+    "name": "Drill Mk2",
+    "description": "A stronger drill for the harder crust layers.",
+    "recipeIds": ["drill_mk2"],
+    "cost": 20,
+    "requires": []
+  },
+  {
+    "id": "drill_mk3",
+    "name": "Drill Mk3",
+    "description": "Break through the core shell with the strongest drill.",
+    "recipeIds": ["drill_mk3"],
+    "cost": 40,
+    "requires": ["drill_mk2"]
+  },
+  {
+    "id": "fuel_refining",
+    "name": "Fuel refining",
+    "description": "Build a fuel refinery and turn biomass or hydrite into cells.",
+    "recipeIds": ["refinery", "fuel_cell_biomass", "fuel_cell_hydrite"],
+    "cost": 20,
+    "requires": []
+  },
+  {
+    "id": "spaceflight",
+    "name": "Spaceflight",
+    "description": "Print a shuttle and reach the second planet.",
+    "recipeIds": ["shuttle"],
+    "cost": 40,
+    "requires": ["fuel_refining", "adv_printing"]
+  },
+  {
+    "id": "outpost",
+    "name": "Outpost",
+    "description": "Deploy a habitat kit to found a new base.",
+    "recipeIds": ["habitat_kit"],
+    "cost": 30,
+    "requires": ["adv_printing"]
+  }
+]

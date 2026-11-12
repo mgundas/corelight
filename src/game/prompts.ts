@@ -2,12 +2,17 @@
 // chain so the HUD always says what E will do next. M10 adds the cable tool
 // and the hold-E pack gesture. Read-only.
 
-import { STATION_INPUT_SLOTS } from '../core/constants.js';
+import { RESEARCH_TIME_S, STATION_INPUT_SLOTS } from '../core/constants.js';
 import { isKnownItem, itemDef } from '../data/loadData.js';
 import { placeableById, placeableForMachineType, placeableForPackageItem } from '../data/loadPlaceables.js';
 import type { EntityId } from '../sim/entities.js';
 import type { World } from '../sim/world.js';
 import { depositCandidate, printerFor } from '../sim/craftingActions.js';
+import {
+  isResearchStation,
+  researchFor,
+  researchSampleCandidate,
+} from '../sim/researchActions.js';
 import { cableOnSnap, snapFree } from '../sim/snapUtils.js';
 import type { ToolAim } from '../player/terrainTool.js';
 import type { CableMode } from './cableMode.js';
@@ -80,6 +85,17 @@ export function interactPrompt(
   const stationId = findAimedStation(world, playerId);
   if (stationId) {
     const station = world.entities.get(stationId);
+    if (isResearchStation(station)) {
+      const research = station ? researchFor(station) : null;
+      const inventory = world.entities.get(playerId)?.components.inventory;
+      if (research && research.dataReady > 0) return `E: collect ${research.dataReady} Data`;
+      if (research && research.inputId === null && inventory && researchSampleCandidate(world, inventory)) {
+        return 'E: load Research sample';
+      }
+      return research?.inputId
+        ? `E: open Research station (${Math.round((research.progressS / RESEARCH_TIME_S) * 100)}%)`
+        : 'E: open Research station';
+    }
     const printer = station ? printerFor(station) : null;
     const machineType = station?.components.machine?.machineType;
     const stationName = machineType ? (placeableForMachineType(machineType)?.name ?? 'Station') : 'Station';

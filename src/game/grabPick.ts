@@ -4,7 +4,7 @@
 
 import { GRAB_RANGE_M, ITEM_BODY_RADIUS } from '../core/constants.js';
 import { distance, dot, sub, type Vec3d } from '../core/math.js';
-import type { EntityId } from '../sim/entities.js';
+import { isItemLike, type EntityId } from '../sim/entities.js';
 import type { World } from '../sim/world.js';
 
 export interface WorldRay {
@@ -26,7 +26,7 @@ export function findItemAlongRay(
   let bestT = Infinity;
   for (const entity of world.entities.values()) {
     const item = entity.components.item;
-    if (entity.kind !== 'item' || !item || item.holder !== undefined || item.grabbedBy !== undefined) continue;
+    if (!isItemLike(entity) || !item || item.holder !== undefined || item.grabbedBy !== undefined) continue;
     if (entity.planetId !== player.planetId) continue;
     if (distance(entity.position, player.position) > GRAB_RANGE_M) continue;
     const to = sub(entity.position, ray.origin);

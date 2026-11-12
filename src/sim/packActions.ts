@@ -32,6 +32,13 @@ export function isEntityEmpty(world: World, entity: Entity): boolean {
   ) {
     return false;
   }
+  const research = entity.components.research;
+  if (
+    research &&
+    (research.inputId !== null || research.progressS > 0 || research.dataReady > 0)
+  ) {
+    return false;
+  }
   if ((entity.components.power?.stored ?? 0) > 1e-6) return false;
   if (entity.kind === 'platform') {
     for (const other of world.entities.values()) {

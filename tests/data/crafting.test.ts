@@ -87,9 +87,10 @@ describe('recipe catalog', () => {
     ]);
     expect(recipeDef('fuel_cell_biomass').output).toBe('fuel_cell');
     expect(recipeDef('fuel_cell_hydrite').output).toBe('fuel_cell');
-    // Starter set from PROJECT.md: backpack recipes + platform.
-    const unlocked = RECIPES.filter(isRecipeUnlocked).map((r) => r.id).sort();
-    expect(unlocked).toEqual(['light_stick', 'oxygen_canister', 'platform', 'tether']);
+    // Starter set from PROJECT.md: backpack recipes + platform, plus M11's
+    // research station (the bootstrap for the research tree).
+    const unlocked = RECIPES.filter((recipe) => isRecipeUnlocked(recipe, new Set())).map((r) => r.id).sort();
+    expect(unlocked).toEqual(['light_stick', 'oxygen_canister', 'platform', 'research_station', 'tether']);
     // Backpack printing is instant and manual.
     for (const recipe of recipesForStation('backpack')) {
       expect(recipe.time).toBe(0);

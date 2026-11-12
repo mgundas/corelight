@@ -11,6 +11,7 @@ import type { ItemEmitter } from './itemView.js';
 export interface EntityViews {
   itemViews: { sync(entities: Iterable<Entity>): ItemEmitter[] };
   nodeViews: { sync(entities: Iterable<Entity>): ItemEmitter[] };
+  sampleViews: { sync(entities: Iterable<Entity>, nowMs?: number): ItemEmitter[] };
   placeableViews: {
     sync(entities: Iterable<Entity>, sunDirWorld?: { x: number; y: number; z: number }): ItemEmitter[];
   };
@@ -23,6 +24,7 @@ export interface EntityViews {
 export interface SyncedEmitters {
   itemEmitters: ItemEmitter[];
   nodeEmitters: ItemEmitter[];
+  sampleEmitters: ItemEmitter[];
   placeableEmitters: ItemEmitter[];
 }
 
@@ -37,10 +39,11 @@ export function syncEntityViews(
   const snapshot = [...entities];
   const itemEmitters = views.itemViews.sync(snapshot);
   const nodeEmitters = views.nodeViews.sync(snapshot);
+  const sampleEmitters = views.sampleViews.sync(snapshot);
   const placeableEmitters = views.placeableViews.sync(snapshot, sunDirWorld);
   views.tetherViews.sync(snapshot);
   views.habitatViews.sync(snapshot);
   views.markerViews.sync(snapshot);
   views.cableViews.sync(snapshot);
-  return { itemEmitters, nodeEmitters, placeableEmitters };
+  return { itemEmitters, nodeEmitters, sampleEmitters, placeableEmitters };
 }

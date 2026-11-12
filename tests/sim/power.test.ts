@@ -179,6 +179,29 @@ describe('power generation and storage', () => {
   });
 });
 
+describe('research station power (M11)', () => {
+  it('draws 1/s only while analyzing and pauses without power', () => {
+    const ctx = context();
+    const station = addMachine(ctx, 'research_station', 1);
+    const research = ctx.world.entities.get(station)?.components.research;
+    if (!research) throw new Error('no research component');
+    setDay(ctx, false);
+    updatePower(ctx.world, SIM_DT);
+    expect(powerOf(ctx, station).demand).toBe(0);
+    expect(powerOf(ctx, station).paused).toBe(false);
+    research.inputId = 'sample_probe';
+    updatePower(ctx.world, SIM_DT);
+    expect(powerOf(ctx, station).demand).toBe(1);
+    expect(powerOf(ctx, station).paused).toBe(true);
+    addHabitat(ctx);
+    updatePower(ctx.world, SIM_DT);
+    expect(powerOf(ctx, station).paused).toBe(false);
+    research.inputId = null;
+    updatePower(ctx.world, SIM_DT);
+    expect(powerOf(ctx, station).demand).toBe(0);
+  });
+});
+
 describe('brownout priority', () => {
   it('keeps printers, then furnace, then refinery as generation shrinks', () => {
     const ctx = context();

@@ -24,6 +24,8 @@ export function HudView() {
   const toolMode = useHudStore((s) => s.toolMode);
   const brushMode = useHudStore((s) => s.brushMode);
   const deathFadeToken = useHudStore((s) => s.deathFadeToken);
+  const toast = useHudStore((s) => s.toast);
+  const toastToken = useHudStore((s) => s.toastToken);
 
   const navParts = [hintText(habitatHint), hintText(deathHint)].filter((part) => part !== '');
   return (
@@ -57,6 +59,11 @@ export function HudView() {
           </div>
         ) : null}
         {prompt ? <div id="hud-prompt">{prompt}</div> : null}
+        {toast ? (
+          <div key={toastToken} id="hud-toast">
+            {toast}
+          </div>
+        ) : null}
         {navParts.length > 0 ? <div id="hud-nav">{navParts.join('   ')}</div> : null}
       </div>
       <div key={deathFadeToken} id="death-fade" className={deathFadeToken > 0 ? 'run' : ''} />

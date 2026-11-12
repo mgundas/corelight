@@ -10,6 +10,7 @@ import { findSpawnPosition } from '../../src/sim/physics/spawn.js';
 import type { Entity, EntityId } from '../../src/sim/entities.js';
 import { ItemViews } from '../../src/render/views/itemView.js';
 import { NodeViews } from '../../src/render/views/nodeView.js';
+import { SampleViews } from '../../src/render/views/sampleView.js';
 import { HabitatViews, MarkerViews, TetherViews } from '../../src/render/views/tetherView.js';
 import { PlaceableViews } from '../../src/render/views/placeableView.js';
 import { CableViews } from '../../src/render/views/cableViews.js';
@@ -49,6 +50,17 @@ function makeWorld(): Map<EntityId, Entity> {
     position: at(-2, 1, 0),
     rotation: { ...IDENTITY_QUAT },
     components: { node: { resourceId: 'resin', charges: 3, maxCharges: 3, chunkKey: 'k' } },
+  });
+  add({
+    id: 'sample_1',
+    kind: 'sample',
+    planetId: SELA.id,
+    position: at(-4, 0, 2),
+    rotation: { ...IDENTITY_QUAT },
+    components: {
+      sample: { value: 10, chunkKey: 'k' },
+      item: { itemId: 'research_sample' },
+    },
   });
   add({
     id: 'tether_1',
@@ -112,6 +124,7 @@ describe('syncEntityViews', () => {
     const views = {
       itemViews: new ItemViews(),
       nodeViews: new NodeViews(),
+      sampleViews: new SampleViews(),
       placeableViews: new PlaceableViews(),
       tetherViews: new TetherViews(),
       habitatViews: new HabitatViews(),
@@ -120,9 +133,13 @@ describe('syncEntityViews', () => {
     };
     // Exactly the production shape: a single map.values() iterator shared
     // by every view. Pre-fix this left 4 of 5 groups empty.
-    const { itemEmitters, nodeEmitters, placeableEmitters } = syncEntityViews(views, entities.values());
+    const { itemEmitters, nodeEmitters, sampleEmitters, placeableEmitters } = syncEntityViews(
+      views,
+      entities.values(),
+    );
     expect(views.itemViews.group.children.length).toBe(1);
     expect(views.nodeViews.group.children.length).toBe(1);
+    expect(views.sampleViews.group.children.length).toBe(1);
     expect(views.placeableViews.group.children.length).toBe(2);
     expect(views.tetherViews.group.children.length).toBe(1);
     expect(views.habitatViews.group.children.length).toBe(1);
@@ -132,9 +149,11 @@ describe('syncEntityViews', () => {
     // and the placed light stick joins the same emitter list.
     expect(itemEmitters.length).toBe(1);
     expect(nodeEmitters.length).toBe(0);
+    expect(sampleEmitters.length).toBe(1);
     expect(placeableEmitters.length).toBe(1);
     views.itemViews.dispose();
     views.nodeViews.dispose();
+    views.sampleViews.dispose();
     views.placeableViews.dispose();
     views.tetherViews.dispose();
     views.habitatViews.dispose();

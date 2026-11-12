@@ -38,7 +38,9 @@ export function powerStatusFor(world: World, playerId: EntityId | null): AimedPo
   const planet = world.planets.find((p) => p.id === entity.planetId);
   const solarWorking =
     machineType === 'solar_panel' && planet !== undefined && solarOutput(world, planet, entity) > 0.01;
-  const working = (printer !== undefined && printer.recipeId !== null) || solarWorking;
+  const researchWorking = entity.components.research?.inputId != null;
+  const working =
+    (printer !== undefined && printer.recipeId !== null) || solarWorking || researchWorking;
   const state: PowerStatus['state'] = power.paused ? 'paused' : working ? 'working' : 'idle';
   const name =
     machineType === 'habitat'

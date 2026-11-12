@@ -5,6 +5,7 @@ import type { PlanetConfig } from '../planets/PlanetConfig.js';
 import { TerrainEdits } from '../terrain/edits.js';
 import { applyAction, type Action } from './actions.js';
 import type { Entity, EntityId } from './entities.js';
+import type { ResearchState } from './researchState.js';
 import { SUN_INITIAL } from './systems/sun.js';
 
 export type System = (world: World, dt: number) => void;
@@ -35,6 +36,10 @@ export class World {
   readonly depletedNodes = new Set<string>();
   /** Remaining charges of partially mined nodes (survives far despawns). */
   readonly nodeCharges = new Map<string, number>();
+  /** Data + bought research entry ids (M11; serialized). */
+  readonly research: ResearchState = { data: 0, unlocked: [] };
+  /** Deterministically-placed sample pods already picked up (never respawn). */
+  readonly depletedSamples = new Set<string>();
   private queue: Action[] = [];
   private systems: System[] = [];
   private idCounter = 0;

@@ -12,7 +12,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { ITEM_BODY_RADIUS } from '../../core/constants.js';
 import type { Vec3d } from '../../core/math.js';
 import type { PlanetConfig } from '../../planets/PlanetConfig.js';
-import type { EntityId } from '../entities.js';
+import { isItemLike, type EntityId } from '../entities.js';
 import { toLocalFrame, toWorldFrame } from '../physics/frames.js';
 import { gravityAt } from '../physics/gravity.js';
 import type { World } from '../world.js';
@@ -42,7 +42,7 @@ export function makeItemsSystem(opts: ItemsOptions): (world: World, dt: number) 
       const entity = world.entities.get(id);
       const held = entity?.components.item?.holder !== undefined;
       const grabbed = entity?.components.item?.grabbedBy !== undefined;
-      if (!entity || entity.kind !== 'item' || held || grabbed || entity.planetId !== entry.planetId) {
+      if (!entity || !isItemLike(entity) || held || grabbed || entity.planetId !== entry.planetId) {
         try {
           opts.worldFor(entry.planetId).removeRigidBody(entry.body);
         } catch {
@@ -56,7 +56,7 @@ export function makeItemsSystem(opts: ItemsOptions): (world: World, dt: number) 
     for (const [id, entry] of bodies) {
       const entity = world.entities.get(id);
       const planet = opts.planets.find((p) => p.id === entry.planetId);
-      if (!entity || entity.kind !== 'item' || !planet) continue;
+      if (!entity || !isItemLike(entity) || !planet) continue;
       const t = entry.body.translation();
       entity.position = toWorldFrame(planet, { x: t.x, y: t.y, z: t.z });
     }
@@ -65,7 +65,7 @@ export function makeItemsSystem(opts: ItemsOptions): (world: World, dt: number) 
     // not loaded freeze instead of falling toward the core (same rule as
     // the player controller's 'pending' ground state).
     for (const entity of world.entities.values()) {
-      if (entity.kind !== 'item' || entity.components.item?.holder !== undefined) continue;
+      if (!isItemLike(entity) || entity.components.item?.holder !== undefined) continue;
       if (entity.components.item?.grabbedBy !== undefined) continue;
       if (opts.groundReady && !opts.groundReady(entity.position)) {
         const frozen = bodies.get(entity.id);

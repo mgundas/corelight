@@ -185,8 +185,9 @@ function findSurfaceSpot(
   return null;
 }
 
-/** A random point near a cave wall (|density| small, gradient nonzero). */
-function findCaveSpot(
+/** A random point near a cave wall (|density| small, gradient nonzero).
+ * Exported for the M11 sample placer (same wall-crossing rule). */
+export function findCaveSpot(
   density: DensityFn,
   planet: PlanetConfig,
   min: Vec3d,
@@ -282,7 +283,7 @@ export function nodesForChunk(
  * away), keep the base spot so mining re-seats the same id instead of
  * deleting it.
  */
-function reseatOnLive(
+export function reseatOnLive(
   live: DensityFn,
   base: DensityFn,
   min: Vec3d,

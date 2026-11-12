@@ -103,5 +103,7 @@ export function updateDebugOverlay(ctx: DebugStatsContext): void {
     oxygen: player?.components.oxygen?.value,
     tetherLive,
     tetherTotal,
+    researchData: ctx.world.research.data,
+    researchUnlocked: ctx.world.research.unlocked.length,
   });
 }

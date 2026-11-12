@@ -10,6 +10,7 @@ export function installUiCommands(
   world: World,
   playerId: () => EntityId | null,
   closePrinter: () => void,
+  closeResearch: () => void,
 ): void {
   const withPlayer = (run: (id: EntityId) => void): void => {
     const id = playerId();
@@ -31,5 +32,12 @@ export function installUiCommands(
     collectStation: (stationId) =>
       withPlayer((id) => world.dispatch({ type: 'collectStation', playerId: id, stationId })),
     closePrinter,
+    unlockResearch: (id) =>
+      withPlayer((player) => world.dispatch({ type: 'unlockResearch', playerId: player, id })),
+    depositResearchSample: (stationId) =>
+      withPlayer((id) => world.dispatch({ type: 'depositResearchSample', playerId: id, stationId })),
+    collectResearch: (stationId) =>
+      withPlayer((id) => world.dispatch({ type: 'collectResearch', playerId: id, stationId })),
+    closeResearch,
   });
 }

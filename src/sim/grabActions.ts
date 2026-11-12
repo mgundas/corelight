@@ -8,7 +8,7 @@ import { events } from '../core/events.js';
 import { distance, IDENTITY_QUAT, sub, type Vec3d } from '../core/math.js';
 import { placeableForPackageItem } from '../data/loadPlaceables.js';
 import type { PlanetConfig } from '../planets/PlanetConfig.js';
-import type { EntityId } from './entities.js';
+import { isItemLike, type EntityId } from './entities.js';
 import { moveBasis, upAt } from './physics/frames.js';
 import { spawnPlaceableEntity } from './placeActions.js';
 import { resolvePlacement, type PlacementTarget } from './placeResolve.js';
@@ -21,7 +21,7 @@ export function grabItem(world: World, playerId: EntityId, itemId: EntityId): vo
   const playerComp = player?.components.player;
   const item = world.entities.get(itemId);
   const itemComp = item?.components.item;
-  if (!player || !playerComp || !item || !itemComp || item.kind !== 'item') {
+  if (!player || !playerComp || !item || !itemComp || !isItemLike(item)) {
     events.emit('actionApplied', { type: 'grabItem' });
     return;
   }

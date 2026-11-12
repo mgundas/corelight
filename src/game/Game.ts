@@ -34,8 +34,7 @@ import { PlacementMode } from './placement.js';
 import { CableMode } from './cableMode.js';
 import { PackHold } from './packHold.js';
 import { dispatchTickInput } from './tickInput.js';
-import { createPrinterUi, updatePrinterUi } from './printerWiring.js';
-import type { PrinterUi } from '../ui/printerUi.js';
+import { StationUi } from './stationUi.js';
 import { updateCameraAndEnvironment } from './frameCamera.js';
 import { applyPaused } from './pause.js';
 
@@ -55,7 +54,7 @@ export class Game {
   readonly cable = new CableMode();
   readonly packHold = new PackHold();
   private readonly hud = new Hud();
-  private readonly printerUi: PrinterUi;
+  private readonly stationUi: StationUi;
 
   private playerId: EntityId | null = null;
   private readonly colliders: TerrainColliders;
@@ -118,15 +117,20 @@ export class Game {
     const setup = setupWorldSystems(this.world, planets, this.colliderPool, seed, existingWorld, {
       // Dev shortcuts: ?dev=1 starts with a full tether pack for oxygen
       // testing; ?build=1 starts with power-base packages for the M10
-      // acceptance (solar/battery recipes are M11-gated). Continue keeps the
-      // stored backpack instead.
+      // acceptance (solar/battery are research-gated since M11; the dev grant
+      // deliberately bypasses the tree). Continue keeps the stored backpack.
       devTethers: !existingWorld && getUrlParams().dev,
       devBuild: !existingWorld && getUrlParams().build,
     });
     this.colliders = setup.colliders;
     this.playerId = setup.playerId;
-    this.printerUi = createPrinterUi();
-    installUiCommands(this.world, () => this.playerId, () => this.printerUi.close());
+    this.stationUi = new StationUi(this.world, this.hud);
+    installUiCommands(
+      this.world,
+      () => this.playerId,
+      () => this.stationUi.closePrinter(),
+      () => this.stationUi.closeResearch(),
+    );
 
     this.renderer = new Renderer(canvas, worldSeed, planets, prebuilt);
     const wiring = wireTerrainEdits(this.world, planets, this.colliders, this.renderer.streamer);
@@ -202,7 +206,7 @@ export class Game {
       input: this.input,
       cable: this.cable,
       packHold: this.packHold,
-      closePrinter: () => this.printerUi.close(),
+      closeAllUi: () => this.stationUi.closeAll(),
     });
   }
   /** Freeze sim ticks (pause menu); rendering continues behind the menu. */
@@ -213,7 +217,7 @@ export class Game {
         input: this.input,
         packHold: this.packHold,
         cable: this.cable,
-        printerUi: this.printerUi,
+        closeAllUi: () => this.stationUi.closeAll(),
         flyCamera: this.flyCamera,
       },
       paused,
@@ -240,7 +244,7 @@ export class Game {
     this.flyCamera.detach();
     this.input.detach();
     this.unsubscribePlayerDied();
-    this.printerUi.dispose();
+    this.stationUi.dispose();
     resetUiCommands();
     resetDragStore();
     this.colliderPool.dispose();
@@ -296,15 +300,13 @@ export class Game {
           toolButtons,
           nowMs: performance.now(),
           flying,
-          uiOpen: this.printerUi.isOpen(),
+          uiOpen: this.stationUi.isOpen(),
           placement: this.placement,
           cable: this.cable,
           packHold: this.packHold,
-          openStation: (stationId) => this.printerUi.openStation(stationId),
-          togglePrinter: () => {
-            if (this.printerUi.isOpen()) this.printerUi.close();
-            else if (!this.flyCamera.enabled) this.printerUi.openBackpack();
-          },
+          openStation: (stationId) => this.stationUi.openStation(stationId),
+          openResearch: (stationId) => this.stationUi.openResearch(stationId),
+          togglePrinter: () => this.stationUi.togglePrinter(!this.flyCamera.enabled),
         });
         const t0 = performance.now();
         this.world.tick(SIM_DT);
@@ -342,7 +344,7 @@ export class Game {
     // origin shifts only.
     this.renderer.updateStreaming(activePos);
     this.renderer.renderPlayer(alpha);
-    updatePrinterUi(this.world, this.playerId, this.printerUi);
+    this.stationUi.update(this.playerId);
     updateFrameHud({
       renderer: this.renderer,
       hud: this.hud,

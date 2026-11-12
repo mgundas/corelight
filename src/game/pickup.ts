@@ -7,8 +7,9 @@
 import { PICKUP_RANGE_M, POWER_VIEW_RANGE_M, STATION_RANGE_M } from '../core/constants.js';
 import { distance, dot, normalize, sub, type Vec3d } from '../core/math.js';
 import { placeableForMachineType } from '../data/loadPlaceables.js';
-import type { Entity, EntityId } from '../sim/entities.js';
+import { isItemLike, type Entity, type EntityId } from '../sim/entities.js';
 import { isStationMachine } from '../sim/craftingActions.js';
+import { isResearchStation } from '../sim/researchActions.js';
 import { moveBasis, upAt } from '../sim/physics/frames.js';
 import type { World } from '../sim/world.js';
 
@@ -36,7 +37,12 @@ export function findAimedTether(world: World, playerId: EntityId): EntityId | nu
  * of a printer registers.
  */
 export function findAimedStation(world: World, playerId: EntityId): EntityId | null {
-  return findAimedMachineMatching(world, playerId, STATION_RANGE_M, (entity) => isStationMachine(entity));
+  return findAimedMachineMatching(
+    world,
+    playerId,
+    STATION_RANGE_M,
+    (entity) => isStationMachine(entity) || isResearchStation(entity),
+  );
 }
 
 /** Nearest machine (any type) for the HUD power readout. */
@@ -93,7 +99,8 @@ function findAimed(world: World, playerId: EntityId, kind: 'item' | 'tether'): E
   let bestDist = Infinity;
   for (const entity of world.entities.values()) {
     if (kind === 'item') {
-      if (entity.kind !== 'item' || entity.components.item?.holder !== undefined) continue;
+      // Items and research sample pods share the pickup prompt.
+      if (!isItemLike(entity) || entity.components.item?.holder !== undefined) continue;
       if (entity.components.item?.grabbedBy !== undefined) continue;
     } else {
       if (entity.kind !== 'tether') continue;

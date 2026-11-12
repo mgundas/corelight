@@ -9,7 +9,7 @@ import { storeSave } from '../../src/save/storage.js';
 describe('storeSave', () => {
   it('resolves to a boolean success flag', async () => {
     const result = await storeSave({
-      version: 2,
+      version: 3,
       seed: 1,
       time: 0,
       idCounter: 0,
@@ -17,13 +17,15 @@ describe('storeSave', () => {
       edits: {},
       depleted: [],
       nodeCharges: {},
+      research: { data: 0, unlocked: [] },
+      depletedSamples: [],
     });
     expect(typeof result).toBe('boolean');
   });
 
   it('refuses snapshots with non-finite positions', async () => {
     const result = await storeSave({
-      version: 2,
+      version: 3,
       seed: 1,
       time: 0,
       idCounter: 1,
@@ -40,6 +42,8 @@ describe('storeSave', () => {
       edits: {},
       depleted: [],
       nodeCharges: {},
+      research: { data: 0, unlocked: [] },
+      depletedSamples: [],
     });
     expect(result).toBe(false);
   });

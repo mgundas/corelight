@@ -247,3 +247,22 @@ export const GRAB_DISTANCE_M = 2.2;
 export const GRAB_LEVITATE_M = 0.35;
 /** Max distance a released item may land from the player (m). */
 export const GRAB_RELEASE_RANGE_M = TOOL_RANGE_M + TOOL_RANGE_SLACK_M;
+
+/** Research samples (M11): deterministic cave pods, rarer than nodes. */
+export const SAMPLE_SPAWN_RANGE_M = 96;
+export const SAMPLE_DESPAWN_RANGE_M = 140;
+/** Per-chunk chance for an eligible chunk (crust / mantle). */
+export const SAMPLE_CRUST_CHANCE = 1 / 6;
+export const SAMPLE_MANTLE_CHANCE = 1 / 3;
+/** Data value by origin depth (PROJECT.md: crust 10, mantle 20, core 40). */
+export const SAMPLE_VALUE_SURFACE = 10;
+export const SAMPLE_VALUE_CRUST = 10;
+export const SAMPLE_VALUE_MANTLE = 20;
+export const SAMPLE_VALUE_CORE = 40;
+/** Research station processing (PROJECT.md: 20 s at 1 power/s). */
+export const RESEARCH_TIME_S = 20;
+export const RESEARCH_POWER = 1;
+/** Open research panel refresh interval (ms), same rationale as printers. */
+export const RESEARCH_UI_SYNC_INTERVAL_MS = 100;
+/** How long the "New blueprint" toast stays visible (ms). */
+export const TOAST_DURATION_MS = 3200;

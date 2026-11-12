@@ -10,6 +10,7 @@ import { placeableForPackageItem } from '../data/loadPlaceables.js';
 import type { EntityId } from '../sim/entities.js';
 import { depositCandidate } from '../sim/craftingActions.js';
 import { isEntityEmpty, isPackableEntity } from '../sim/packActions.js';
+import { isResearchStation, researchSampleCandidate } from '../sim/researchActions.js';
 import { moveBasis, upAt } from '../sim/physics/frames.js';
 import { defForEntity } from '../sim/snapUtils.js';
 import type { World } from '../sim/world.js';
@@ -71,6 +72,9 @@ export function primaryPackTarget(world: World, playerId: EntityId): EntityId | 
     // not steal that familiar action.
     const inventory = world.entities.get(playerId)?.components.inventory;
     if (inventory && depositCandidate(world, inventory, station)) return null;
+    if (inventory && isResearchStation(station) && researchSampleCandidate(world, inventory)) {
+      return null;
+    }
     return station.id;
   }
   if (findAimedItem(world, playerId)) return null;

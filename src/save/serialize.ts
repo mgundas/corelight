@@ -6,17 +6,27 @@
 // index, delta, ...]; indices < 2^24 round-trip exactly through float32).
 
 import type { Quat, Vec3d } from '../core/math.js';
+import { isKnownResearch } from '../data/loadResearch.js';
 import type { PlanetConfig } from '../planets/PlanetConfig.js';
 import type { Entity, EntityId, EntityKind } from '../sim/entities.js';
 import { TerrainEdits, type SerializedEdits } from '../terrain/edits.js';
 import { parseChunkKey } from '../terrain/chunkKey.js';
 import { World } from '../sim/world.js';
 
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 
-/** Version -> migration. M07 added depleted nodes and partial charges. */
+/**
+ * Version -> migration. M07 added depleted nodes and partial charges; M11
+ * added research Data/unlocks and deterministic sample depletion.
+ */
 export const migrations: Record<number, (data: unknown) => unknown> = {
   1: (data: unknown) => ({ ...(data as Record<string, unknown>), version: 2, depleted: [], nodeCharges: {} }),
+  2: (data: unknown) => ({
+    ...(data as Record<string, unknown>),
+    version: 3,
+    research: { data: 0, unlocked: [] },
+    depletedSamples: [],
+  }),
 };
 
 const ENTITY_KINDS: ReadonlySet<string> = new Set<string>([
@@ -44,7 +54,7 @@ export interface SerializedEntity {
 }
 
 export interface SaveData {
-  version: 2;
+  version: 3;
   seed: number;
   /** Seconds of simulated time. */
   time: number;
@@ -57,6 +67,10 @@ export interface SaveData {
   depleted: string[];
   /** Node id -> remaining charges for partially mined nodes. */
   nodeCharges: Record<string, number>;
+  /** Research Data and bought entry ids (M11). */
+  research: { data: number; unlocked: string[] };
+  /** Deterministic sample pod ids already picked up (never respawned). */
+  depletedSamples: string[];
 }
 
 function isFiniteNumber(v: unknown): v is number {
@@ -209,6 +223,8 @@ export function serializeWorld(world: World): SaveData {
     edits,
     depleted: [...world.depletedNodes],
     nodeCharges: Object.fromEntries(world.nodeCharges),
+    research: { data: world.research.data, unlocked: [...world.research.unlocked] },
+    depletedSamples: [...world.depletedSamples],
   };
 }
 
@@ -254,6 +270,28 @@ export function deserializeWorld(data: unknown, planets: PlanetConfig[]): World 
     if (!Number.isInteger(charges)) throw new Error(`bad save: nodeCharges for ${id} is not an integer`);
     world.nodeCharges.set(id, charges as number);
   }
+  if (!Array.isArray(root['depletedSamples'])) throw new Error('bad save: depletedSamples missing');
+  for (const id of root['depletedSamples'] as unknown[]) {
+    if (typeof id !== 'string') throw new Error('bad save: depletedSamples entry is not a string');
+    world.depletedSamples.add(id);
+  }
+  const research = root['research'];
+  if (typeof research !== 'object' || research === null || Array.isArray(research)) {
+    throw new Error('bad save: research missing');
+  }
+  const r = research as Record<string, unknown>;
+  if (!isFiniteNumber(r['data']) || r['data'] < 0) throw new Error('bad save: research.data malformed');
+  if (!Array.isArray(r['unlocked'])) throw new Error('bad save: research.unlocked missing');
+  world.research.data = r['data'];
+  const unlocked: string[] = [];
+  for (const id of r['unlocked'] as unknown[]) {
+    if (typeof id !== 'string') throw new Error('bad save: research.unlocked entry is not a string');
+    // Unknown ids are dropped instead of bricking a save after a data edit;
+    // duplicates collapse so costs/state stay unambiguous.
+    if (!isKnownResearch(id) || unlocked.includes(id)) continue;
+    unlocked.push(id);
+  }
+  world.research.unlocked = unlocked;
   // Edits ride the validated TerrainEdits path: base64 -> pairs -> the same
   // deserialize() the live game uses, so a corrupt blob fails loudly here
   // instead of warping terrain after load.
