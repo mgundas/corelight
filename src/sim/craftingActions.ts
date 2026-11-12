@@ -9,10 +9,7 @@
 // network; the power system pauses progress (whole machine) until the
 // network can afford it.
 
-import {
-  STATION_INPUT_SLOTS,
-  STATION_RANGE_M,
-} from '../core/constants.js';
+import { STATION_RANGE_M } from '../core/constants.js';
 import { events } from '../core/events.js';
 import { distance } from '../core/math.js';
 import { isKnownItem } from '../data/loadData.js';
@@ -20,9 +17,7 @@ import { isPlaceable } from '../data/loadPlaceables.js';
 import {
   isRecipeUnlocked,
   recipeById,
-  recipesForStation,
   type RecipeDef,
-  type RecipeStation,
 } from '../data/loadRecipes.js';
 import type { Entity, EntityId, PrinterComponent } from './entities.js';
 import { giveItemToPlayer, inventoryFor } from './inventoryActions.js';
@@ -31,6 +26,7 @@ import {
   isResearchStation,
   unlockedRecipesFor,
 } from './researchActions.js';
+import { depositCandidate, hasInputRoom, stationAcceptsItem } from './stationInputs.js';
 import type { World } from './world.js';
 
 const STATION_MACHINE_TYPES: ReadonlySet<string> = new Set([
@@ -61,7 +57,7 @@ export function ensurePrinter(entity: Entity): PrinterComponent | null {
   if (!isStationMachine(entity)) return null;
   let printer = entity.components.printer;
   if (!printer) {
-    printer = { recipeId: null, progressS: 0, inputs: [], outputReady: null };
+    printer = { recipeId: null, progressS: 0, inputs: [], outputReady: null, boosted: false };
     entity.components.printer = printer;
   }
   return printer;
@@ -182,7 +178,13 @@ export function depositToStation(world: World, playerId: EntityId, stationId: En
     return;
   }
   const heldId = depositCandidate(world, inventory, station);
-  if (!heldId || !nearStation(player, station) || printer.inputs.length >= STATION_INPUT_SLOTS) {
+  const heldItemId = heldId ? world.entities.get(heldId)?.components.item?.itemId : undefined;
+  if (
+    !heldId ||
+    !heldItemId ||
+    !nearStation(player, station) ||
+    !hasInputRoom(world, station, printer.inputs, heldItemId)
+  ) {
     events.emit('actionApplied', { type: 'depositToStation' });
     return;
   }
@@ -238,10 +240,11 @@ export function depositSlotToStation(
   }
   // The sim trusts no crafted action: the station must actually consume this
   // item id, and the player must be near with room in the input slots.
-  const consumes = recipesForStation(machineType as RecipeStation).some((recipe) =>
-    recipe.inputs.some((input) => input.item === item.itemId),
-  );
-  if (!consumes || !nearStation(player, station) || printer.inputs.length >= STATION_INPUT_SLOTS) {
+  if (
+    !stationAcceptsItem(station, item.itemId) ||
+    !nearStation(player, station) ||
+    !hasInputRoom(world, station, printer.inputs, item.itemId)
+  ) {
     events.emit('actionApplied', { type: 'depositSlotToStation' });
     return;
   }
@@ -277,6 +280,21 @@ export function printAtStation(
     return;
   }
   consumeStationInputs(world, printer, recipe);
+  // Optional furnace fuel: one biomass in the second slot is consumed at
+  // job start and doubles the smelt speed (PROJECT.md M12). Other stations
+  // never set the boost, so a stale flag can never leak across a recipe.
+  printer.boosted = false;
+  if (station.components.machine?.machineType === 'furnace') {
+    const fuelIndex = printer.inputs.findIndex(
+      (id) => world.entities.get(id)?.components.item?.itemId === 'biomass',
+    );
+    if (fuelIndex !== -1) {
+      const fuelId = printer.inputs[fuelIndex] as EntityId;
+      world.entities.delete(fuelId);
+      printer.inputs.splice(fuelIndex, 1);
+      printer.boosted = true;
+    }
+  }
   printer.recipeId = recipe.id;
   printer.progressS = 0;
   events.emit('actionApplied', { type: 'printAtStation' });
@@ -306,34 +324,4 @@ export function collectStation(world: World, playerId: EntityId, stationId: Enti
   giveItemToPlayer(world, player, outputId);
   printer.outputReady = null;
   events.emit('actionApplied', { type: 'collectStation' });
-}
-
-/** True when this station's recipe catalog lists the item as an input. */
-export function stationAcceptsItem(station: Entity, itemId: string): boolean {
-  const machineType = station.components.machine?.machineType;
-  if (!machineType || !isKnownItem(itemId)) return false;
-  return recipesForStation(machineType as RecipeStation).some((recipe) =>
-    recipe.inputs.some((input) => input.item === itemId),
-  );
-}
-
-/**
- * The backpack item E would deposit next: the selected slot when it is a
- * station input, else the first matching carried input (so a fresh pickup
- * works without slot juggling). Null when nothing matches.
- */
-export function depositCandidate(
-  world: World,
-  inventory: { slots: (EntityId | null)[]; selectedSlot: number },
-  station: Entity,
-): EntityId | null {
-  const selected = inventory.slots[inventory.selectedSlot];
-  const selectedId = selected ? world.entities.get(selected)?.components.item?.itemId : undefined;
-  if (selected && selectedId && stationAcceptsItem(station, selectedId)) return selected;
-  for (const id of inventory.slots) {
-    if (!id) continue;
-    const itemId = world.entities.get(id)?.components.item?.itemId;
-    if (itemId && stationAcceptsItem(station, itemId)) return id;
-  }
-  return null;
 }

@@ -163,6 +163,20 @@ describe('oxygen system', () => {
     expect(hazardMultiplier(vorn, local)).toBe(1.5);
   });
 
+  it('reads hazard multipliers from planet config, not hardcoded layers', () => {
+    const mantleLocal = { x: 0, y: SELA.radius - 180, z: 0 };
+    expect(hazardMultiplier(SELA, mantleLocal)).toBe(2);
+    // A custom layer value flows through (M13's Vorn heat/cold configs can
+    // use the same field without touching the oxygen system).
+    const hot = {
+      ...SELA,
+      layers: SELA.layers.map((layer) =>
+        layer.name === 'mantle' ? { ...layer, hazardOxygenMult: 3 } : layer,
+      ),
+    };
+    expect(hazardMultiplier(hot, mantleLocal)).toBe(3);
+  });
+
   it('a canister auto-fires at 20 and refills to full', () => {    const { world, playerId } = oxygenWorld();
     const player = world.entities.get(playerId);
     if (!player) throw new Error('no player');

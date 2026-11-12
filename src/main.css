@@ -572,6 +572,37 @@ body {
   background: #66ffcc;
 }
 
+#hud-drill {
+  font-size: 12px;
+  color: #b8c2cc;
+  background: rgb(0 0 0 / 45%);
+  padding: 3px 10px;
+  border-radius: 6px;
+}
+
+/* M12 mantle heat: subtle orange edge vignette, pulsing slowly. */
+#heat-haze {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  background:
+    radial-gradient(ellipse at center, transparent 42%, rgb(255 96 24 / 16%) 78%, rgb(255 72 12 / 30%) 100%);
+  transition: opacity 0.9s ease;
+  z-index: 9;
+}
+
+#heat-haze.on {
+  opacity: 1;
+  animation: heat-haze-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes heat-haze-pulse {
+  50% {
+    opacity: 0.62;
+  }
+}
+
 #drag-ghost {
   position: fixed;
   display: flex;

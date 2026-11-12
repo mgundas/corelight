@@ -23,7 +23,7 @@ export interface PrinterRow {
 export interface StationPanel {
   stationId: string;
   name: string;
-  /** Loaded input item names, padded with null to STATION_INPUT_SLOTS. */
+  /** Loaded input item names, padded with null to the station's input slots. */
   slots: (string | null)[];
   /** Item ids this station's recipes consume (drag-and-drop validation). */
   acceptsItemIds: string[];

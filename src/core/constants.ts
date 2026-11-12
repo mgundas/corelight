@@ -107,6 +107,13 @@ export const TOOL_DEFAULT_RADIUS = 2;
 export const TOOL_EDITS_PER_SECOND = 10;
 /** Density delta applied at the brush center per edit (quadratic falloff). */
 export const TOOL_DIG_STRENGTH = 0.5;
+/** Drill tier hardness (M12): layers with hardness above this are skipped.
+ * Mk1 is the starting terrain tool; Mk2/Mk3 are backpack drill items. */
+export const DRILL_MK1_HARDNESS = 2;
+export const DRILL_MK2_HARDNESS = 3;
+export const DRILL_MK3_HARDNESS = 4;
+/** Mk3 digs 30% faster (PROJECT.md M12): stroke strength multiplier. */
+export const DRILL_MK3_SPEED_MULT = 1.3;
 /** How long the "Too hard" indicator stays visible after a blocked dig. */
 export const TOO_HARD_INDICATOR_S = 1.5;
 
@@ -186,9 +193,8 @@ export const OXYGEN_MAX = 100;
 export const OXYGEN_REFILL_PER_S = 20;
 /** Oxygen drain per second off-network (before hazard multipliers). */
 export const OXYGEN_DRAIN_PER_S = 1;
-/** Mantle heat multiplies off-network oxygen drain (PROJECT.md: 2x). */
-export const OXYGEN_MANTLE_MULT = 2;
-/** Vorn surface cold multiplies off-network drain (PROJECT.md: 1.5x). */
+/** Vorn surface cold multiplies off-network drain (PROJECT.md: 1.5x).
+ * Mantle heat (2x) is planet-config data (`LayerConfig.hazardOxygenMult`). */
 export const OXYGEN_VORN_COLD_MULT = 1.5;
 /** Oxygen at/below which a carried canister auto-refills to full. */
 export const OXYGEN_CANISTER_THRESHOLD = 20;
@@ -209,6 +215,10 @@ export const TETHER_PLACE_AHEAD_M = 1.5;
 export const STATION_RANGE_M = 4.5;
 /** Station input slots: the largest recipe (shuttle) needs 8 item units. */
 export const STATION_INPUT_SLOTS = 8;
+/** Furnace (M12): one recipe input slot plus one optional biomass fuel slot. */
+export const FURNACE_INPUT_SLOTS = 2;
+/** Biomass fuel advances a smelt job at this multiple of normal speed. */
+export const FUEL_BOOST_MULT = 2;
 /** Open printer panel refresh interval (ms): progress is decisecond-granular
  * and counts change on actions, so 10 Hz is plenty and avoids per-frame
  * state/string allocation. */

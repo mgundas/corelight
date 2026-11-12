@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import * as THREE from 'three';
 import { itemDef } from '../../src/data/loadData.js';
 import { ItemViews } from '../../src/render/views/itemView.js';
 import { NodeViews } from '../../src/render/views/nodeView.js';
@@ -77,6 +78,39 @@ describe('node views', () => {
     expect(views.sync([node('n1', 'voidstone')]).length).toBe(1);
     // Common ores stay dark until mined.
     expect(views.sync([node('n2', 'ferrite_ore')]).length).toBe(0);
+    views.dispose();
+  });
+
+  it('renders biomass deposits as low-poly plant tufts (M12)', () => {
+    const views = new NodeViews();
+    const node = (id: string, resourceId: string): Entity => ({
+      id,
+      kind: 'node',
+      planetId: 'sela',
+      position: { x: 4, y: 5, z: 6 },
+      rotation: { ...IDENTITY_QUAT },
+      components: { node: { resourceId, charges: 3, maxCharges: 3, chunkKey: 'sela:0:1:2:3' } },
+    });
+    views.sync([node('plant', 'biomass')]);
+    const tuft = views.group.children[0];
+    expect(tuft?.children.length).toBeGreaterThanOrEqual(8);
+    // Slim tall stems + dark leaf blades, not the short round ore shards.
+    expect(tuft?.children.some((child) => child.scale.y >= 1.1 && child.scale.x < 0.7)).toBe(true);
+    const colors = new Set(
+      (tuft?.children ?? [])
+        .filter((child): child is THREE.Mesh => child instanceof THREE.Mesh)
+        .map((mesh) => (mesh.material as THREE.MeshStandardMaterial).color.getHexString()),
+    );
+    expect(colors.size).toBeGreaterThanOrEqual(2);
+    // The same node id rebuilds the identical tuft (deterministic layout).
+    const leaves = tuft?.children.length ?? 0;
+    views.sync([]);
+    views.sync([node('plant', 'biomass')]);
+    expect(views.group.children[0]?.children.length).toBe(leaves);
+    // Ferrite still meshes as a shard cluster.
+    views.sync([node('ore', 'ferrite_ore')]);
+    const ore = views.group.children[0];
+    expect(ore?.children.every((child) => child.scale.y < 1.3)).toBe(true);
     views.dispose();
   });
 });

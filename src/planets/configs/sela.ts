@@ -42,6 +42,9 @@ export const SELA: PlanetConfig = {
       hardness: 3,
       color: [0.63, 0.35, 0.18],
       colorVariation: 0.15,
+      // Heat multiplies off-network oxygen drain (PROJECT.md 2x). Lives in
+      // the planet config so hazards are data, not code (M12).
+      hazardOxygenMult: 2,
     },
   ],
   core: {

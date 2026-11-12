@@ -18,11 +18,13 @@ export function HudView() {
   const prompt = useHudStore((s) => s.prompt);
   const oxygen = useHudStore((s) => s.oxygen);
   const onNetwork = useHudStore((s) => s.onNetwork);
+  const heat = useHudStore((s) => s.heat);
   const habitatHint = useHudStore((s) => s.habitatHint);
   const deathHint = useHudStore((s) => s.deathHint);
   const power = useHudStore((s) => s.power);
   const toolMode = useHudStore((s) => s.toolMode);
   const brushMode = useHudStore((s) => s.brushMode);
+  const drillTier = useHudStore((s) => s.drillTier);
   const deathFadeToken = useHudStore((s) => s.deathFadeToken);
   const toast = useHudStore((s) => s.toast);
   const toastToken = useHudStore((s) => s.toastToken);
@@ -39,6 +41,9 @@ export function HudView() {
         </div>
         <div id="hud-mode" className={toolMode === 'deform' ? 'deform' : ''}>
           {toolMode === 'deform' ? `Q: tool on · ${brushMode === 'dig' ? 'Dig' : 'Add'} (X)` : 'Q: terrain tool'}
+        </div>
+        <div id="hud-drill" title="Selected backpack drill">
+          Drill Mk{drillTier}
         </div>
         <div id="hud-slots">
           {Array.from({ length: 8 }, (_, i) => (
@@ -66,6 +71,7 @@ export function HudView() {
         ) : null}
         {navParts.length > 0 ? <div id="hud-nav">{navParts.join('   ')}</div> : null}
       </div>
+      <div id="heat-haze" className={heat ? 'on' : ''} />
       <div key={deathFadeToken} id="death-fade" className={deathFadeToken > 0 ? 'run' : ''} />
     </>
   );

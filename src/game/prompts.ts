@@ -2,12 +2,13 @@
 // chain so the HUD always says what E will do next. M10 adds the cable tool
 // and the hold-E pack gesture. Read-only.
 
-import { RESEARCH_TIME_S, STATION_INPUT_SLOTS } from '../core/constants.js';
+import { RESEARCH_TIME_S } from '../core/constants.js';
 import { isKnownItem, itemDef } from '../data/loadData.js';
 import { placeableById, placeableForMachineType, placeableForPackageItem } from '../data/loadPlaceables.js';
 import type { EntityId } from '../sim/entities.js';
 import type { World } from '../sim/world.js';
-import { depositCandidate, printerFor } from '../sim/craftingActions.js';
+import { depositCandidate, inputSlotsFor } from '../sim/stationInputs.js';
+import { printerFor } from '../sim/craftingActions.js';
 import {
   isResearchStation,
   researchFor,
@@ -102,7 +103,7 @@ export function interactPrompt(
     if (printer?.outputReady) return `E: collect ${nameForId(printer.outputReady)}`;
     const inventory = world.entities.get(playerId)?.components.inventory;
     const candidate = inventory && station ? depositCandidate(world, inventory, station) : null;
-    if (candidate && printer && printer.inputs.length < STATION_INPUT_SLOTS) {
+    if (candidate && printer && station && printer.inputs.length < inputSlotsFor(station)) {
       const itemId = world.entities.get(candidate)?.components.item?.itemId;
       return `E: load ${itemId ? nameForId(itemId) : 'input'}`;
     }

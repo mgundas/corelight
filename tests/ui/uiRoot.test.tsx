@@ -78,6 +78,22 @@ describe('React UI root', () => {
     expect(html).toContain('data-drop="station:machine_x:1"');
   });
 
+  it('renders the drill tier chip', () => {
+    useHudStore.setState({ drillTier: 3 });
+    const html = renderUi();
+    expect(html).toContain('id="hud-drill"');
+    expect(html).toContain('Drill Mk3');
+  });
+
+  it('renders the heat haze only in the mantle', () => {
+    useHudStore.setState({ heat: true });
+    const hot = renderUi();
+    expect(hot).toContain('id="heat-haze" class="on"');
+    useHudStore.setState({ heat: false });
+    const cool = renderUi();
+    expect(cool).toContain('id="heat-haze" class=""');
+  });
+
   it('renders the drag ghost only while a drag is active', () => {
     useDragStore.setState({
       active: {

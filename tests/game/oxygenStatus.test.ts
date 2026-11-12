@@ -90,4 +90,20 @@ describe('oxygenStatusFor', () => {
     expect(oxygenStatusFor(world, null)).toBe(null);
     expect(oxygenStatusFor(world, 'player_missing')).toBe(null);
   });
+
+  it('marks mantle depth as hot for the heat vignette', () => {
+    const { world, playerId } = statusWorld();
+    expect(oxygenStatusFor(world, playerId)?.heat).toBe(false);
+    const player = world.entities.get(playerId);
+    if (!player) throw new Error('no player');
+    const up = upAt(SELA, player.position);
+    const deep = {
+      x: SELA.center.x + up.x * (SELA.radius - 180),
+      y: SELA.center.y + up.y * (SELA.radius - 180),
+      z: SELA.center.z + up.z * (SELA.radius - 180),
+    };
+    world.dispatch({ type: 'playerTeleport', playerId, position: deep });
+    world.tick(SIM_DT);
+    expect(oxygenStatusFor(world, playerId)?.heat).toBe(true);
+  });
 });

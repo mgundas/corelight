@@ -15,6 +15,11 @@ export interface LayerConfig {
   color: Rgb;
   /** Relative brightness noise on the layer color, e.g. 0.1 = +/-10%. */
   colorVariation: number;
+  /**
+   * Off-network oxygen drain multiplier for this layer (M12 hazards).
+   * Undefined or 1 = no extra drain; Sela's mantle heat uses 2.
+   */
+  hazardOxygenMult?: number;
 }
 
 export interface CaveConfig {

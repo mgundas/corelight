@@ -7,6 +7,7 @@ import { isKnownItem, itemDef, type ItemDef } from '../data/loadData.js';
 import { BACKPACK_SLOTS } from '../core/constants.js';
 import type { PlayerInput } from '../player/input.js';
 import type { EntityId } from '../sim/entities.js';
+import { equippedDrillTier, type DrillTier } from '../sim/drill.js';
 import type { World } from '../sim/world.js';
 import { findAimedItem } from './pickup.js';
 
@@ -39,6 +40,8 @@ export interface BackpackFrame {
   slotDefs: (ItemDef | null)[];
   selectedSlot: number;
   soil: number;
+  /** Drill tier from the selected backpack slot (M12; Mk1 without one). */
+  drillTier: DrillTier;
   /** Item id of the large package carried in front, if any. */
   frontCarryItemId: string | null;
   /** "E: pick up Resin" when an item is aimed, else null. */
@@ -68,6 +71,7 @@ export function backpackFrame(world: World, playerId: EntityId | null, flying: b
     slotDefs,
     selectedSlot: inv?.selectedSlot ?? 0,
     soil: Math.floor(holder?.components.player?.soil ?? 0),
+    drillTier: playerId ? equippedDrillTier(world, playerId) : 1,
     frontCarryItemId,
     prompt,
   };

@@ -6,6 +6,7 @@ import { TOAST_DURATION_MS } from '../core/constants.js';
 import type { ItemDef } from '../data/loadData.js';
 import type { PowerStatus } from '../game/powerStatus.js';
 import type { NavHint } from '../game/oxygenStatus.js';
+import type { DrillTier } from '../sim/drill.js';
 import {
   clearHudToast,
   resetHudView,
@@ -25,6 +26,8 @@ export interface HudState {
   oxygen: number;
   /** Inside a live tether/habitat network. */
   onNetwork: boolean;
+  /** Mantle heat: render the orange vignette (M12). */
+  heat: boolean;
   /** Where the habitat is (off-network only), else null. */
   habitatHint: NavHint | null;
   /** Where the lost pack waits, else null. */
@@ -34,6 +37,8 @@ export interface HudState {
   /** Terrain tool equipped (Q) and its add/deform sub-mode (X). */
   toolMode: 'cursor' | 'deform';
   brushMode: 'dig' | 'add';
+  /** Current drill tier (M12): from the selected backpack slot. */
+  drillTier: DrillTier;
 }
 
 export class Hud {
@@ -64,6 +69,7 @@ export class Hud {
       state.prompt ?? '',
       state.oxygen,
       state.onNetwork,
+      state.heat,
       state.habitatHint ? `${state.habitatHint.label}${state.habitatHint.distM}${state.habitatHint.bearingDeg}` : '',
       state.deathHint ? `${state.deathHint.label}${state.deathHint.distM}${state.deathHint.bearingDeg}` : '',
       power
@@ -71,6 +77,7 @@ export class Hud {
         : '',
       state.toolMode,
       state.brushMode,
+      state.drillTier,
       ...state.slots.map((d) => d?.id ?? ''),
     ].join('|');
     if (key === this.lastKey) return;
@@ -84,11 +91,13 @@ export class Hud {
       prompt: state.prompt,
       oxygen: state.oxygen,
       onNetwork: state.onNetwork,
+      heat: state.heat,
       habitatHint: state.habitatHint,
       deathHint: state.deathHint,
       power: state.power,
       toolMode: state.toolMode,
       brushMode: state.brushMode,
+      drillTier: state.drillTier,
     });
   }
 

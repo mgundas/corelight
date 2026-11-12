@@ -64,11 +64,13 @@ export function updateFrameHud(deps: FrameHudDeps): void {
     ),
     oxygen: o2?.oxygen ?? 100,
     onNetwork: o2?.onNetwork ?? true,
+    heat: o2?.heat ?? false,
     habitatHint: o2?.habitat ?? null,
     deathHint: o2?.deathMarker ?? null,
     power: power?.status ?? null,
     toolMode: deps.toolMode.active ? 'deform' : 'cursor',
     brushMode: deps.toolMode.brush,
+    drillTier: frame.drillTier,
   });
 }
 

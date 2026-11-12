@@ -3,7 +3,7 @@
 // loaded station inputs, job progress and the collect affordance. Mutations
 // still go through Actions dispatched by Game.
 
-import { PRINTER_UI_SYNC_INTERVAL_MS, STATION_INPUT_SLOTS, STATION_RANGE_M } from '../core/constants.js';
+import { PRINTER_UI_SYNC_INTERVAL_MS, STATION_RANGE_M } from '../core/constants.js';
 import { distance } from '../core/math.js';
 import { isKnownItem, itemDef } from '../data/loadData.js';
 import { placeableById, placeableForMachineType } from '../data/loadPlaceables.js';
@@ -16,7 +16,12 @@ import {
 } from '../data/loadRecipes.js';
 import type { EntityId } from '../sim/entities.js';
 import type { World } from '../sim/world.js';
-import { countInBackpack, countInStation, printerFor } from '../sim/craftingActions.js';
+import {
+  countInBackpack,
+  countInStation,
+  printerFor,
+} from '../sim/craftingActions.js';
+import { inputSlotsFor, stationAcceptedItems } from '../sim/stationInputs.js';
 import { unlockedRecipesFor } from '../sim/researchActions.js';
 import type { PrinterRow, PrinterUi, PrinterUiState } from '../ui/printerUi.js';
 
@@ -80,16 +85,16 @@ function stationState(world: World, playerId: EntityId, stationId: EntityId): Pr
     const itemId = world.entities.get(id)?.components.item?.itemId;
     return itemId && isKnownItem(itemId) ? itemDef(itemId).name : null;
   });
-  while (slots.length < STATION_INPUT_SLOTS) slots.push(null);
+  while (slots.length < inputSlotsFor(station)) slots.push(null);
   const stationRecipes = recipesForStation(machineType as RecipeStation);
-  const acceptsItemIds = [...new Set(stationRecipes.flatMap((recipe) => recipe.inputs.map((input) => input.item)))];
+  const acceptsItemIds = stationAcceptedItems(station);
   const paused = station.components.power?.paused === true;
   const hint = printer.outputReady
     ? 'Output ready — press E or Collect.'
     : jobRecipe
       ? paused
         ? 'Paused — no power. Progress resumes when the network can afford it.'
-        : `Printing… (${jobRecipe.power} power/s while working)`
+        : `Printing… (${jobRecipe.power} power/s while working${printer.boosted === true ? ', biomass boost 2x' : ''})`
       : 'Press E while holding an input to load it. Tab closes.';
   return {
     mode: 'station',

@@ -5,6 +5,7 @@
 import { create } from 'zustand';
 import type { PowerStatus } from '../../game/powerStatus.js';
 import type { NavHint } from '../../game/oxygenStatus.js';
+import type { DrillTier } from '../../sim/drill.js';
 
 export interface HudSlotView {
   /** Canonical item id (drag rules need it; display uses name/color). */
@@ -20,11 +21,15 @@ export interface HudViewState {
   prompt: string | null;
   oxygen: number;
   onNetwork: boolean;
+  /** Mantle heat vignette (M12). */
+  heat: boolean;
   habitatHint: NavHint | null;
   deathHint: NavHint | null;
   power: PowerStatus | null;
   toolMode: 'cursor' | 'deform';
   brushMode: 'dig' | 'add';
+  /** Drill tier from the selected backpack slot (M12). */
+  drillTier: DrillTier;
   /** Incremented on death; the fade element remounts per token. */
   deathFadeToken: number;
   /** Short "New blueprint: …" message (M11), null when hidden. */
@@ -40,11 +45,13 @@ const INITIAL: HudViewState = {
   prompt: null,
   oxygen: 100,
   onNetwork: true,
+  heat: false,
   habitatHint: null,
   deathHint: null,
   power: null,
   toolMode: 'cursor',
   brushMode: 'dig',
+  drillTier: 1,
   deathFadeToken: 0,
   toast: null,
   toastToken: 0,

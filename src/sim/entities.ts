@@ -70,6 +70,12 @@ export interface PrinterComponent {
   inputs: EntityId[];
   /** Finished output waiting for pickup (recipe output id), or null. */
   outputReady: string | null;
+  /**
+   * Furnace biomass boost (M12): true when the active job consumed a fuel
+   * biomass and advances at FUEL_BOOST_MULT. Optional so pre-M12 saves and
+   * hand-made test stations stay valid (absent reads as unboosted).
+   */
+  boosted?: boolean;
 }
 
 export interface FurnaceComponent {

@@ -115,7 +115,7 @@
     "station": "furnace",
     "output": "iron",
     "inputs": [{ "item": "ferrite_ore", "count": 1 }],
-    "time": 2,
+    "time": 10,
     "power": 2,
     "unlockedByDefault": false
   },
@@ -124,7 +124,7 @@
     "station": "furnace",
     "output": "copper",
     "inputs": [{ "item": "cuprite_ore", "count": 1 }],
-    "time": 2,
+    "time": 10,
     "power": 2,
     "unlockedByDefault": false
   },
@@ -133,7 +133,7 @@
     "station": "furnace",
     "output": "polymer",
     "inputs": [{ "item": "resin", "count": 1 }],
-    "time": 2,
+    "time": 10,
     "power": 2,
     "unlockedByDefault": false
   },

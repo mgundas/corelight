@@ -14,6 +14,7 @@ import { distance } from '../core/math.js';
 import { layerAt } from '../terrain/density.js';
 import type { FlattenPlane } from '../terrain/edits.js';
 import type { Action } from './actions.js';
+import { digSpeedMult, toolHardnessFor } from './drill.js';
 import { mineNodes } from './mining.js';
 import { baseFieldFor } from './tetherActions.js';
 import type { World } from './world.js';
@@ -98,15 +99,20 @@ export function applyTerrainEdit(world: World, action: Extract<Action, { type: '
         normal: { ...action.flattenPlane.normal },
       }
     : undefined;
+  // Drill tier (M12) is derived from the selected backpack slot on every
+  // stroke: switching slots is immediate and a stale HUD/save value can
+  // never gate an edit. Mk3 adds its 30% speed to dig strokes only.
+  const hardness = toolHardnessFor(world, entity.id);
+  const strength = action.strength * (action.mode === 'dig' ? digSpeedMult(world, entity.id) : 1);
   const outcome = world.terrainEdits.applySphere(
     planet,
     field.density,
     local,
     radius,
-    action.strength,
+    strength,
     action.mode,
     {
-      maxHardness: player.toolHardness,
+      maxHardness: hardness,
       hardnessAt: (x, y, z) => layerAt(planet, x, y, z).hardness,
       flattenPlane: plane,
       // Digging earns soil; adding/flattening may only flip what the
@@ -114,6 +120,8 @@ export function applyTerrainEdit(world: World, action: Extract<Action, { type: '
       soilBudget: action.mode === 'dig' ? undefined : player.soil,
     },
   );
+  // Keep the saved/displayed hardness in sync with what this stroke used.
+  player.toolHardness = hardness;
   player.soil = Math.min(SOIL_MAX, Math.max(0, player.soil + outcome.gained - outcome.spent));
   if (outcome.blocked) player.lastTooHard = world.time;
   // Mining: a dig stroke that actually moved terrain and overlaps a node

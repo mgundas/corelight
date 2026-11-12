@@ -91,6 +91,16 @@ describe('recipe catalog', () => {
     // research station (the bootstrap for the research tree).
     const unlocked = RECIPES.filter((recipe) => isRecipeUnlocked(recipe, new Set())).map((r) => r.id).sort();
     expect(unlocked).toEqual(['light_stick', 'oxygen_canister', 'platform', 'research_station', 'tether']);
+    // M12 furnace: every smelt takes 10 s at 2 power/s (PROJECT.md).
+    for (const id of ['smelt_iron', 'smelt_copper', 'polymer']) {
+      expect(recipeDef(id).station, id).toBe('furnace');
+      expect(recipeDef(id).time, id).toBe(10);
+      expect(recipeDef(id).power, id).toBe(2);
+    }
+    // M12: ore maps to the matching metal; resin to polymer.
+    expect(recipeDef('smelt_iron').output).toBe('iron');
+    expect(recipeDef('smelt_copper').output).toBe('copper');
+    expect(recipeDef('polymer').output).toBe('polymer');
     // Backpack printing is instant and manual.
     for (const recipe of recipesForStation('backpack')) {
       expect(recipe.time).toBe(0);
@@ -105,6 +115,13 @@ describe('recipe catalog', () => {
       'smelt_iron',
       'smelt_copper',
       'polymer',
+    ]);
+    // M12 task 2: the medium printer offers the larger blueprints.
+    expect(recipesForStation('medium_printer').map((r) => r.id)).toEqual([
+      'drill_mk3',
+      'refinery',
+      'shuttle',
+      'habitat_kit',
     ]);
   });
 
@@ -161,6 +178,11 @@ describe('placeable catalog', () => {
     // M10: platforms carry four rim cable snaps and four top machine slots.
     expect(placeableDef('platform').snapPoints).toHaveLength(4);
     expect(placeableDef('platform').slots).toHaveLength(4);
+    // M12: the medium printer is the larger-footprint tier.
+    expect(placeableDef('medium_printer').footprintRadiusM).toBeGreaterThan(
+      placeableDef('small_printer').footprintRadiusM,
+    );
+    expect(placeableDef('medium_printer').size).toBe('large');
     // Machines have no top slots (they are not platforms).
     expect(placeableDef('small_printer').slots).toEqual([]);
     // Back-reference helpers used by carry/render code.

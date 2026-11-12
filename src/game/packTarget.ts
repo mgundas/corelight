@@ -8,7 +8,7 @@ import { STATION_RANGE_M } from '../core/constants.js';
 import { distance, dot, normalize, sub, type Vec3d } from '../core/math.js';
 import { placeableForPackageItem } from '../data/loadPlaceables.js';
 import type { EntityId } from '../sim/entities.js';
-import { depositCandidate } from '../sim/craftingActions.js';
+import { depositCandidate } from '../sim/stationInputs.js';
 import { isEntityEmpty, isPackableEntity } from '../sim/packActions.js';
 import { isResearchStation, researchSampleCandidate } from '../sim/researchActions.js';
 import { moveBasis, upAt } from '../sim/physics/frames.js';

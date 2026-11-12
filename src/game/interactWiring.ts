@@ -4,11 +4,11 @@
 // (enter placement) > selected light stick. Tab toggles the backpack printer.
 // Queues drain every tick even when the player cannot act (no late fires).
 
-import { STATION_INPUT_SLOTS } from '../core/constants.js';
 import type { Vec3d } from '../core/math.js';
 import type { EntityId } from '../sim/entities.js';
 import type { World } from '../sim/world.js';
-import { depositCandidate, printerFor } from '../sim/craftingActions.js';
+import { depositCandidate, inputSlotsFor } from '../sim/stationInputs.js';
+import { printerFor } from '../sim/craftingActions.js';
 import {
   isResearchStation,
   researchFor,
@@ -116,7 +116,7 @@ export function tickInteraction(deps: InteractDeps): void {
       return;
     }
     const candidate = inventory ? depositCandidate(world, inventory, station) : null;
-    if (candidate && printer.inputs.length < STATION_INPUT_SLOTS) {
+    if (candidate && printer.inputs.length < inputSlotsFor(station)) {
       world.dispatch({ type: 'depositToStation', playerId, stationId });
       return;
     }

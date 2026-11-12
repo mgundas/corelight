@@ -363,6 +363,8 @@ describe('save round trip', () => {
           progressS: 0.75,
           inputs: [],
           outputReady: 'platform',
+          // M12: furnace fuel boost is a free-form printer field.
+          boosted: true,
         },
       },
     });

@@ -263,9 +263,10 @@ describe('brownout priority', () => {
     // A per-tick energy check would chatter (~30 transitions/s). The buffer
     // gives a slow duty cycle, not 30 Hz flicker.
     expect(transitions).toBeLessThanOrEqual(8);
-    // It did run (the 2 s smelt finished); the point is that it did not
-    // toggle on/off every tick while the buffer recharged.
-    expect(ctx.world.entities.get(furnace)?.components.printer?.outputReady).toBe('iron');
+    // It did run at least one tick; the point is that it did not toggle
+    // on/off every tick while the buffer recharged. (M12: the smelt is 10 s,
+    // so 3 s of chattering is no longer guaranteed to finish the job.)
+    expect(ctx.world.entities.get(furnace)?.components.printer?.progressS).toBeGreaterThan(0);
   });
 
   it('breaks priority ties by stable entity id', () => {

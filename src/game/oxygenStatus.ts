@@ -8,6 +8,7 @@ import { dot, normalize, sub, type Vec3d } from '../core/math.js';
 import type { EntityId } from '../sim/entities.js';
 import { moveBasis, upAt } from '../sim/physics/frames.js';
 import type { World } from '../sim/world.js';
+import { layerAt } from '../terrain/density.js';
 import { isOnOxygenNetwork } from '../sim/systems/oxygen.js';
 import { habitatsOn } from '../sim/systems/tethers.js';
 
@@ -23,6 +24,8 @@ export interface OxygenStatus {
   /** 0..OXYGEN_MAX (old saves report full via the lazy default). */
   oxygen: number;
   onNetwork: boolean;
+  /** Mantle heat (M12): show the orange vignette while this layer is hot. */
+  heat: boolean;
   /** Shown when off-network and a habitat exists. */
   habitat: NavHint | null;
   /** Shown while the lost-backpack marker waits. */
@@ -71,5 +74,17 @@ export function oxygenStatusFor(world: World, playerId: EntityId | null): Oxygen
   const markerId = player.components.player?.deathMarkerId;
   const marker = markerId ? world.entities.get(markerId) : undefined;
   if (marker) deathMarker = hintFor(world, playerId, marker.position, 'Pack');
-  return { oxygen, onNetwork, habitat, deathMarker };
+  // Heat reads the same config data as the oxygen hazard, so the vignette
+  // can never disagree with the drain (works on and off the tether network).
+  let heat = false;
+  const planet = world.planets.find((p) => p.id === player.planetId);
+  if (planet) {
+    const local = {
+      x: player.position.x - planet.center.x,
+      y: player.position.y - planet.center.y,
+      z: player.position.z - planet.center.z,
+    };
+    heat = (layerAt(planet, local.x, local.y, local.z).hazardOxygenMult ?? 1) > 1;
+  }
+  return { oxygen, onNetwork, heat, habitat, deathMarker };
 }

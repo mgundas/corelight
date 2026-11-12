@@ -1,6 +1,6 @@
 import type { Vec3d } from '../core/math.js';
 import { IDENTITY_QUAT } from '../core/math.js';
-import { BACKPACK_SLOTS, OXYGEN_MAX } from '../core/constants.js';
+import { BACKPACK_SLOTS, DRILL_MK1_HARDNESS, OXYGEN_MAX } from '../core/constants.js';
 import { events } from '../core/events.js';
 import type { EditMode } from '../terrain/edits.js';
 import type { EntityId, SnapRef } from './entities.js';
@@ -136,7 +136,7 @@ export function applyAction(world: World, action: Action): void {
             embeddedTime: 0,
             escaping: false,
             soil: 0,
-            toolHardness: 2,
+            toolHardness: DRILL_MK1_HARDNESS,
             lastTooHard: -Infinity,
             headlampOn: true,
             deathMarkerId: null,

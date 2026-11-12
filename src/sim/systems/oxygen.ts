@@ -13,7 +13,6 @@ import {
   BACKPACK_SLOTS,
   OXYGEN_CANISTER_THRESHOLD,
   OXYGEN_DRAIN_PER_S,
-  OXYGEN_MANTLE_MULT,
   OXYGEN_MAX,
   OXYGEN_RANGE_M,
   OXYGEN_REFILL_PER_S,
@@ -32,7 +31,10 @@ import { habitatsOn, liveTethersNear } from './tethers.js';
 /** Off-network drain multiplier for a planet-local point (hookable per planet). */
 export function hazardMultiplier(planet: PlanetConfig, local: { x: number; y: number; z: number }): number {
   const layer = layerAt(planet, local.x, local.y, local.z);
-  if (layer.name === 'mantle') return OXYGEN_MANTLE_MULT;
+  // M12: hazards are planet-config data (Sela's mantle = 2x). Any layer can
+  // define one, so Vorn's surface cold can move here with its M13 config.
+  const configured = layer.hazardOxygenMult;
+  if (configured !== undefined) return configured;
   // Vorn's surface cold (PROJECT.md: 1.5x). No Vorn config exists yet (M13),
   // so on Sela this branch never fires; it is pinned by a test with a
   // renamed Sela config.
