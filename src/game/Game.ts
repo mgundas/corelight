@@ -55,7 +55,6 @@ export class Game {
   readonly packHold = new PackHold();
   private readonly hud = new Hud();
   private readonly stationUi: StationUi;
-
   private playerId: EntityId | null = null;
   private readonly colliders: TerrainColliders;
   private readonly colliderPool = new ColliderPool();
@@ -158,6 +157,7 @@ export class Game {
       overlay: this.overlay,
       renderer: this.renderer,
       toggleFly: () => this.toggleFly(),
+      enabled: () => !this.paused && !this.stationUi.isOpen(),
     });
     this.unsubscribeOriginShifted = events.on('originShifted', () => {
       this.originShifts += 1;

@@ -17,6 +17,9 @@ export interface GameDebugDeps {
   overlay: DebugOverlay;
   renderer: Renderer;
   toggleFly(): void;
+  /** False while paused or a station panel is open: V must not yank the
+   * player away from an open UI / behind the menu (M13 review). */
+  enabled(): boolean;
 }
 
 /** Install the game debug hotkeys; returns a disposer. */
@@ -30,8 +33,7 @@ export function installGameDebugKeys(deps: GameDebugDeps): () => void {
       deps.renderer.setWireframe(wireframe);
     },
     toggleBounds: () => deps.renderer.setBoundsVisible(!deps.renderer.bounds.isVisible()),
-    devTeleportToVorn: () => {
-      teleportToVorn(deps.world, deps.planets, deps.playerId());
-    },
+    devTeleportToVorn: () =>
+      deps.enabled() && teleportToVorn(deps.world, deps.planets, deps.playerId()),
   });
 }

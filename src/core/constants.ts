@@ -40,12 +40,23 @@ export const STREAM_APPLY_BUDGET_MS = 4;
 /** Cap on mesh jobs in flight (keeps the pool queue short so reprioritizing works). */
 export const STREAM_MAX_INFLIGHT_FACTOR = 2;
 
-/** Priority bonus (meters) for chunks inside the view frustum. */
+/** Overall priority bonus (meters) for chunks inside the view frustum. */
 export const STREAM_FRUSTUM_BONUS = 300;
 
 /** Levels a non-primary planet may drop below lodMaxLevel while far away
  * (M13): the boot prebuilt L(max-2)..L(max) is the far planet's detail floor. */
 export const FAR_PLANET_LOD_DROP = 2;
+
+/** Hysteresis for the current-planet choice (M13): a challenger must be
+ * closer by more than this before the LOD/fog primary flips, so the swap
+ * cannot flap at the exact midpoint between two planets. */
+export const PRIMARY_PLANET_HYSTERESIS_M = 200;
+
+/** Self-illumination of the far planet (M13): the one sun lights it during
+ * the shared day, but the local night fade would leave it black. A dim
+ * emissive glow keeps it readable as a lit sphere without lighting cave
+ * ceilings on the player's own planet (see lighting.ts). */
+export const FAR_PLANET_EMISSIVE = 0.14;
 
 /** Low-poly detail for the M00 placeholder sphere (icosahedron subdivisions). */
 export const PLACEHOLDER_SPHERE_DETAIL = 5;
@@ -149,11 +160,6 @@ export const SKY_SPACE_END_M = 2000;
 
 /** Atmosphere shell radius as a multiple of the planet radius. */
 export const ATMOSPHERE_SHELL_MULT = 1.35;
-
-/** Sun intensity floor at night: the sun keeps shining in space (M13), so
- * the far planet is lit even while the player's own hemisphere is dark. The
- * local ground still goes black because its normals face away from the sun. */
-export const SUN_NIGHT_FLOOR = 0.12;
 
 /** Headlamp spotlight tuning (SpotLight attached to the camera). */
 export const HEADLAMP_COLOR = 0xfff1d6;

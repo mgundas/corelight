@@ -7,6 +7,7 @@ import type { PlanetConfig } from '../planets/PlanetConfig.js';
 import { nearestPlanet } from '../planets/solarSystem.js';
 import type { EnvironmentUpdate } from '../render/Renderer.js';
 import { upAt } from '../sim/physics/frames.js';
+import { primaryPlanet } from '../sim/physics/gravity.js';
 import { depthBelowSurface, sunDirection } from '../sim/systems/sun.js';
 import type { World } from '../sim/world.js';
 
@@ -27,7 +28,7 @@ export function findFollowed(
   const entity = playerId ? world.entities.get(playerId) : undefined;
   if (!entity) return null;
   const planet =
-    planets.find((p) => p.id === entity.planetId) ?? nearestPlanet(planets, entity.position);
+    planets.find((p) => p.id === entity.planetId) ?? primaryPlanet(planets, entity.position);
   return { position: entity.position, planet };
 }
 
@@ -45,10 +46,10 @@ export function computeEnvironment(
   headlampOn: boolean,
 ): EnvironmentUpdate {
   const sunDir = sunDirection(world);
-  const skyPlanet = nearestPlanet(planets, activePos);
+  const skyPlanet = primaryPlanet(planets, activePos);
   const skyLocal = sub(activePos, skyPlanet.center);
   const elevation = dot(sunDir, upAt(skyPlanet, activePos));
-  const focusPlanet = nearestPlanet(planets, focusWorld);
+  const focusPlanet = primaryPlanet(planets, focusWorld);
   const focusLocal = sub(focusWorld, focusPlanet.center);
   return {
     sunDirWorld: sunDir,

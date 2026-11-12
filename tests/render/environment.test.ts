@@ -6,18 +6,14 @@ import { describe, expect, it } from 'vitest';
 import { SELA } from '../../src/planets/configs/sela.js';
 import { VORN } from '../../src/planets/configs/vorn.js';
 import { ATMOSPHERE_SHELL_MULT } from '../../src/core/constants.js';
-import {
-  FOG_CAVE_DENSITY,
-  FOG_SURFACE_DENSITY,
-  SUN_NIGHT_FLOOR,
-} from '../../src/core/constants.js';
+import { FOG_CAVE_DENSITY, FOG_SURFACE_DENSITY } from '../../src/core/constants.js';
 import { nodeKey, nodeOrigin } from '../../src/terrain/octree.js';
 import type { MeshResult } from '../../src/terrain/workerPool.js';
 import { maybeShiftOrigin, resetOrigin, toLocal } from '../../src/render/floatingOrigin.js';
 import { Atmosphere } from '../../src/render/atmosphere.js';
 import { ChunkMeshes } from '../../src/render/chunkMeshes.js';
 import { LightingRig } from '../../src/render/lighting.js';
-import { Sky } from '../../src/render/sky.js';
+import { Sky, SUN_DISC_DISTANCE } from '../../src/render/sky.js';
 
 const DAY: [number, number, number] = [0.5, 0.7, 1];
 
@@ -64,13 +60,45 @@ describe('LightingRig', () => {
       skyTint: DAY,
       groundTint: [0.6, 0.55, 0.45],
     });
-    // Night keeps the M13 sun floor (the shared sun lights the far planet);
-    // the local ground is dark from its normals, not from a dead sun.
-    expect(rig.sun.intensity).toBeCloseTo(2.2 * SUN_NIGHT_FLOOR, 10);
+    // M05 night restored (M13 review): the far planet has its own emissive
+    // glow, so the local key light stays fully off below the horizon.
+    expect(rig.sun.intensity).toBe(0);
     expect(rig.headlamp.visible).toBe(false);
     // Night, deep underground: dim floor of the day fill, depth-scaled.
     expect(rig.hemi.intensity).toBeCloseTo(0.06 * 0.08, 10);
     rig.dispose();
+  });
+
+  it('repositions the sun and shadow target from world doubles after an origin shift', () => {
+    resetOrigin();
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(70, 1, 0.1, 200000);
+    const rig = new LightingRig(scene, camera);
+    // Jump the floating origin to Vorn (as the Sela -> Vorn flight does).
+    expect(maybeShiftOrigin(VORN.center)).not.toBe(null);
+    const focus = {
+      x: VORN.center.x + 10,
+      y: VORN.center.y + VORN.radius,
+      z: VORN.center.z,
+    };
+    rig.update({
+      sunDirWorld: { x: 1, y: 0, z: 0 },
+      focusWorld: focus,
+      elevation: 1,
+      depthBelowM: 0,
+      headlampOn: false,
+      skyTint: DAY,
+      groundTint: [0.6, 0.55, 0.45],
+    });
+    const local = toLocal(focus);
+    // Texel snapping stays within one texel (<1 m at 64 m / 2048).
+    expect(rig.sun.target.position.x).toBeCloseTo(local.x, 0);
+    expect(rig.sun.target.position.y).toBeCloseTo(local.y, 0);
+    expect(rig.sun.target.position.z).toBeCloseTo(local.z, 0);
+    // The sun sits 250 m along +X from the (snapped) shadow focus.
+    expect(rig.sun.position.x).toBeCloseTo(rig.sun.target.position.x + 250, 0);
+    rig.dispose();
+    resetOrigin();
   });
 });
 
@@ -89,6 +117,36 @@ describe('Sky', () => {
     expect(bg.r + bg.g + bg.b).toBeLessThan(0.2);
     sky.dispose();
     expect(scene.fog).toBe(null);
+  });
+
+  it('keeps stars and the sun disc on the camera after an origin shift', () => {
+    resetOrigin();
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(70, 1, 0.1, 200000);
+    const sky = new Sky(scene, camera, 1337);
+    expect(maybeShiftOrigin({ x: 2016, y: 0, z: 0 })).not.toBe(null);
+    // The renderer keeps the camera in local coordinates after a shift.
+    camera.position.set(10, 20, 600);
+    sky.update({
+      sunDirWorld: { x: 0, y: 1, z: 0 },
+      elevation: 1,
+      altitudeM: 0,
+      depthBelowM: 0,
+      dayColor: DAY,
+    });
+    const stars = scene.children.find((child) => child instanceof THREE.Points) as
+      | THREE.Points
+      | undefined;
+    const disc = scene.children.find((child) => child instanceof THREE.Mesh) as
+      | THREE.Mesh
+      | undefined;
+    if (!stars || !disc) throw new Error('sky objects missing');
+    expect(stars.position.x).toBeCloseTo(10, 6);
+    expect(stars.position.y).toBeCloseTo(20, 6);
+    expect(disc.position.x).toBeCloseTo(10, 6);
+    expect(disc.position.y).toBeCloseTo(20 + SUN_DISC_DISTANCE, 6);
+    sky.dispose();
+    resetOrigin();
   });
 });
 

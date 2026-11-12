@@ -7,6 +7,7 @@
 import {
   EMPTY_KEY_BUDGET,
   FAR_PLANET_LOD_DROP,
+  PRIMARY_PLANET_HYSTERESIS_M,
   STREAM_APPLY_BUDGET_MS,
   STREAM_FRUSTUM_BONUS,
   STREAM_MAX_INFLIGHT_FACTOR,
@@ -14,7 +15,7 @@ import {
 } from '../core/constants.js';
 import { distance, type Vec3d } from '../core/math.js';
 import type { PlanetConfig } from '../planets/PlanetConfig.js';
-import { nearestPlanet } from '../planets/solarSystem.js';
+import { selectPrimaryPlanet } from '../sim/physics/gravity.js';
 import { parseChunkKey } from './chunkKey.js';
 import { createDensityField, type DensityField } from './density.js';
 import type { EditAttachment } from './edits.js';
@@ -56,6 +57,8 @@ export class ChunkManager {
   private desiredKeys = new Set<string>();
   private desiredCount = 0;
   private lastTick = -Infinity;
+  /** Current primary planet (hysteresis; the renderer reads it for fog). */
+  private primaryId: string | null = null;
   /** Priority rebuilds for player-edited chunks (owns the edit lineage). */
   private readonly remesher: EditRemesher;
 
@@ -82,6 +85,11 @@ export class ChunkManager {
 
   get pendingCount(): number {
     return this.queued.size + this.inflight.size;
+  }
+
+  /** Primary planet of the last diff (the camera's planet, with hysteresis). */
+  get primaryPlanetId(): string | null {
+    return this.primaryId;
   }
 
   /** Adopt boot pre-generation results (meshes + empty keys) before streaming. */
@@ -146,17 +154,22 @@ export class ChunkManager {
       if (now - failedAt >= FAILURE_COOLDOWN_MS) this.failures.delete(key);
     }
     const desired: DesiredNode[] = [];
-    // Full LOD belongs to the planet the camera is in (nearest by center;
-    // the SOI makes this exact near the surface). All other planets are
-    // capped at their boot-prebuilt levels so a far world can never steal
-    // the worker pool from the one the player is looking at (M13).
-    const primaryId = nearestPlanet(
-      this.planets.map((state) => state.config),
+    // Full LOD belongs to the planet the camera is in (dominant SOI; nearest
+    // outside every SOI). A challenger must win by a margin so the LOD/fog
+    // primary cannot flap at the exact midpoint (M13 review). All other
+    // planets are capped at their boot-prebuilt levels so a far world can
+    // never steal the pool from the one the player is looking at.
+    const configs = this.planets.map((state) => state.config);
+    const primary = selectPrimaryPlanet(
+      configs,
       cameraWorld,
-    ).id;
+      this.primaryId,
+      PRIMARY_PLANET_HYSTERESIS_M,
+    );
+    this.primaryId = primary.id;
     for (const { config, field } of this.planets) {
       const minLevel =
-        config.id === primaryId ? 0 : Math.max(0, config.lodMaxLevel - FAR_PLANET_LOD_DROP);
+        config.id === this.primaryId ? 0 : Math.max(0, config.lodMaxLevel - FAR_PLANET_LOD_DROP);
       const local: Vec3d = {
         x: cameraWorld.x - config.center.x,
         y: cameraWorld.y - config.center.y,
@@ -216,16 +229,31 @@ export class ChunkManager {
         }
       });
     }
-    // Near-planet jobs always submit before far ones: even if a far root
-    // ever scored closer, the player's own planet must never wait behind it.
+    // Fair submission order (M13 review): two near jobs per far job while
+    // both queues have work. The near planet keeps priority, but a far
+    // planet with pending work can never be starved by a permanently full
+    // near queue (its coarse shell is booted, yet detail edits/refreshes
+    // must still make progress).
     const waiting = [...this.queued.values()];
     const nearJobs = waiting
-      .filter((job) => job.planet.id === primaryId)
+      .filter((job) => job.planet.id === this.primaryId)
       .sort((a, b) => a.score - b.score);
     const farJobs = waiting
-      .filter((job) => job.planet.id !== primaryId)
+      .filter((job) => job.planet.id !== this.primaryId)
       .sort((a, b) => a.score - b.score);
-    const sorted = [...nearJobs, ...farJobs];
+    const sorted: Array<DesiredNode & { score: number }> = [];
+    let nearIndex = 0;
+    let farIndex = 0;
+    while (nearIndex < nearJobs.length || farIndex < farJobs.length) {
+      for (let n = 0; n < 2 && nearIndex < nearJobs.length; n += 1) {
+        sorted.push(nearJobs[nearIndex] as DesiredNode & { score: number });
+        nearIndex += 1;
+      }
+      if (farIndex < farJobs.length) {
+        sorted.push(farJobs[farIndex] as DesiredNode & { score: number });
+        farIndex += 1;
+      }
+    }
     while (this.inflight.size < this.maxInflight && sorted.length > 0) {
       const job = sorted.shift() as DesiredNode & { score: number };
       this.queued.delete(job.key);

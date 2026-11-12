@@ -5,7 +5,9 @@ import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { IDENTITY_QUAT } from '../../src/core/math.js';
 import type { Entity } from '../../src/sim/entities.js';
+import { snapWorld } from '../../src/sim/snapUtils.js';
 import { CableViews } from '../../src/render/views/cableViews.js';
+import { maybeShiftOrigin, resetOrigin, toLocal } from '../../src/render/floatingOrigin.js';
 
 function platform(id: string, x: number): Entity {
   return {
@@ -59,5 +61,32 @@ describe('cable views', () => {
     views.sync([a, b, dangling]);
     expect(views.group.children).toHaveLength(0);
     views.dispose();
+  });
+
+  it('repositions cable endpoints after a floating-origin shift', () => {
+    resetOrigin();
+    const views = new CableViews();
+    const a = platform('a', 0);
+    const b = platform('b', 4);
+    const c = cable('c', 'a', 'b');
+    views.sync([a, b, c]);
+    const aWorld = snapWorld(a, 0);
+    const bWorld = snapWorld(b, 0);
+    if (!aWorld || !bWorld) throw new Error('missing snap');
+    // Fly ~2 km from the base: the origin jumps, the cable follows.
+    expect(maybeShiftOrigin({ x: 2016, y: 0, z: 0 })).not.toBe(null);
+    views.sync([a, b, c]);
+    const line = views.group.children[0] as THREE.Line;
+    const positions = line.geometry.attributes['position'] as THREE.BufferAttribute;
+    const aLocal = toLocal(aWorld);
+    const bLocal = toLocal(bWorld);
+    expect(positions.getX(0)).toBeCloseTo(aLocal.x, 3);
+    expect(positions.getY(0)).toBeCloseTo(aLocal.y, 3);
+    expect(positions.getZ(0)).toBeCloseTo(aLocal.z, 3);
+    expect(positions.getX(8)).toBeCloseTo(bLocal.x, 3);
+    expect(positions.getY(8)).toBeCloseTo(bLocal.y, 3);
+    expect(positions.getZ(8)).toBeCloseTo(bLocal.z, 3);
+    views.dispose();
+    resetOrigin();
   });
 });

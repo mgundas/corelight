@@ -119,6 +119,9 @@ export class Renderer {
     this.sky = new Sky(this.scene, this.camera, worldSeed);
     this.atmosphere = new Atmosphere(this.scene);
     for (const planet of planets) this.atmosphere.addPlanet(planet);
+    // Compile both per-planet chunk materials now instead of at the first
+    // Sela<->Vorn midpoint fog flip (no mid-flight shader stall, M13 review).
+    this.chunks.prewarm(planets);
     this.scene.add(this.chunks.group);
     this.scene.add(this.bounds.group);
     this.scene.add(this.playerView.group);
@@ -180,13 +183,15 @@ export class Renderer {
 
   /** Stream LOD around the camera; call every frame with the world position. */
   updateStreaming(cameraWorld: Vec3d): void {
-    // Only the camera's planet keeps surface fog; the far planet must stay
-    // visible as a crisp sphere from ~12.7 km away (M13).
-    this.chunks.setFogPlanet(nearestPlanet(this.planets, cameraWorld).id);
     // Frustum planes come out of the camera in render-local space; the
     // streamer tests world-frame chunk boxes, so translate by the origin.
     const worldPlanes = toWorldPlanes(frustumPlanes(this.camera), getOrigin());
     this.streamer.update(cameraWorld, worldPlanes);
+    // Fog follows the streamer's primary planet (same hysteresis), so the
+    // near planet keeps the exact M05 look and the far one stays crisp.
+    this.chunks.setFogPlanet(
+      this.streamer.primaryPlanetId ?? nearestPlanet(this.planets, cameraWorld).id,
+    );
     if (this.bounds.isVisible()) this.bounds.update(this.chunks.boxes());
   }
 

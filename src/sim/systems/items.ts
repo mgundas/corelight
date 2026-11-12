@@ -10,11 +10,11 @@
 
 import RAPIER from '@dimforge/rapier3d-compat';
 import { ITEM_BODY_RADIUS } from '../../core/constants.js';
-import type { Vec3d } from '../../core/math.js';
+import type { Quat, Vec3d } from '../../core/math.js';
 import type { PlanetConfig } from '../../planets/PlanetConfig.js';
 import { isItemLike, type EntityId } from '../entities.js';
-import { toLocalFrame, toWorldFrame, transferPlanetId } from '../physics/frames.js';
-import { gravityAt } from '../physics/gravity.js';
+import { toLocalFrame, toWorldFrame } from '../physics/frames.js';
+import { gravityAt, type GravitySample } from '../physics/gravity.js';
 import type { World } from '../world.js';
 
 export interface ItemsOptions {
@@ -35,26 +35,50 @@ interface ItemBody {
 
 export function makeItemsSystem(opts: ItemsOptions): (world: World, dt: number) => void {
   const bodies = new Map<EntityId, ItemBody>();
+  /** One SOI sample per loose item per tick (relabel + gravity reuse). */
+  const samples = new Map<EntityId, GravitySample>();
+  /** Motion captured from a body that had to be recreated in another frame. */
+  const transferred = new Map<EntityId, { linvel: Vec3d; rotation: Quat }>();
+  const removeBody = (entry: ItemBody): void => {
+    try {
+      opts.worldFor(entry.planetId).removeRigidBody(entry.body);
+    } catch {
+      // World already disposed in tests; nothing to do.
+    }
+  };
 
   return (world: World, dt: number) => {
-    // SOI handoff (M13): relabel loose items by the dominant planet before
-    // the body bookkeeping below, so a body left in the old planet world is
-    // dropped and recreated in the new one on this tick.
+    samples.clear();
+    transferred.clear();
+    // SOI handoff (M13): one gravity sample per loose item drives the planet
+    // relabel, the body swap and the integration below. A single scan keeps
+    // the per-tick cost at one gravityAt per item (M13 review).
     for (const entity of world.entities.values()) {
       if (!isItemLike(entity) || entity.components.item?.holder !== undefined) continue;
-      entity.planetId = transferPlanetId(opts.planets, entity.position);
+      const sample = gravityAt(opts.planets, entity.position);
+      samples.set(entity.id, sample);
+      entity.planetId = sample.planet?.id ?? null;
     }
     // Drop bodies for deleted, carried, grabbed, or planet-swapped items.
     for (const [id, entry] of [...bodies]) {
       const entity = world.entities.get(id);
       const held = entity?.components.item?.holder !== undefined;
       const grabbed = entity?.components.item?.grabbedBy !== undefined;
-      if (!entity || !isItemLike(entity) || held || grabbed || entity.planetId !== entry.planetId) {
-        try {
-          opts.worldFor(entry.planetId).removeRigidBody(entry.body);
-        } catch {
-          // World already disposed in tests; nothing to do.
-        }
+      if (!entity || !isItemLike(entity) || held || grabbed) {
+        removeBody(entry);
+        bodies.delete(id);
+        continue;
+      }
+      if (entity.planetId !== entry.planetId) {
+        // Task 5: transfer position, velocity and rotation. Positions are
+        // world doubles; the zero-gravity planet worlds mean linvel/rotation
+        // are frame-independent, so carry them across the body swap (M13
+        // review: a fresh body used to drop in-flight velocity).
+        transferred.set(id, {
+          linvel: { ...entry.body.linvel() },
+          rotation: { ...entry.body.rotation() },
+        });
+        removeBody(entry);
         bodies.delete(id);
       }
     }
@@ -85,16 +109,21 @@ export function makeItemsSystem(opts: ItemsOptions): (world: World, dt: number) 
         }
         continue;
       }
-      const sample = gravityAt(opts.planets, entity.position);
-      if (!sample.planet) continue;
+      const sample = samples.get(entity.id);
+      if (!sample || !sample.planet) continue;
       const planet = sample.planet;
       let entry = bodies.get(entity.id);
       if (!entry) {
         const rapierWorld = opts.worldFor(planet.id);
         const local = toLocalFrame(planet, entity.position);
-        const body = rapierWorld.createRigidBody(
-          RAPIER.RigidBodyDesc.dynamic().setTranslation(local.x, local.y, local.z),
-        );
+        let desc = RAPIER.RigidBodyDesc.dynamic().setTranslation(local.x, local.y, local.z);
+        const moved = transferred.get(entity.id);
+        if (moved) {
+          desc = desc
+            .setLinvel(moved.linvel.x, moved.linvel.y, moved.linvel.z)
+            .setRotation(moved.rotation);
+        }
+        const body = rapierWorld.createRigidBody(desc);
         rapierWorld.createCollider(RAPIER.ColliderDesc.ball(ITEM_BODY_RADIUS), body);
         entry = { body, planetId: planet.id };
         bodies.set(entity.id, entry);

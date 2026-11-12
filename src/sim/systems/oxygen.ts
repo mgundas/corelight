@@ -24,6 +24,7 @@ import { distance, IDENTITY_QUAT } from '../../core/math.js';
 import type { PlanetConfig } from '../../planets/PlanetConfig.js';
 import { layerAt } from '../../terrain/density.js';
 import { upAt } from '../physics/frames.js';
+import { findSpawnPosition } from '../physics/spawn.js';
 import type { Entity, EntityId } from '../entities.js';
 import type { World } from '../world.js';
 import { habitatsOn, liveTethersNear } from './tethers.js';
@@ -71,6 +72,50 @@ function consumeCanister(world: World, player: Entity): boolean {
   world.entities.delete(spentId);
   inventory.slots[slot] = null;
   return true;
+}
+
+/**
+ * Where a dead player wakes. PROJECT.md: "respawn at the last habitat". A
+ * habitat on the death planet wins; otherwise the nearest habitat anywhere
+ * (M13: Vorn has no habitat until the M14 kit, so a Vorn death returns the
+ * player to Sela instead of leaving them to die in place forever). With no
+ * habitat at all, fall back to the death planet's surface spawn; deep space
+ * without a habitat stays put.
+ */
+function respawnFor(
+  world: World,
+  planets: PlanetConfig[],
+  player: Entity,
+  deathPlanet: PlanetConfig | undefined,
+): { planetId: string; position: { x: number; y: number; z: number } } | null {
+  let hub: { planet: PlanetConfig; position: { x: number; y: number; z: number } } | null = null;
+  const samePlanet = deathPlanet ? habitatsOn(world, deathPlanet.id)[0] : undefined;
+  if (samePlanet && deathPlanet) hub = { planet: deathPlanet, position: samePlanet.position };
+  if (!hub) {
+    let best = Infinity;
+    for (const planet of planets) {
+      for (const habitat of habitatsOn(world, planet.id)) {
+        const d = distance(habitat.position, player.position);
+        if (d < best) {
+          best = d;
+          hub = { planet, position: habitat.position };
+        }
+      }
+    }
+  }
+  if (hub) {
+    const up = upAt(hub.planet, hub.position);
+    return {
+      planetId: hub.planet.id,
+      position: {
+        x: hub.position.x + up.x * 2,
+        y: hub.position.y + up.y * 2,
+        z: hub.position.z + up.z * 2,
+      },
+    };
+  }
+  if (!deathPlanet) return null;
+  return { planetId: deathPlanet.id, position: findSpawnPosition(deathPlanet, world.seed) };
 }
 
 /**
@@ -153,17 +198,12 @@ function die(world: World, player: Entity, planets: PlanetConfig[]): void {
     components: {},
   });
   if (playerComp) playerComp.deathMarkerId = markerId;
-  const habitat = planet ? habitatsOn(world, planet.id)[0] : undefined;
-  // NOTE: single-habitat v1 respawns at habitats[0]; with several habitats
-  // this must become the last visited one (PROJECT.md). Latent until M10+.
-  if (habitat && planet) {
-    const hub = upAt(planet, habitat.position);
-    player.position = {
-      x: habitat.position.x + hub.x * 2,
-      y: habitat.position.y + hub.y * 2,
-      z: habitat.position.z + hub.z * 2,
-    };
-    player.planetId = planet.id;
+  // M13: habitats are cross-planet rescue now. The marker and the dropped
+  // pack stay on the death planet; only the player teleports.
+  const spawn = respawnFor(world, planets, player, planet);
+  if (spawn) {
+    player.position = spawn.position;
+    player.planetId = spawn.planetId;
   }
   if (playerComp) {
     // Same reset as playerTeleport: no fall velocity, no stale input, out

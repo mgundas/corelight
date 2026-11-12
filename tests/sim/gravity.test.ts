@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { length, normalize, sub } from '../../src/core/math.js';
 import { SELA } from '../../src/planets/configs/sela.js';
-import { gravityAt, sphereOfInfluence } from '../../src/sim/physics/gravity.js';
+import { nearestPlanet } from '../../src/planets/solarSystem.js';
+import {
+  gravityAt,
+  primaryPlanet,
+  selectPrimaryPlanet,
+  sphereOfInfluence,
+} from '../../src/sim/physics/gravity.js';
 import { toLocalFrame, toWorldFrame, upAt } from '../../src/sim/physics/frames.js';
 
 const SURFACE_TOP = { x: 0, y: SELA.radius, z: 0 };
@@ -38,6 +44,32 @@ describe('gravityAt', () => {
     // Deep in Sela's falloff (r=100 -> 0.5x) but at the clone's surface (1x).
     const g = gravityAt([SELA, clone], { x: 100, y: 0, z: 0 });
     expect(g.planet?.id).toBe('clone');
+  });
+});
+
+describe('primary planet', () => {
+  it('uses the dominant SOI, not the geometrically nearest center', () => {
+    // Both SOIs overlap; b is closer to the probe but Sela pulls harder.
+    const b = { ...SELA, id: 'b', center: { x: 300, y: 0, z: 0 }, gravity: 5 };
+    const probe = { x: 200, y: 0, z: 0 };
+    expect(nearestPlanet([SELA, b], probe).id).toBe('b');
+    expect(primaryPlanet([SELA, b], probe).id).toBe('sela');
+    // Outside every SOI it falls back to the nearest planet.
+    const deep = { x: 0, y: sphereOfInfluence(SELA) + 500, z: 0 };
+    expect(primaryPlanet([SELA, b], deep).id).toBe('sela');
+  });
+
+  it('keeps the current owner until a challenger wins by the margin', () => {
+    // a (gravity 4) owns the frame; b (gravity 6) becomes dominant first.
+    const a = { ...SELA, id: 'a', gravity: 4 };
+    const b = { ...SELA, id: 'b', center: { x: 1000, y: 0, z: 0 }, gravity: 6 };
+    const nearB = { x: 520, y: 0, z: 0 };
+    expect(primaryPlanet([a, b], nearB).id).toBe('b');
+    expect(selectPrimaryPlanet([a, b], nearB, 'a', 200).id).toBe('a');
+    // Clearly past the midpoint: the margin no longer holds.
+    expect(selectPrimaryPlanet([a, b], { x: 800, y: 0, z: 0 }, 'a', 200).id).toBe('b');
+    // No current owner: plain primary wins.
+    expect(selectPrimaryPlanet([a, b], nearB, null, 200).id).toBe('b');
   });
 });
 

@@ -24,6 +24,16 @@ export interface LayerConfig {
   hazardKind?: 'heat' | 'cold';
 }
 
+/**
+ * HUD hazard cue for a layer. Falls back to `heat` when a multiplier was set
+ * without an explicit kind, so the drain and the vignette can never
+ * disagree (M13 review).
+ */
+export function hazardKindOf(layer: LayerConfig): 'heat' | 'cold' | null {
+  if (layer.hazardKind) return layer.hazardKind;
+  return (layer.hazardOxygenMult ?? 1) > 1 ? 'heat' : null;
+}
+
 export interface CaveConfig {
   /** Spatial frequency of the worm fields (per meter). */
   frequency: number;

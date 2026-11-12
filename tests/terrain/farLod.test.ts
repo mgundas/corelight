@@ -96,4 +96,14 @@ describe('far-planet LOD cap', () => {
     // The far root is queued behind the near work, not lost.
     expect(manager.pendingCount).toBeGreaterThan(1);
   });
+
+  it('interleaves far work so a full near queue cannot starve it', () => {
+    const submitted: string[] = [];
+    const manager = makeManager([SELA, VORN], submitted, 3);
+    manager.update({ x: 10, y: 402, z: 5 }, null, 1e6);
+    expect(submitted.length).toBe(3);
+    // Two near jobs per far job: the far root gets a slot immediately.
+    expect(submitted.filter((key) => key.startsWith('vorn:')).length).toBe(1);
+    expect(submitted.filter((key) => key.startsWith('sela:')).length).toBe(2);
+  });
 });

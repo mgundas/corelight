@@ -11,7 +11,7 @@ import {
   sunIntensityForElevation,
 } from '../../src/render/lighting.js';
 import { dot, normalize } from '../../src/core/math.js';
-import { AMBIENT_DEEP, AMBIENT_SURFACE, SUN_NIGHT_FLOOR } from '../../src/core/constants.js';
+import { AMBIENT_DEEP, AMBIENT_SURFACE } from '../../src/core/constants.js';
 
 describe('sunColorForElevation', () => {
   it('is warm at the horizon and white at noon', () => {
@@ -37,13 +37,14 @@ describe('sunColorForElevation', () => {
 });
 
 describe('sunIntensityForElevation', () => {
-  it('keeps a night floor so the shared sun lights the far planet', () => {
-    const night = sunIntensityForElevation(-1);
-    expect(night).toBeCloseTo(2.2 * SUN_NIGHT_FLOOR, 10);
-    expect(night).toBeGreaterThan(0);
+  it('is dark below the horizon and full by day', () => {
+    // M13 keeps M05's night: the far planet's readability is a separate
+    // emissive glow, never a below-horizon key light (that would light
+    // cave ceilings at night).
+    expect(sunIntensityForElevation(-1)).toBe(0);
     expect(sunIntensityForElevation(1)).toBeCloseTo(2.2, 10);
     const mid = sunIntensityForElevation(0);
-    expect(mid).toBeGreaterThan(night);
+    expect(mid).toBeGreaterThan(0);
     expect(mid).toBeLessThan(2.2);
   });
 });

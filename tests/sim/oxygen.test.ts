@@ -8,7 +8,7 @@ import { SELA } from '../../src/planets/configs/sela.js';
 import { VORN } from '../../src/planets/configs/vorn.js';
 import { OXYGEN_MAX, SIM_DT } from '../../src/core/constants.js';
 import { events } from '../../src/core/events.js';
-import { IDENTITY_QUAT } from '../../src/core/math.js';
+import { IDENTITY_QUAT, distance } from '../../src/core/math.js';
 import { findSpawnPosition } from '../../src/sim/physics/spawn.js';
 import { upAt } from '../../src/sim/physics/frames.js';
 import { hazardMultiplier, updateOxygen } from '../../src/sim/systems/oxygen.js';
@@ -204,7 +204,8 @@ describe('oxygen system', () => {
     expect(hazardMultiplier(hot, mantleLocal)).toBe(3);
   });
 
-  it('a canister auto-fires at 20 and refills to full', () => {    const { world, playerId } = oxygenWorld();
+  it('a canister auto-fires at 20 and refills to full', () => {
+    const { world, playerId } = oxygenWorld();
     const player = world.entities.get(playerId);
     if (!player) throw new Error('no player');
     const up = upAt(SELA, player.position);
@@ -339,5 +340,43 @@ describe('oxygen system', () => {
       );
       expect(d).toBeLessThan(5);
     }
+  });
+
+  it('rescues a Vorn death to the nearest habitat on another planet', () => {
+    // M13: Vorn has no habitat until the M14 kit; without cross-planet
+    // rescue the player would die in place forever. The pack and marker stay
+    // on Vorn, the player wakes at Sela's habitat.
+    const planets = [SELA, VORN];
+    const world = new World(1337, { planets });
+    world.dispatch({ type: 'spawnPlayer', planetId: VORN.id, position: findSpawnPosition(VORN, 1337) });
+    world.tick(SIM_DT);
+    const playerId = [...world.entities.values()].find((e) => e.kind === 'player')?.id ?? '';
+    if (!playerId) throw new Error('no player');
+    world.dispatch({ type: 'spawnHabitat', planetId: SELA.id, position: findSpawnPosition(SELA, 1337) });
+    world.tick(SIM_DT);
+    const habitat = [...world.entities.values()].find(
+      (e) => e.kind === 'machine' && e.components.machine?.machineType === 'habitat',
+    );
+    if (!habitat) throw new Error('no habitat');
+    world.addSystem((w, dt) => updateOxygen(w, planets, dt));
+    const dying = world.entities.get(playerId);
+    if (!dying) throw new Error('player lost');
+    const deathPos = { ...dying.position };
+    giveItem(world, playerId, 'hydrite');
+    setOxygen(world, playerId, 0);
+    world.tick(SIM_DT);
+    const respawned = world.entities.get(playerId);
+    if (!respawned) throw new Error('player lost after death');
+    expect(respawned.planetId).toBe(SELA.id);
+    expect(distance(respawned.position, habitat.position)).toBeLessThan(4);
+    // The dropped pack and the marker stay where the player died (Vorn).
+    const marker = [...world.entities.values()].find((e) => e.kind === 'marker');
+    expect(marker?.planetId).toBe(VORN.id);
+    expect(distance(marker?.position ?? { x: 0, y: 0, z: 0 }, deathPos)).toBeLessThan(0.01);
+    const dropped = [...world.entities.values()].find(
+      (e) => e.kind === 'item' && e.components.item?.itemId === 'hydrite',
+    );
+    expect(dropped?.planetId).toBe(VORN.id);
+    expect(oxygenOf(world, playerId)).toBe(OXYGEN_MAX);
   });
 });

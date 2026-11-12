@@ -4,7 +4,7 @@
 // the floating origin.
 
 import * as THREE from 'three';
-import { CHUNK_CACHE_BUDGET } from '../core/constants.js';
+import { CHUNK_CACHE_BUDGET, FAR_PLANET_EMISSIVE } from '../core/constants.js';
 import type { Vec3d } from '../core/math.js';
 import type { PlanetConfig } from '../planets/PlanetConfig.js';
 import { chunkSizeForLevel, parseChunkKey } from '../terrain/chunkKey.js';
@@ -23,7 +23,7 @@ export class ChunkMeshes {
   readonly group = new THREE.Group();
   /** One material per planet: the far planet renders with fog disabled. */
   private readonly materials = new Map<string, THREE.MeshStandardMaterial>();
-  /** Planet whose material keeps scene fog (nearest to the camera). */
+  /** Planet whose material keeps scene fog (the streamer's primary). */
   private fogPlanetId: string | null = null;
   /** F4 state; new per-planet materials must inherit it. */
   private wireframe = false;
@@ -48,23 +48,34 @@ export class ChunkMeshes {
    * Fog follows the camera's planet only: from Sela's surface Vorn is
    * ~12.7 km away, where the surface FogExp2 would erase it completely.
    * The far planet stays crisp; the near one keeps the exact M05 look.
+   * The far material also carries a dim emissive glow (M13): the sun fades
+   * out at the player's night, so without it the far sphere would go black.
    */
   setFogPlanet(planetId: string): void {
     if (this.fogPlanetId === planetId) return;
     this.fogPlanetId = planetId;
     for (const [id, material] of this.materials) {
       material.fog = id === planetId;
+      material.emissiveIntensity = id === planetId ? 0 : FAR_PLANET_EMISSIVE;
       // Fog is a shader define in three.js: recompile only on the flip.
       material.needsUpdate = true;
     }
   }
 
-  private materialFor(planetId: string): THREE.MeshStandardMaterial {
+  /** Create the per-planet materials up front (boot) so the first
+   * midpoint fog flip never compiles a shader mid-flight (M13 review). */
+  prewarm(planets: PlanetConfig[]): void {
+    for (const planet of planets) this.materialFor(planet);
+  }
+
+  private materialFor(config: PlanetConfig): THREE.MeshStandardMaterial {
+    const planetId = config.id;
     let material = this.materials.get(planetId);
     if (!material) {
       // Flat-shaded low-poly look: facets stay crisp. The marching-cubes
       // tessellation is clean quads (mid-cell crossings), so flat shading
       // reads as stylized facets, not noise. Entity views share the style.
+      const far = this.fogPlanetId !== null && this.fogPlanetId !== planetId;
       material = new THREE.MeshStandardMaterial({
         vertexColors: true,
         flatShading: true,
@@ -72,6 +83,10 @@ export class ChunkMeshes {
         metalness: 0,
         fog: this.fogPlanetId === null || this.fogPlanetId === planetId,
         wireframe: this.wireframe,
+        // Tinted by the planet's own ice/rock palette; strong enough to read
+        // as a lit sphere at ~12.7 km, dim enough not to look like a lamp.
+        emissive: new THREE.Color(...config.surfaceColors.flat),
+        emissiveIntensity: far ? FAR_PLANET_EMISSIVE : 0,
       });
       this.materials.set(planetId, material);
     }
@@ -128,7 +143,7 @@ export class ChunkMeshes {
     geometry.setAttribute('normal', new THREE.BufferAttribute(result.normals, 3));
     geometry.setAttribute('color', new THREE.BufferAttribute(result.colors, 3));
     geometry.setIndex(new THREE.BufferAttribute(result.indices, 1));
-    const mesh = new THREE.Mesh(geometry, this.materialFor(config.id));
+    const mesh = new THREE.Mesh(geometry, this.materialFor(config));
     mesh.userData['chunkKey'] = result.key;
     // Only the two finest LODs cast/receive shadows: the 64 m cascade
     // follows the player, so coarser shells never intersect it. This keeps

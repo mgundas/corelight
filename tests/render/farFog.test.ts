@@ -52,6 +52,37 @@ describe('far-planet fog', () => {
     meshes.dispose();
   });
 
+  it('self-illuminates only the far planet so it stays a lit sphere at night', () => {
+    resetOrigin();
+    const meshes = new ChunkMeshes();
+    const sela = resultFor(SELA, { x: 1, y: 2, z: 3 });
+    const vorn = resultFor(VORN, { x: 0, y: 0, z: 0 });
+    meshes.add(SELA, sela);
+    meshes.add(VORN, vorn);
+    meshes.setFogPlanet('sela');
+    expect(materialOf(meshes, sela.key).emissiveIntensity).toBe(0);
+    expect(materialOf(meshes, vorn.key).emissiveIntensity).toBeGreaterThan(0);
+    meshes.setFogPlanet('vorn');
+    expect(materialOf(meshes, sela.key).emissiveIntensity).toBeGreaterThan(0);
+    expect(materialOf(meshes, vorn.key).emissiveIntensity).toBe(0);
+    meshes.dispose();
+  });
+
+  it('prewarms both per-planet materials before the first mesh arrives', () => {
+    resetOrigin();
+    const meshes = new ChunkMeshes();
+    // No throw, and the fog flip afterwards applies to the prewarmed pair.
+    meshes.prewarm([SELA, VORN]);
+    meshes.setFogPlanet('vorn');
+    const sela = resultFor(SELA, { x: 1, y: 2, z: 3 });
+    const vorn = resultFor(VORN, { x: 0, y: 0, z: 0 });
+    meshes.add(SELA, sela);
+    meshes.add(VORN, vorn);
+    expect(materialOf(meshes, sela.key).fog).toBe(false);
+    expect(materialOf(meshes, vorn.key).fog).toBe(true);
+    meshes.dispose();
+  });
+
   it('does not recompile materials when the near planet is unchanged', () => {
     resetOrigin();
     const meshes = new ChunkMeshes();

@@ -9,6 +9,7 @@ import { PLANETS } from '../../src/planets/solarSystem.js';
 import { cavernStack, createDensityField, layerAt } from '../../src/terrain/density.js';
 import { findSpawnPosition } from '../../src/sim/physics/spawn.js';
 import { pickResource } from '../../src/sim/nodes.js';
+import { hazardKindOf, type LayerConfig } from '../../src/planets/PlanetConfig.js';
 
 describe('Vorn config', () => {
   it('matches PROJECT.md and ARCHITECTURE.md', () => {
@@ -85,5 +86,12 @@ describe('Vorn config', () => {
     expect(pickResource(() => 0.1, 'sela', 'mantle', false)).not.toBe('voidstone');
     expect(pickResource(() => 0.5, 'vorn', 'core_shell', true)).toBe('voidstone');
     expect(pickResource(() => 0.5, 'sela', 'core_shell', true)).toBe('heartglass');
+  });
+
+  it('derives the HUD hazard cue from the drain multiplier when no kind is set', () => {
+    expect(hazardKindOf(VORN.layers[0] as LayerConfig)).toBe('cold');
+    expect(hazardKindOf(VORN.layers[1] as LayerConfig)).toBeNull();
+    expect(hazardKindOf(VORN.layers[2] as LayerConfig)).toBe('heat');
+    expect(hazardKindOf({ ...(VORN.layers[1] as LayerConfig), hazardOxygenMult: 3 })).toBe('heat');
   });
 });

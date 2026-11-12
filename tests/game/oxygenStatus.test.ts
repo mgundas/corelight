@@ -84,6 +84,11 @@ describe('oxygenStatusFor', () => {
     const status = oxygenStatusFor(world, playerId);
     expect(status?.deathMarker?.label).toBe('Pack');
     expect(status?.deathMarker?.distM).toBeCloseTo(10, 0);
+    // Cross-planet rescue: the pack stayed on Vorn, so no surface bearing.
+    const markerEntity = world.entities.get(markerId);
+    if (!markerEntity) throw new Error('marker lost');
+    markerEntity.planetId = 'vorn';
+    expect(oxygenStatusFor(world, playerId)?.deathMarker).toBeNull();
   });
 
   it('returns null with no player', () => {

@@ -2,8 +2,9 @@
 // transfer is an id relabel (world doubles never change); body owners rebind
 // to the new planet's Rapier world. Pinned end to end on real Vorn terrain.
 
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { IDENTITY_QUAT, length, sub } from '../../src/core/math.js';
+import { SIM_DT } from '../../src/core/constants.js';
 import { SELA } from '../../src/planets/configs/sela.js';
 import { VORN } from '../../src/planets/configs/vorn.js';
 import type { PlanetConfig } from '../../src/planets/PlanetConfig.js';
@@ -22,6 +23,12 @@ const PLANETS: PlanetConfig[] = [SELA, VORN];
 beforeAll(async () => {
   await initPhysics();
 }, 30000);
+
+beforeEach(() => {
+  // Each test owns its planet worlds: bodies from an earlier item test must
+  // not leak into the next one's counters.
+  disposePhysics();
+});
 
 afterAll(() => {
   disposePhysics();
@@ -114,5 +121,46 @@ describe('item frame handoff', () => {
     expect(world.entities.get(nearSela)?.planetId).toBe('sela');
     expect(physicsWorldFor('vorn').bodies.len()).toBe(1);
     expect(physicsWorldFor('sela').bodies.len()).toBe(1);
+  });
+
+  it('carries linear velocity and rotation across the body swap (task 5)', () => {
+    const world = new World(1337, { planets: PLANETS });
+    world.addSystem(makeItemsSystem({ planets: PLANETS, worldFor: physicsWorldFor }));
+    const selaSpawn = findSpawnPosition(SELA, 1337);
+    const itemId = world.nextId('item');
+    world.entities.set(itemId, {
+      id: itemId,
+      kind: 'item',
+      planetId: 'sela',
+      position: { x: selaSpawn.x, y: selaSpawn.y + 20, z: selaSpawn.z },
+      rotation: { ...IDENTITY_QUAT },
+      components: { item: { itemId: 'resin' } },
+    });
+    world.tick();
+    const selaBodies = physicsWorldFor('sela').bodies.getAll();
+    expect(selaBodies.length).toBe(1);
+    const before = selaBodies[0];
+    if (!before) throw new Error('no Sela body');
+    before.setLinvel({ x: 3, y: 4, z: 5 }, true);
+    // 45 degrees around Z, so the transfer is visible in a non-identity quat.
+    before.setRotation({ x: 0, y: 0, z: 0.3826834, w: 0.9238795 }, true);
+    // Cross into Vorn's SOI with the stale Sela label.
+    const item = world.entities.get(itemId);
+    if (!item) throw new Error('item lost');
+    const vornSpawn = findSpawnPosition(VORN, 1337);
+    item.position = { x: vornSpawn.x, y: vornSpawn.y + 20, z: vornSpawn.z };
+    world.tick();
+    expect(item.planetId).toBe('vorn');
+    expect(physicsWorldFor('sela').bodies.len()).toBe(0);
+    const vornBodies = physicsWorldFor('vorn').bodies.getAll();
+    expect(vornBodies.length).toBe(1);
+    const after = vornBodies[0];
+    if (!after) throw new Error('no Vorn body');
+    const vel = after.linvel();
+    expect(vel.x).toBeCloseTo(3, 6);
+    // The items system applies one tick of Vorn gravity after the swap.
+    expect(vel.y).toBeCloseTo(4 - VORN.gravity * SIM_DT, 5);
+    expect(vel.z).toBeCloseTo(5, 6);
+    expect(after.rotation().w).toBeCloseTo(0.9238795, 6);
   });
 });

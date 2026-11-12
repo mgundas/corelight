@@ -3,8 +3,9 @@
 // the radius and eases to 15% at the center (floaty core chamber).
 // Outside every sphere of influence (3 * radius) gravity is zero.
 
-import { length, normalize, scale, sub, type Vec3d } from '../../core/math.js';
+import { distance, length, normalize, scale, sub, type Vec3d } from '../../core/math.js';
 import type { PlanetConfig } from '../../planets/PlanetConfig.js';
+import { nearestPlanet } from '../../planets/solarSystem.js';
 
 export interface GravitySample {
   /** Acceleration vector in m/s^2, world frame. Zero outside every SOI. */
@@ -58,4 +59,35 @@ export function gravityAt(planets: PlanetConfig[], worldPos: Vec3d): GravitySamp
   }
   const toward = normalize(sub(best.center, worldPos));
   return { vector: scale(toward, bestMag), planet: best };
+}
+
+/**
+ * Planet that owns a world position: the dominant SOI planet (the one whose
+ * gravity wins), or the nearest one outside every SOI (M13). Streaming,
+ * fog, sky and physics all resolve "the planet for this position" through
+ * this one helper so they cannot disagree.
+ */
+export function primaryPlanet(planets: PlanetConfig[], worldPos: Vec3d): PlanetConfig {
+  return gravityAt(planets, worldPos).planet ?? nearestPlanet(planets, worldPos);
+}
+
+/**
+ * Primary planet with hysteresis: once `currentId` owns the frame, a
+ * challenger must be closer by more than `marginM` before taking over. This
+ * keeps the LOD/fog swap from flapping at the exact midpoint between two
+ * planets (M13 review).
+ */
+export function selectPrimaryPlanet(
+  planets: PlanetConfig[],
+  worldPos: Vec3d,
+  currentId: string | null,
+  marginM: number,
+): PlanetConfig {
+  const candidate = primaryPlanet(planets, worldPos);
+  if (!currentId || currentId === candidate.id) return candidate;
+  const current = planets.find((planet) => planet.id === currentId);
+  if (!current) return candidate;
+  return distance(worldPos, candidate.center) + marginM < distance(worldPos, current.center)
+    ? candidate
+    : current;
 }

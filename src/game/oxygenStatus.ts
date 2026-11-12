@@ -5,6 +5,7 @@
 
 import { OXYGEN_MAX } from '../core/constants.js';
 import { dot, normalize, sub, type Vec3d } from '../core/math.js';
+import { hazardKindOf } from '../planets/PlanetConfig.js';
 import type { EntityId } from '../sim/entities.js';
 import { moveBasis, upAt } from '../sim/physics/frames.js';
 import type { World } from '../sim/world.js';
@@ -75,7 +76,12 @@ export function oxygenStatusFor(world: World, playerId: EntityId | null): Oxygen
   let deathMarker: NavHint | null = null;
   const markerId = player.components.player?.deathMarkerId;
   const marker = markerId ? world.entities.get(markerId) : undefined;
-  if (marker) deathMarker = hintFor(world, playerId, marker.position, 'Pack');
+  // A cross-planet death (Vorn -> Sela rescue) leaves the pack on the other
+  // planet: a surface bearing would point the wrong way, so only hint when
+  // the pack is on the player's planet.
+  if (marker && marker.planetId === player.planetId) {
+    deathMarker = hintFor(world, playerId, marker.position, 'Pack');
+  }
   // Hazards read the same config data as the oxygen drain, so the vignette
   // can never disagree with the drain (works on and off the tether network).
   let heat = false;
@@ -88,8 +94,9 @@ export function oxygenStatusFor(world: World, playerId: EntityId | null): Oxygen
       z: player.position.z - planet.center.z,
     };
     const layer = layerAt(planet, local.x, local.y, local.z);
-    heat = layer.hazardKind === 'heat';
-    cold = layer.hazardKind === 'cold';
+    const kind = hazardKindOf(layer);
+    heat = kind === 'heat';
+    cold = kind === 'cold';
   }
   return { oxygen, onNetwork, heat, cold, habitat, deathMarker };
 }
