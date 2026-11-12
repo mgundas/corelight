@@ -10,6 +10,36 @@ import {
 } from '../../src/sim/physics/frames.js';
 
 describe('moveBasis', () => {
+  it('keeps the default heading continuous around a full polar great circle', () => {
+    let previous = moveBasis(vec3(0, 1, 0), 0, 0);
+    for (let i = 1; i <= 720; i += 1) {
+      const angle = i * Math.PI / 360;
+      const up = vec3(Math.sin(angle), Math.cos(angle), 0);
+      const current = moveBasis(up, 0, 0);
+      expect(dot(previous.forward, current.forward)).toBeGreaterThan(0.999);
+      expect(dot(previous.right, current.right)).toBeGreaterThan(0.999);
+      expect(dot(current.forward, up)).toBeCloseTo(0, 6);
+      previous = current;
+    }
+  });
+
+  it('keeps forward/right continuous across the former pole reference-axis boundary', () => {
+    // The report's (52.2, 391.1, 17.9) lies just inside this latitude.
+    for (const y of [391.1, -391.1]) {
+      for (const z of [0, 17.9, -17.9]) {
+        const x = Math.sqrt(y * y * (1 / 0.99 ** 2 - 1) - z * z);
+        const before = normalize(vec3(x - 0.01, y, z));
+        const after = normalize(vec3(x + 0.01, y, z));
+        for (const yaw of [0, 0.7, 2]) {
+          const a = moveBasis(before, yaw, 0.2);
+          const b = moveBasis(after, yaw, 0.2);
+          expect(dot(a.forward, b.forward)).toBeGreaterThan(0.999);
+          expect(dot(a.right, b.right)).toBeGreaterThan(0.999);
+        }
+      }
+    }
+  });
+
   it('produces an orthonormal aim frame with pitch', () => {
     const up = vec3(0, 1, 0);
     const { forward, right } = moveBasis(up, 0.7, 0.3);

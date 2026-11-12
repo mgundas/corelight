@@ -125,6 +125,7 @@ d += editDelta(localPos)                                        // player edits
 - Gravity: direction = toward planet center. Magnitude `g = planet.gravity * clamp(r / (0.5 * planet.radius), 0.15, 1.0)`. Inside the core chamber this gives low gravity.
 - Sphere of influence = `3 * planet.radius`. Outside every SOI, gravity is zero.
 - Character controller: Rapier `KinematicCharacterController` with a capsule. Its "up" is the direction away from the planet center, updated every tick. The player body is rotated so its local up matches.
+- Movement and orbit camera share `moveBasis`: rotate the spawn +X heading from +Y onto radial up, then apply yaw/pitch. Do not switch projection reference axes at a latitude threshold: that reverses held movement and snaps the camera when crossing it.
 - Items and machines are dynamic bodies with custom gravity applied each tick (Rapier global gravity is zero; we apply forces ourselves).
 
 ## Simulation model

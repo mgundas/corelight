@@ -1,10 +1,25 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { CameraRig, CAM_DISTANCE_MAX, CAM_DISTANCE_MIN } from '../../src/player/cameraRig.js';
 import { DEFAULT_SETTINGS, updateSettings } from '../../src/core/settings.js';
+import { distance, normalize } from '../../src/core/math.js';
 
 beforeEach(() => { updateSettings(DEFAULT_SETTINGS); });
 
 describe('CameraRig', () => {
+  it('does not whip around when walking across the old movement-frame latitude boundary', () => {
+    const rig = new CameraRig();
+    rig.distance = 8;
+    const y = 391.1;
+    const z = 17.9;
+    const x = Math.sqrt(y * y * (1 / 0.99 ** 2 - 1) - z * z);
+    const before = { x: x - 0.01, y, z };
+    const after = { x: x + 0.01, y, z };
+    rig.update(before, normalize(before), () => null, 1 / 60);
+    const cameraBefore = { ...rig.position };
+    rig.update(after, normalize(after), () => null, 1 / 60);
+    expect(distance(cameraBefore, rig.position)).toBeLessThan(0.1);
+  });
+
   it('clamps zoom to [2, 8]', () => {
     const rig = new CameraRig();
     for (let i = 0; i < 20; i += 1) rig.zoom(-100);

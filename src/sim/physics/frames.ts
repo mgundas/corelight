@@ -56,15 +56,19 @@ export function upAt(planet: PlanetConfig, worldPos: Vec3d): Vec3d {
  * plane. Pure math: safe to share between sim and render-side camera code.
  */
 export function moveBasis(up: Vec3d, yaw: number, pitch: number): { forward: Vec3d; right: Vec3d } {
-  const ref = Math.abs(up.y) < 0.99 ? { x: 0, y: 1, z: 0 } : { x: 1, y: 0, z: 0 };
-  const east = normalize(cross(up, ref));
-  const north = cross(east, up);
+  // Rotate the spawn frame onto radial up. Switching projection axes at
+  // a latitude threshold flips both movement and the camera, trapping a
+  // held-forward player on that invisible boundary.
+  const normal = normalize(up);
+  const align = quatFromTo({ x: 0, y: 1, z: 0 }, normal);
+  const north = rotateVector({ x: 1, y: 0, z: 0 }, align);
+  const east = cross(normal, north);
   // Yaw rotates around up; yaw = 0 faces north, positive yaw turns right.
   const cosY = Math.cos(yaw);
   const sinY = Math.sin(yaw);
   const flatFwd = add(scale(north, cosY), scale(east, sinY));
-  const right = normalize(cross(flatFwd, up));
-  const forward = normalize(add(scale(flatFwd, Math.cos(pitch)), scale(up, Math.sin(pitch))));
+  const right = normalize(cross(flatFwd, normal));
+  const forward = normalize(add(scale(flatFwd, Math.cos(pitch)), scale(normal, Math.sin(pitch))));
   return { forward, right };
 }
 
