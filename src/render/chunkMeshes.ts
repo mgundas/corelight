@@ -1,5 +1,5 @@
 // Render-side chunk meshes: one THREE.Mesh per worker MeshResult, with one
-// flat-shaded vertex-color material per planet (the far planet disables fog,
+// smooth-shaded vertex-color material per planet (the far planet disables fog,
 // M13). Positions are stored in world-space doubles; every mesh is placed via
 // the floating origin.
 
@@ -72,13 +72,12 @@ export class ChunkMeshes {
     const planetId = config.id;
     let material = this.materials.get(planetId);
     if (!material) {
-      // Flat-shaded low-poly look: facets stay crisp. The marching-cubes
-      // tessellation is clean quads (mid-cell crossings), so flat shading
-      // reads as stylized facets, not noise. Entity views share the style.
+      // Density-gradient normals agree across equal-resolution boundaries.
+      // Flat shading discards them and exposes the LOD triangulation grid.
       const far = this.fogPlanetId !== null && this.fogPlanetId !== planetId;
       material = new THREE.MeshStandardMaterial({
         vertexColors: true,
-        flatShading: true,
+        flatShading: false,
         roughness: 1,
         metalness: 0,
         fog: this.fogPlanetId === null || this.fogPlanetId === planetId,
@@ -152,6 +151,13 @@ export class ChunkMeshes {
     const castsShadow = level <= 1;
     mesh.castShadow = castsShadow;
     mesh.receiveShadow = castsShadow;
+    // Skirts cover LOD cracks, but their vertical faces are not terrain:
+    // casting them into the sun map draws artificial dark chunk outlines.
+    // Keep one mesh/draw call; restrict only the shadow pass's index range.
+    const surfaceCount = result.surfaceIndexCount ?? result.indices.length;
+    geometry.setDrawRange(0, result.indices.length);
+    mesh.onBeforeShadow = () => { geometry.setDrawRange(0, surfaceCount); };
+    mesh.onAfterShadow = () => { geometry.setDrawRange(0, result.indices.length); };
     // Worker origin is planet-local; world = planetCenter + chunkOrigin.
     const world: Vec3d = {
       x: config.center.x + result.origin.x,

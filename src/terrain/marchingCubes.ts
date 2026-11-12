@@ -25,6 +25,8 @@ export interface ChunkMeshData {
   normals: Float32Array;
   colors: Float32Array;
   indices: Uint32Array;
+  /** Index prefix for real terrain; subsequent indices are crack-cover skirts. */
+  surfaceIndexCount: number;
   empty: boolean;
 }
 
@@ -190,6 +192,7 @@ export function polygonize(
     }
   }
 
+  const surfaceIndexCount = indices.length;
   if (options?.skirts) {
     addSkirts(positions, normals, colors, indices, samples, origin, cellSize, colorAt);
   }
@@ -199,6 +202,7 @@ export function polygonize(
     normals: new Float32Array(normals),
     colors: new Float32Array(colors),
     indices: new Uint32Array(indices),
+    surfaceIndexCount,
     empty: indices.length === 0,
   };
 }

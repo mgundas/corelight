@@ -106,7 +106,7 @@ d += editDelta(localPos)                                        // player edits
 - Split rule: a node splits if `distance(camera, nodeCenter) < node.size * LOD_SPLIT_FACTOR` (start with 1.5) and `level > 0`.
 - Skip nodes that are fully solid or fully air (check density at corners plus center with a margin; the worker reports empty meshes, cache that result).
 - Seams between LOD levels: add skirts (extend boundary triangles downward along the inverse normal by `cellSize`). Accept minor visual overlap.
-- Meshing: marching cubes in a worker pool (`navigator.hardwareConcurrency - 1`, min 2, max 6). Output: positions (Float32 planet-local relative to chunk origin), normals, colors, indices.
+- Meshing: marching cubes in a worker pool (`navigator.hardwareConcurrency - 1`, min 2, max 6). Output: positions (Float32 planet-local relative to chunk origin), normals, colors, indices, and `surfaceIndexCount` (the index prefix excluding skirts). Only real surface triangles cast shadows; skirts remain visible crack covers.
 - Priority queue: chunks closest to the camera and in front of it first.
 - Cache meshes per chunk key `planetId:level:x:y:z`; LRU evict when over budget (start: 1500 chunks).
 - At game start, pre-generate levels 5 to 3 for both planets behind the boot screen. This is the only loading screen.
@@ -152,7 +152,7 @@ interface Entity {
 - ACES filmic tone mapping compresses bright highlights. The astronaut's primitive art rig and distance-driven gait are render-only; capsule collision and simulation movement are unchanged.
 
 - `Renderer` subscribes to world state each frame and keeps a `Map<EntityId, Object3D>` of views.
-- Materials: `MeshStandardMaterial` with `vertexColors: true`, `flatShading: true`. Fog color matches the sky.
+- Materials: `MeshStandardMaterial` with `vertexColors: true`; terrain uses smooth worker gradient normals (`flatShading: false`), while props use flat shading. Fog color matches the sky.
 - Lighting underground: ambient intensity scales with depth below the surface (1.0 at surface, 0.08 below 25 m). Headlamp = SpotLight attached to the camera. Light sticks and lumen crystals = PointLights, at most 12 active, nearest first.
 - Atmosphere: back-side sphere shell at `1.25 * radius` with a simple scattering-style gradient shader. Sky color fades to black as altitude rises, stars appear in space.
 - Logarithmic depth buffer on (needed for space to ground scale).

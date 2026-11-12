@@ -156,6 +156,9 @@ describe('skirts', () => {
     expect(plain.empty).toBe(false);
     expect(skirted.empty).toBe(false);
     expect(skirted.indices.length).toBeGreaterThan(plain.indices.length);
+    expect(skirted.surfaceIndexCount).toBe(plain.indices.length);
+    expect(Array.from(skirted.indices.slice(0, skirted.surfaceIndexCount))).toEqual(Array.from(plain.indices));
+    expect(plain.surfaceIndexCount).toBe(plain.indices.length);
     expect(skirted.indices.length % 3).toBe(0);
     // Every index addresses a real vertex.
     const verts = skirted.positions.length / 3;

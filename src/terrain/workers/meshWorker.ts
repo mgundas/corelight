@@ -29,6 +29,8 @@ export interface MeshResult {
   normals: Float32Array;
   colors: Float32Array;
   indices: Uint32Array;
+  /** Absent on older/prebuilt results: treat the full mesh as terrain. */
+  surfaceIndexCount?: number;
   empty: boolean;
   /** Echoed from the job (undefined for pre-edit jobs). */
   editVersion?: number;
@@ -89,6 +91,7 @@ workerScope.onmessage = (event: MessageEvent<MeshJob>): void => {
       normals: mesh.normals,
       colors: mesh.colors,
       indices: mesh.indices,
+      surfaceIndexCount: mesh.surfaceIndexCount,
       empty: mesh.empty,
       editVersion: job.editVersion,
     };

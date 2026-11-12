@@ -2,7 +2,7 @@
 // eviction. Headless (no WebGL needed for BufferGeometry bookkeeping).
 
 import { describe, expect, it } from 'vitest';
-import type { Mesh, MeshStandardMaterial } from 'three';
+import { Camera, Scene, Group, MeshDepthMaterial, type Mesh, type MeshStandardMaterial, type WebGLRenderer } from 'three';
 import { SELA } from '../../src/planets/configs/sela.js';
 import type { MeshSink } from '../../src/terrain/streaming.js';
 import { nodeKey, nodeOrigin } from '../../src/terrain/octree.js';
@@ -51,13 +51,36 @@ describe('ChunkMeshes', () => {
     meshes.dispose();
   });
 
-  it('uses flat shading for the stylized low-poly look', () => {
+  it('uses the worker gradient normals for smooth terrain shading', () => {
     resetOrigin();
     const meshes = new ChunkMeshes();
     expect(meshes.add(SELA, result(0, { x: 1, y: 2, z: 3 }, false))).toBe('added');
     const mesh = meshes.group.children[0] as Mesh;
     const material = mesh.material as MeshStandardMaterial;
-    expect(material.flatShading).toBe(true);
+    expect(material.flatShading).toBe(false);
+    expect(Array.from(mesh.geometry.getAttribute('normal').array)).toEqual(Array.from(result(0, { x: 1, y: 2, z: 3 }, false).normals));
+    meshes.dispose();
+  });
+
+  it('casts real terrain shadows while retaining skirts only in the visible pass', () => {
+    resetOrigin();
+    const meshes = new ChunkMeshes();
+    const data = result(0, { x: 1, y: 2, z: 3 }, false);
+    data.indices = new Uint32Array([0, 1, 2, 2, 1, 0]);
+    data.surfaceIndexCount = 3;
+    meshes.add(SELA, data);
+    const mesh = meshes.group.children[0] as Mesh;
+    const camera = new Camera();
+    const scene = new Scene();
+    const group = new Group();
+    const depth = new MeshDepthMaterial();
+    expect(mesh.castShadow).toBe(true);
+    expect(mesh.geometry.drawRange.count).toBe(6);
+    mesh.onBeforeShadow({} as WebGLRenderer, scene, camera, camera, mesh.geometry, depth, group);
+    expect(mesh.geometry.drawRange.count).toBe(3);
+    mesh.onAfterShadow({} as WebGLRenderer, scene, camera, camera, mesh.geometry, depth, group);
+    expect(mesh.geometry.drawRange.count).toBe(6);
+    depth.dispose();
     meshes.dispose();
   });
 
