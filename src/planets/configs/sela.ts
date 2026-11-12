@@ -45,6 +45,7 @@ export const SELA: PlanetConfig = {
       // Heat multiplies off-network oxygen drain (PROJECT.md 2x). Lives in
       // the planet config so hazards are data, not code (M12).
       hazardOxygenMult: 2,
+      hazardKind: 'heat',
     },
   ],
   core: {

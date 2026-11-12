@@ -16,6 +16,7 @@ import {
   HEADLAMP_PENUMBRA,
   SHADOW_FRUSTUM_M,
   SHADOW_MAP_SIZE,
+  SUN_NIGHT_FLOOR,
 } from '../core/constants.js';
 import { cross, dot, normalize, smoothstep, type Vec3d } from '../core/math.js';
 import { toLocal } from './floatingOrigin.js';
@@ -26,9 +27,15 @@ export function sunColorForElevation(elevation: number): [number, number, number
   return [1, 0.55 + 0.43 * t, 0.28 + 0.66 * t];
 }
 
-/** Sun fades out just below the horizon (smooth sunset, no pop). */
+/**
+ * Sun fades to a small night floor just below the horizon (smooth sunset,
+ * no pop). The floor matters from M13 on: there is one sun for both planets,
+ * and keeping it fully off would leave Vorn unlit in Sela's night sky. The
+ * player's own ground still reads as night because its normals face away
+ * from the below-horizon sun.
+ */
 export function sunIntensityForElevation(elevation: number): number {
-  return 2.2 * smoothstep(-0.1, 0.08, elevation);
+  return 2.2 * (SUN_NIGHT_FLOOR + (1 - SUN_NIGHT_FLOOR) * smoothstep(-0.1, 0.08, elevation));
 }
 
 /** Ambient scale: 1.0 at the surface, smoothly to 0.08 at 25 m down. */

@@ -603,6 +603,23 @@ body {
   }
 }
 
+/* M13 Vorn cold: icy blue edge tint, pulsing slowly. */
+#cold-tint {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  background:
+    radial-gradient(ellipse at center, transparent 44%, rgb(120 190 255 / 10%) 80%, rgb(170 220 255 / 26%) 100%);
+  transition: opacity 0.9s ease;
+  z-index: 9;
+}
+
+#cold-tint.on {
+  opacity: 1;
+  animation: heat-haze-pulse 3.2s ease-in-out infinite;
+}
+
 #drag-ghost {
   position: fixed;
   display: flex;

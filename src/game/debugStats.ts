@@ -4,10 +4,11 @@
 // this entirely in that case (mesh counts and layer lookups are not free).
 
 import { TOO_HARD_INDICATOR_S } from '../core/constants.js';
-import { length, sub, type Vec3d } from '../core/math.js';
+import { distance, length, sub, type Vec3d } from '../core/math.js';
 import type { PlanetConfig } from '../planets/PlanetConfig.js';
 import { getOrigin } from '../render/floatingOrigin.js';
 import type { Renderer } from '../render/Renderer.js';
+import { gravityAt, sphereOfInfluence } from '../sim/physics/gravity.js';
 import type { TerrainColliders } from '../sim/physics/terrainColliders.js';
 import { timeOfDay } from '../sim/systems/sun.js';
 import { layerAt } from '../terrain/density.js';
@@ -53,6 +54,12 @@ export function updateDebugOverlay(ctx: DebugStatsContext): void {
     .join(' ');
   const player = ctx.playerId ? ctx.world.entities.get(ctx.playerId) : undefined;
   const playerComp = player?.components.player;
+  // M13: SOI readout for the focus point (player in third person, camera in
+  // fly). The dominant planet is the strongest pull; outside every SOI the
+  // nearest planet still gives a meaningful distance to its boundary.
+  const gravity = gravityAt(ctx.planets, focus);
+  const soiPlanet = gravity.planet ?? nearestPlanet(ctx.planets, focus);
+  const soiDistanceM = distance(focus, soiPlanet.center) - sphereOfInfluence(soiPlanet);
   let tetherLive = 0;
   let tetherTotal = 0;
   if (ctx.playerId) {
@@ -105,5 +112,8 @@ export function updateDebugOverlay(ctx: DebugStatsContext): void {
     tetherTotal,
     researchData: ctx.world.research.data,
     researchUnlocked: ctx.world.research.unlocked.length,
+    dominantPlanet: gravity.planet?.name ?? 'deep space',
+    soiDistanceM,
+    physicsFrame: player ? (player.planetId ?? 'deep space') : 'none',
   });
 }

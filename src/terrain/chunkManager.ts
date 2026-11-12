@@ -6,6 +6,7 @@
 
 import {
   EMPTY_KEY_BUDGET,
+  FAR_PLANET_LOD_DROP,
   STREAM_APPLY_BUDGET_MS,
   STREAM_FRUSTUM_BONUS,
   STREAM_MAX_INFLIGHT_FACTOR,
@@ -13,6 +14,7 @@ import {
 } from '../core/constants.js';
 import { distance, type Vec3d } from '../core/math.js';
 import type { PlanetConfig } from '../planets/PlanetConfig.js';
+import { nearestPlanet } from '../planets/solarSystem.js';
 import { parseChunkKey } from './chunkKey.js';
 import { createDensityField, type DensityField } from './density.js';
 import type { EditAttachment } from './edits.js';
@@ -144,13 +146,23 @@ export class ChunkManager {
       if (now - failedAt >= FAILURE_COOLDOWN_MS) this.failures.delete(key);
     }
     const desired: DesiredNode[] = [];
+    // Full LOD belongs to the planet the camera is in (nearest by center;
+    // the SOI makes this exact near the surface). All other planets are
+    // capped at their boot-prebuilt levels so a far world can never steal
+    // the worker pool from the one the player is looking at (M13).
+    const primaryId = nearestPlanet(
+      this.planets.map((state) => state.config),
+      cameraWorld,
+    ).id;
     for (const { config, field } of this.planets) {
+      const minLevel =
+        config.id === primaryId ? 0 : Math.max(0, config.lodMaxLevel - FAR_PLANET_LOD_DROP);
       const local: Vec3d = {
         x: cameraWorld.x - config.center.x,
         y: cameraWorld.y - config.center.y,
         z: cameraWorld.z - config.center.z,
       };
-      for (const node of updateOctree(config, local)) {
+      for (const node of updateOctree(config, local, minLevel)) {
         const key = nodeKey(config.id, node.level, node.coord);
         desired.push({ planet: config, node, key });
         if (this.sink.has(key) || this.inflight.has(key)) continue;
@@ -204,7 +216,16 @@ export class ChunkManager {
         }
       });
     }
-    const sorted = [...this.queued.values()].sort((a, b) => a.score - b.score);
+    // Near-planet jobs always submit before far ones: even if a far root
+    // ever scored closer, the player's own planet must never wait behind it.
+    const waiting = [...this.queued.values()];
+    const nearJobs = waiting
+      .filter((job) => job.planet.id === primaryId)
+      .sort((a, b) => a.score - b.score);
+    const farJobs = waiting
+      .filter((job) => job.planet.id !== primaryId)
+      .sort((a, b) => a.score - b.score);
+    const sorted = [...nearJobs, ...farJobs];
     while (this.inflight.size < this.maxInflight && sorted.length > 0) {
       const job = sorted.shift() as DesiredNode & { score: number };
       this.queued.delete(job.key);

@@ -17,7 +17,7 @@ import type { WorldRay } from './grabPick.js';
 import { installUiCommands } from './uiCommands.js';
 import { resetUiCommands } from '../ui/stores/commandsStore.js';
 import { resetDragStore } from '../ui/stores/dragStore.js';
-import { installDebugKeys } from './debugKeys.js';
+import { installGameDebugKeys } from './debugWiring.js';
 import { toggleFly } from './flyToggle.js';
 import { World } from '../sim/world.js';
 import type { EntityId } from '../sim/entities.js';
@@ -80,7 +80,6 @@ export class Game {
   private lastTickMs = 0;
   private originShifts = 0;
   private flySpeed = 60;
-  private wireframe = false;
   /** Pause menu state: ticks stop, rendering continues behind the menu. */
   private paused = false;
   private readonly planets: PlanetConfig[];
@@ -152,14 +151,13 @@ export class Game {
     this.input.attach(canvas, this.rig, this.rig, this.tool);
     this.input.setEnabled(true);
 
-    this.disposeDebugKeys = installDebugKeys({
+    this.disposeDebugKeys = installGameDebugKeys({
+      world: this.world,
+      planets: this.planets,
+      playerId: () => this.playerId,
       overlay: this.overlay,
+      renderer: this.renderer,
       toggleFly: () => this.toggleFly(),
-      toggleWireframe: () => {
-        this.wireframe = !this.wireframe;
-        this.renderer.setWireframe(this.wireframe);
-      },
-      toggleBounds: () => this.renderer.setBoundsVisible(!this.renderer.bounds.isVisible()),
     });
     this.unsubscribeOriginShifted = events.on('originShifted', () => {
       this.originShifts += 1;

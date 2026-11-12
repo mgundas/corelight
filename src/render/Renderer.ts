@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { SELA } from '../planets/configs/sela.js';
 import type { PlanetConfig, Rgb } from '../planets/PlanetConfig.js';
+import { PLANETS, nearestPlanet } from '../planets/solarSystem.js';
 import type { Quat, Vec3d } from '../core/math.js';
 import { isKnownItem, itemDef, type ItemDef } from '../data/loadData.js';
 import type { Entity } from '../sim/entities.js';
@@ -88,13 +88,15 @@ export class Renderer {
   private readonly screenRaycaster = new THREE.Raycaster();
 
   private readonly handleResize: () => void;
+  private readonly planets: PlanetConfig[];
 
   constructor(
     canvas: HTMLCanvasElement,
     worldSeed: number,
-    planets: PlanetConfig[] = [SELA],
+    planets: PlanetConfig[] = PLANETS,
     prebuilt: PrebuiltTerrain[] = [],
   ) {
+    this.planets = planets;
     this.renderer = new THREE.WebGLRenderer({
       canvas,
       antialias: true,
@@ -178,6 +180,9 @@ export class Renderer {
 
   /** Stream LOD around the camera; call every frame with the world position. */
   updateStreaming(cameraWorld: Vec3d): void {
+    // Only the camera's planet keeps surface fog; the far planet must stay
+    // visible as a crisp sphere from ~12.7 km away (M13).
+    this.chunks.setFogPlanet(nearestPlanet(this.planets, cameraWorld).id);
     // Frustum planes come out of the camera in render-local space; the
     // streamer tests world-frame chunk boxes, so translate by the origin.
     const worldPlanes = toWorldPlanes(frustumPlanes(this.camera), getOrigin());

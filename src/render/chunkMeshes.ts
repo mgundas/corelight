@@ -1,6 +1,7 @@
-// Render-side chunk meshes: one THREE.Mesh per worker MeshResult, all
-// sharing a flat-shaded vertex-color material. Positions are stored in
-// world-space doubles; every mesh is placed via the floating origin.
+// Render-side chunk meshes: one THREE.Mesh per worker MeshResult, with one
+// flat-shaded vertex-color material per planet (the far planet disables fog,
+// M13). Positions are stored in world-space doubles; every mesh is placed via
+// the floating origin.
 
 import * as THREE from 'three';
 import { CHUNK_CACHE_BUDGET } from '../core/constants.js';
@@ -20,7 +21,12 @@ export interface ChunkBox {
 
 export class ChunkMeshes {
   readonly group = new THREE.Group();
-  private readonly material: THREE.MeshStandardMaterial;
+  /** One material per planet: the far planet renders with fog disabled. */
+  private readonly materials = new Map<string, THREE.MeshStandardMaterial>();
+  /** Planet whose material keeps scene fog (nearest to the camera). */
+  private fogPlanetId: string | null = null;
+  /** F4 state; new per-planet materials must inherit it. */
+  private wireframe = false;
   private readonly meshes = new Map<string, THREE.Mesh>();
   /** Chunk-origin world position per key (for origin re-sync). */
   private readonly worldPos = new Map<string, Vec3d>();
@@ -32,19 +38,44 @@ export class ChunkMeshes {
   private readonly levelCounts: number[] = [];
 
   constructor() {
-    // Flat-shaded low-poly look: facets stay crisp. The marching-cubes
-    // tessellation is clean quads (mid-cell crossings), so flat shading
-    // reads as stylized facets, not noise. Entity views share the style.
-    this.material = new THREE.MeshStandardMaterial({
-      vertexColors: true,
-      flatShading: true,
-      roughness: 1,
-      metalness: 0,
-    });
     this.group.name = 'chunks';
     // The group only positions children absolutely (see syncAll): origin
     // shifts must skip it, or every mesh would move twice.
     this.group.userData['originManaged'] = true;
+  }
+
+  /**
+   * Fog follows the camera's planet only: from Sela's surface Vorn is
+   * ~12.7 km away, where the surface FogExp2 would erase it completely.
+   * The far planet stays crisp; the near one keeps the exact M05 look.
+   */
+  setFogPlanet(planetId: string): void {
+    if (this.fogPlanetId === planetId) return;
+    this.fogPlanetId = planetId;
+    for (const [id, material] of this.materials) {
+      material.fog = id === planetId;
+      // Fog is a shader define in three.js: recompile only on the flip.
+      material.needsUpdate = true;
+    }
+  }
+
+  private materialFor(planetId: string): THREE.MeshStandardMaterial {
+    let material = this.materials.get(planetId);
+    if (!material) {
+      // Flat-shaded low-poly look: facets stay crisp. The marching-cubes
+      // tessellation is clean quads (mid-cell crossings), so flat shading
+      // reads as stylized facets, not noise. Entity views share the style.
+      material = new THREE.MeshStandardMaterial({
+        vertexColors: true,
+        flatShading: true,
+        roughness: 1,
+        metalness: 0,
+        fog: this.fogPlanetId === null || this.fogPlanetId === planetId,
+        wireframe: this.wireframe,
+      });
+      this.materials.set(planetId, material);
+    }
+    return material;
   }
 
   get count(): number {
@@ -97,7 +128,8 @@ export class ChunkMeshes {
     geometry.setAttribute('normal', new THREE.BufferAttribute(result.normals, 3));
     geometry.setAttribute('color', new THREE.BufferAttribute(result.colors, 3));
     geometry.setIndex(new THREE.BufferAttribute(result.indices, 1));
-    const mesh = new THREE.Mesh(geometry, this.material);
+    const mesh = new THREE.Mesh(geometry, this.materialFor(config.id));
+    mesh.userData['chunkKey'] = result.key;
     // Only the two finest LODs cast/receive shadows: the 64 m cascade
     // follows the player, so coarser shells never intersect it. This keeps
     // the depth pass to a handful of near chunks.
@@ -145,7 +177,8 @@ export class ChunkMeshes {
   }
 
   setWireframe(enabled: boolean): void {
-    this.material.wireframe = enabled;
+    this.wireframe = enabled;
+    for (const material of this.materials.values()) material.wireframe = enabled;
   }
 
   /** Reposition every mesh from world doubles (call after origin shifts). */
@@ -168,7 +201,8 @@ export class ChunkMeshes {
     this.worldPos.clear();
     this.lru.length = 0;
     this.levelCounts.length = 0;
-    this.material.dispose();
+    for (const material of this.materials.values()) material.dispose();
+    this.materials.clear();
   }
 
   /** Shared mesh teardown for remove() and LRU eviction. */

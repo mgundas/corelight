@@ -23,6 +23,8 @@ export interface HudViewState {
   onNetwork: boolean;
   /** Mantle heat vignette (M12). */
   heat: boolean;
+  /** Cold-layer tint (Vorn surface, M13). */
+  cold: boolean;
   habitatHint: NavHint | null;
   deathHint: NavHint | null;
   power: PowerStatus | null;
@@ -46,6 +48,7 @@ const INITIAL: HudViewState = {
   oxygen: 100,
   onNetwork: true,
   heat: false,
+  cold: false,
   habitatHint: null,
   deathHint: null,
   power: null,

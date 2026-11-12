@@ -20,6 +20,8 @@ export interface LayerConfig {
    * Undefined or 1 = no extra drain; Sela's mantle heat uses 2.
    */
   hazardOxygenMult?: number;
+  /** What kind of hazard this is (drives the HUD cue, M13). */
+  hazardKind?: 'heat' | 'cold';
 }
 
 export interface CaveConfig {

@@ -19,6 +19,7 @@ export function HudView() {
   const oxygen = useHudStore((s) => s.oxygen);
   const onNetwork = useHudStore((s) => s.onNetwork);
   const heat = useHudStore((s) => s.heat);
+  const cold = useHudStore((s) => s.cold);
   const habitatHint = useHudStore((s) => s.habitatHint);
   const deathHint = useHudStore((s) => s.deathHint);
   const power = useHudStore((s) => s.power);
@@ -72,6 +73,7 @@ export function HudView() {
         {navParts.length > 0 ? <div id="hud-nav">{navParts.join('   ')}</div> : null}
       </div>
       <div id="heat-haze" className={heat ? 'on' : ''} />
+      <div id="cold-tint" className={cold ? 'on' : ''} />
       <div key={deathFadeToken} id="death-fade" className={deathFadeToken > 0 ? 'run' : ''} />
     </>
   );

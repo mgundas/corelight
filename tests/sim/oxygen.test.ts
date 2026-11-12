@@ -5,6 +5,7 @@
 
 import { beforeEach, describe, expect, it } from 'vitest';
 import { SELA } from '../../src/planets/configs/sela.js';
+import { VORN } from '../../src/planets/configs/vorn.js';
 import { OXYGEN_MAX, SIM_DT } from '../../src/core/constants.js';
 import { events } from '../../src/core/events.js';
 import { IDENTITY_QUAT } from '../../src/core/math.js';
@@ -155,12 +156,38 @@ describe('oxygen system', () => {
     expect(oxygenOf(world, playerId)).toBeCloseTo(OXYGEN_MAX - 2, 6);
   });
 
-  it('hazardMultiplier pins the Vorn cold hook (renamed Sela)', () => {
-    const vorn = { ...SELA, id: 'vorn' };
-    const spawn = findSpawnPosition(SELA, 1337);
-    const local = { x: spawn.x - SELA.center.x, y: spawn.y - SELA.center.y, z: spawn.z - SELA.center.z };
-    expect(hazardMultiplier(SELA, local)).toBe(1);
-    expect(hazardMultiplier(vorn, local)).toBe(1.5);
+  it('reads Vorn cold/heat hazards from planet config data', () => {
+    const surfaceLocal = { x: 0, y: VORN.radius - 10, z: 0 };
+    const mantleLocal = { x: 0, y: VORN.radius - 200, z: 0 };
+    expect(hazardMultiplier(VORN, surfaceLocal)).toBe(1.5);
+    expect(hazardMultiplier(VORN, mantleLocal)).toBe(2);
+    // Sela keeps no surface hazard (temperate).
+    const selaSurface = { x: 0, y: SELA.radius - 10, z: 0 };
+    expect(hazardMultiplier(SELA, selaSurface)).toBe(1);
+  });
+
+  it('drains 1.5x on Vorn surface and 2x in the Vorn mantle', () => {
+    const world = new World(1337, { planets: [VORN] });
+    world.dispatch({ type: 'spawnPlayer', planetId: VORN.id, position: findSpawnPosition(VORN, 1337) });
+    world.tick(SIM_DT);
+    const player = [...world.entities.values()].find((e) => e.kind === 'player');
+    if (!player) throw new Error('no player');
+    world.addSystem((w, dt) => updateOxygen(w, [VORN], dt));
+    setOxygen(world, player.id, OXYGEN_MAX);
+    for (let i = 0; i < 30; i += 1) world.tick(SIM_DT);
+    expect(oxygenOf(world, player.id)).toBeCloseTo(OXYGEN_MAX - 1.5, 6);
+    // Teleport deep into the mantle: the same planet config switches to heat.
+    const up = upAt(VORN, player.position);
+    const r = VORN.radius - 200;
+    world.dispatch({
+      type: 'playerTeleport',
+      playerId: player.id,
+      position: { x: VORN.center.x + up.x * r, y: VORN.center.y + up.y * r, z: VORN.center.z + up.z * r },
+    });
+    const before = oxygenOf(world, player.id);
+    world.tick(SIM_DT);
+    for (let i = 0; i < 29; i += 1) world.tick(SIM_DT);
+    expect(oxygenOf(world, player.id)).toBeCloseTo(before - 2, 6);
   });
 
   it('reads hazard multipliers from planet config, not hardcoded layers', () => {

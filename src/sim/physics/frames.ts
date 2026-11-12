@@ -17,10 +17,21 @@ import {
   type Vec3d,
 } from '../../core/math.js';
 import type { PlanetConfig } from '../../planets/PlanetConfig.js';
+import { gravityAt } from './gravity.js';
 
 /** World-space doubles -> planet-local doubles. */
 export function toLocalFrame(planet: PlanetConfig, worldPos: Vec3d): Vec3d {
   return sub(worldPos, planet.center);
+}
+
+/**
+ * Planet whose local frame owns a world-space point: the dominant SOI
+ * planet, or null in deep space. The transfer itself is an id relabel —
+ * entity positions stay world-frame doubles (M13) — so no coordinate math
+ * is needed; body owners rebind when the id changes.
+ */
+export function transferPlanetId(planets: PlanetConfig[], worldPos: Vec3d): string | null {
+  return gravityAt(planets, worldPos).planet?.id ?? null;
 }
 
 /** Planet-local doubles -> world-space doubles. */

@@ -28,6 +28,8 @@ export interface HudState {
   onNetwork: boolean;
   /** Mantle heat: render the orange vignette (M12). */
   heat: boolean;
+  /** Cold layer: render the icy blue tint (M13). */
+  cold: boolean;
   /** Where the habitat is (off-network only), else null. */
   habitatHint: NavHint | null;
   /** Where the lost pack waits, else null. */
@@ -70,6 +72,7 @@ export class Hud {
       state.oxygen,
       state.onNetwork,
       state.heat,
+      state.cold,
       state.habitatHint ? `${state.habitatHint.label}${state.habitatHint.distM}${state.habitatHint.bearingDeg}` : '',
       state.deathHint ? `${state.deathHint.label}${state.deathHint.distM}${state.deathHint.bearingDeg}` : '',
       power
@@ -92,6 +95,7 @@ export class Hud {
       oxygen: state.oxygen,
       onNetwork: state.onNetwork,
       heat: state.heat,
+      cold: state.cold,
       habitatHint: state.habitatHint,
       deathHint: state.deathHint,
       power: state.power,

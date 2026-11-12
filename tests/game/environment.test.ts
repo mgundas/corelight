@@ -4,6 +4,8 @@
 
 import { describe, expect, it } from 'vitest';
 import { SELA } from '../../src/planets/configs/sela.js';
+import { VORN } from '../../src/planets/configs/vorn.js';
+import { PLANETS } from '../../src/planets/solarSystem.js';
 import { World } from '../../src/sim/world.js';
 import { isDaylight } from '../../src/sim/systems/sun.js';
 import {
@@ -69,5 +71,29 @@ describe('isDaylight with an offset planet', () => {
     expect(isDaylight(world, 'sela', { x: 0, y: 400, z: 0 })).toBe(true);
     expect(isDaylight(world, 'vorn', { x: 0, y: 400, z: 0 })).toBe(true);
     expect(isDaylight(world, 'vorn', { x: 0, y: -400, z: 0 })).toBe(false);
+  });
+});
+
+describe('second-planet environment', () => {
+  it('switches the sky/ground palette to the planet nearest the camera', () => {
+    const world = new World(1337);
+    world.sunDirection = { x: 0, y: 1, z: 0 };
+    const onVorn = {
+      x: VORN.center.x,
+      y: VORN.center.y + VORN.radius + 10,
+      z: VORN.center.z,
+    };
+    const vornEnv = computeEnvironment(world, PLANETS, onVorn, onVorn, true);
+    expect(vornEnv.dayColor).toEqual(VORN.atmosphere.sky);
+    expect(vornEnv.skyTint).toEqual(VORN.atmosphere.sky);
+    expect(vornEnv.groundTint).toEqual(VORN.atmosphere.ground);
+    expect(vornEnv.altitudeM).toBeCloseTo(10, 6);
+
+    const onSela = { x: 0, y: SELA.radius + 10, z: 0 };
+    expect(computeEnvironment(world, PLANETS, onSela, onSela, true).dayColor).toEqual(SELA.atmosphere.sky);
+    // Deep space: both planets are far, and the M05 altitude fade (tested in
+    // sky.test.ts) turns the background black while stars show.
+    const midway = { x: 6000, y: 750, z: 2000 };
+    expect(computeEnvironment(world, PLANETS, midway, midway, true).altitudeM).toBeGreaterThan(2000);
   });
 });

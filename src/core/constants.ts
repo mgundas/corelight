@@ -43,6 +43,10 @@ export const STREAM_MAX_INFLIGHT_FACTOR = 2;
 /** Priority bonus (meters) for chunks inside the view frustum. */
 export const STREAM_FRUSTUM_BONUS = 300;
 
+/** Levels a non-primary planet may drop below lodMaxLevel while far away
+ * (M13): the boot prebuilt L(max-2)..L(max) is the far planet's detail floor. */
+export const FAR_PLANET_LOD_DROP = 2;
+
 /** Low-poly detail for the M00 placeholder sphere (icosahedron subdivisions). */
 export const PLACEHOLDER_SPHERE_DETAIL = 5;
 
@@ -145,6 +149,11 @@ export const SKY_SPACE_END_M = 2000;
 
 /** Atmosphere shell radius as a multiple of the planet radius. */
 export const ATMOSPHERE_SHELL_MULT = 1.35;
+
+/** Sun intensity floor at night: the sun keeps shining in space (M13), so
+ * the far planet is lit even while the player's own hemisphere is dark. The
+ * local ground still goes black because its normals face away from the sun. */
+export const SUN_NIGHT_FLOOR = 0.12;
 
 /** Headlamp spotlight tuning (SpotLight attached to the camera). */
 export const HEADLAMP_COLOR = 0xfff1d6;

@@ -4,11 +4,16 @@
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { SELA } from '../../src/planets/configs/sela.js';
+import { VORN } from '../../src/planets/configs/vorn.js';
 import { ATMOSPHERE_SHELL_MULT } from '../../src/core/constants.js';
-import { FOG_CAVE_DENSITY, FOG_SURFACE_DENSITY } from '../../src/core/constants.js';
+import {
+  FOG_CAVE_DENSITY,
+  FOG_SURFACE_DENSITY,
+  SUN_NIGHT_FLOOR,
+} from '../../src/core/constants.js';
 import { nodeKey, nodeOrigin } from '../../src/terrain/octree.js';
 import type { MeshResult } from '../../src/terrain/workerPool.js';
-import { resetOrigin } from '../../src/render/floatingOrigin.js';
+import { maybeShiftOrigin, resetOrigin, toLocal } from '../../src/render/floatingOrigin.js';
 import { Atmosphere } from '../../src/render/atmosphere.js';
 import { ChunkMeshes } from '../../src/render/chunkMeshes.js';
 import { LightingRig } from '../../src/render/lighting.js';
@@ -59,7 +64,9 @@ describe('LightingRig', () => {
       skyTint: DAY,
       groundTint: [0.6, 0.55, 0.45],
     });
-    expect(rig.sun.intensity).toBe(0);
+    // Night keeps the M13 sun floor (the shared sun lights the far planet);
+    // the local ground is dark from its normals, not from a dead sun.
+    expect(rig.sun.intensity).toBeCloseTo(2.2 * SUN_NIGHT_FLOOR, 10);
     expect(rig.headlamp.visible).toBe(false);
     // Night, deep underground: dim floor of the day fill, depth-scaled.
     expect(rig.hemi.intensity).toBeCloseTo(0.06 * 0.08, 10);
@@ -105,6 +112,27 @@ describe('Atmosphere', () => {
     expect(sun.value.y).toBeCloseTo(1, 10);
     atmosphere.dispose();
     expect(scene.children.length).toBe(0);
+  });
+
+  it('repositions both shells from world doubles after an origin shift', () => {
+    resetOrigin();
+    const scene = new THREE.Scene();
+    const atmosphere = new Atmosphere(scene);
+    atmosphere.addPlanet(SELA);
+    atmosphere.addPlanet(VORN);
+    // Jump the floating origin to Vorn (as the Sela -> Vorn flight does).
+    expect(maybeShiftOrigin(VORN.center)).not.toBe(null);
+    atmosphere.update({ x: 0, y: 1, z: 0 });
+    const positions = scene.children.map((child) => (child as THREE.Mesh).position.clone());
+    const vornLocal = toLocal(VORN.center);
+    const selaLocal = toLocal(SELA.center);
+    const near = (p: THREE.Vector3, q: { x: number; y: number; z: number }): number =>
+      Math.hypot(p.x - q.x, p.y - q.y, p.z - q.z);
+    expect(positions.some((p) => near(p, vornLocal) < 0.01)).toBe(true);
+    expect(positions.some((p) => near(p, selaLocal) < 0.01)).toBe(true);
+    expect(Math.hypot(selaLocal.x, selaLocal.y, selaLocal.z)).toBeGreaterThan(10000);
+    atmosphere.dispose();
+    resetOrigin();
   });
 });
 

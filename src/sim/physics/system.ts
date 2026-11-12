@@ -18,7 +18,7 @@ import type { TerrainEdits } from '../../terrain/edits.js';
 import type { Entity, EntityId } from '../entities.js';
 import type { System } from '../world.js';
 import { PlayerBody } from './characterController.js';
-import { toLocalFrame, upAt } from './frames.js';
+import { toLocalFrame, transferPlanetId, upAt } from './frames.js';
 import { gravityAt } from './gravity.js';
 import { physicsWorldFor, stepPlanetWorlds } from './rapierWorld.js';
 import { TerrainColliders } from './terrainColliders.js';
@@ -124,6 +124,11 @@ export function makePhysicsSystem(opts: PhysicsOptions): System {
     }
     for (const entity of world.entities.values()) {
       if (entity.kind !== 'player' || !entity.components.player) continue;
+      // SOI handoff (M13): the dominant planet owns the frame. Relabel first
+      // so colliders, oxygen, nodes and tether systems all agree this tick;
+      // the controller rebinds to the new Rapier world when it steps.
+      const dominant = transferPlanetId(opts.planets, entity.position);
+      if (entity.planetId !== dominant) entity.planetId = dominant;
       opts.colliders.update(entity.position, opts.planets, opts.worldSeed);
       // Embedded safety first: inside solid rock normal integration only
       // builds fall velocity (solid chunks have no trimesh), so freeze and

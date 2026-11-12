@@ -26,6 +26,8 @@ export interface OxygenStatus {
   onNetwork: boolean;
   /** Mantle heat (M12): show the orange vignette while this layer is hot. */
   heat: boolean;
+  /** Cold layer (Vorn surface, M13): show the icy blue vignette. */
+  cold: boolean;
   /** Shown when off-network and a habitat exists. */
   habitat: NavHint | null;
   /** Shown while the lost-backpack marker waits. */
@@ -74,9 +76,10 @@ export function oxygenStatusFor(world: World, playerId: EntityId | null): Oxygen
   const markerId = player.components.player?.deathMarkerId;
   const marker = markerId ? world.entities.get(markerId) : undefined;
   if (marker) deathMarker = hintFor(world, playerId, marker.position, 'Pack');
-  // Heat reads the same config data as the oxygen hazard, so the vignette
+  // Hazards read the same config data as the oxygen drain, so the vignette
   // can never disagree with the drain (works on and off the tether network).
   let heat = false;
+  let cold = false;
   const planet = world.planets.find((p) => p.id === player.planetId);
   if (planet) {
     const local = {
@@ -84,7 +87,9 @@ export function oxygenStatusFor(world: World, playerId: EntityId | null): Oxygen
       y: player.position.y - planet.center.y,
       z: player.position.z - planet.center.z,
     };
-    heat = (layerAt(planet, local.x, local.y, local.z).hazardOxygenMult ?? 1) > 1;
+    const layer = layerAt(planet, local.x, local.y, local.z);
+    heat = layer.hazardKind === 'heat';
+    cold = layer.hazardKind === 'cold';
   }
-  return { oxygen, onNetwork, heat, habitat, deathMarker };
+  return { oxygen, onNetwork, heat, cold, habitat, deathMarker };
 }

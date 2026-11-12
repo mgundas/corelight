@@ -3,8 +3,9 @@
 //
 // Each tick, per player: inside OXYGEN_RANGE_M of a live tether or any
 // habitat the suit refills at OXYGEN_REFILL_PER_S; off-network it drains at
-// OXYGEN_DRAIN_PER_S times the hazard multiplier (mantle heat 2x, Vorn
-// surface cold 1.5x — the Vorn branch is a hook for M13, harmless on Sela).
+// OXYGEN_DRAIN_PER_S times the hazard multiplier. Hazards are planet-config
+// data (Sela's mantle heat 2x, Vorn's cold surface 1.5x and mantle 2x), so
+// adding a hazard needs no code change here (M12/M13).
 // A carried oxygen canister auto-fires at OXYGEN_CANISTER_THRESHOLD and
 // refills to full. At 0 the player drops every carried item where they
 // stand, leaves a lost-backpack marker, and wakes up at the habitat.
@@ -16,7 +17,6 @@ import {
   OXYGEN_MAX,
   OXYGEN_RANGE_M,
   OXYGEN_REFILL_PER_S,
-  OXYGEN_VORN_COLD_MULT,
   PICKUP_RANGE_M,
 } from '../../core/constants.js';
 import { events } from '../../core/events.js';
@@ -28,18 +28,11 @@ import type { Entity, EntityId } from '../entities.js';
 import type { World } from '../world.js';
 import { habitatsOn, liveTethersNear } from './tethers.js';
 
-/** Off-network drain multiplier for a planet-local point (hookable per planet). */
+/** Off-network drain multiplier for a planet-local point. Pure data:
+ * a layer's `hazardOxygenMult` (Sela mantle 2x, Vorn cold 1.5x / heat 2x). */
 export function hazardMultiplier(planet: PlanetConfig, local: { x: number; y: number; z: number }): number {
   const layer = layerAt(planet, local.x, local.y, local.z);
-  // M12: hazards are planet-config data (Sela's mantle = 2x). Any layer can
-  // define one, so Vorn's surface cold can move here with its M13 config.
-  const configured = layer.hazardOxygenMult;
-  if (configured !== undefined) return configured;
-  // Vorn's surface cold (PROJECT.md: 1.5x). No Vorn config exists yet (M13),
-  // so on Sela this branch never fires; it is pinned by a test with a
-  // renamed Sela config.
-  if (planet.id === 'vorn' && layer.name === 'surface') return OXYGEN_VORN_COLD_MULT;
-  return 1;
+  return layer.hazardOxygenMult ?? 1;
 }
 
 /** True when the player breathes from a habitat or a live tether. */

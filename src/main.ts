@@ -152,7 +152,7 @@ async function boot(): Promise<void> {
   const hint = document.createElement('div');
   hint.id = 'hint';
   hint.textContent =
-    'Corelight — WASD move, hold RMB look, Space jump, Shift sprint, wheel zoom, Q terrain tool (LMB use, X dig/add, F flatten, Ctrl+wheel size), LMB click grabs/releases items with the tool off, drag backpack slots to move/drop, E interact, hold E pack up, Tab printer, C cable tool, 1-8 slots, T tether, L headlamp, Esc menu, F1 overlay, F3 fly, F4 wireframe, B chunk bounds. Dev: ?dev=1 tethers, ?build=1 power-base packages';
+    'Corelight — WASD move, hold RMB look, Space jump, Shift sprint, wheel zoom, Q terrain tool (LMB use, X dig/add, F flatten, Ctrl+wheel size), LMB click grabs/releases items with the tool off, drag backpack slots to move/drop, E interact, hold E pack up, Tab printer, C cable tool, 1-8 slots, T tether, L headlamp, Esc menu, F1 overlay, F3 fly, F4 wireframe, B chunk bounds. Dev: ?dev=1 tethers + V teleports to Vorn, ?build=1 power-base packages';
   app.appendChild(hint);
 
   const { prebuilt } = await runBootSafe(bootSeed, params.skipBoot);

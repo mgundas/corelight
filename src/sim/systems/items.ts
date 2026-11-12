@@ -13,7 +13,7 @@ import { ITEM_BODY_RADIUS } from '../../core/constants.js';
 import type { Vec3d } from '../../core/math.js';
 import type { PlanetConfig } from '../../planets/PlanetConfig.js';
 import { isItemLike, type EntityId } from '../entities.js';
-import { toLocalFrame, toWorldFrame } from '../physics/frames.js';
+import { toLocalFrame, toWorldFrame, transferPlanetId } from '../physics/frames.js';
 import { gravityAt } from '../physics/gravity.js';
 import type { World } from '../world.js';
 
@@ -37,6 +37,13 @@ export function makeItemsSystem(opts: ItemsOptions): (world: World, dt: number) 
   const bodies = new Map<EntityId, ItemBody>();
 
   return (world: World, dt: number) => {
+    // SOI handoff (M13): relabel loose items by the dominant planet before
+    // the body bookkeeping below, so a body left in the old planet world is
+    // dropped and recreated in the new one on this tick.
+    for (const entity of world.entities.values()) {
+      if (!isItemLike(entity) || entity.components.item?.holder !== undefined) continue;
+      entity.planetId = transferPlanetId(opts.planets, entity.position);
+    }
     // Drop bodies for deleted, carried, grabbed, or planet-swapped items.
     for (const [id, entry] of [...bodies]) {
       const entity = world.entities.get(id);

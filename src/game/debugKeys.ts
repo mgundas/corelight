@@ -1,5 +1,5 @@
-// Debug hotkeys (F1 overlay, F3 fly, F4 wireframe, B bounds). F5 is
-// deliberately NOT handled: the browser must keep it for page refresh.
+// Debug hotkeys (F1 overlay, F3 fly, F4 wireframe, B bounds, V dev teleport).
+// F5 is deliberately NOT handled: the browser must keep it for page refresh.
 
 import type { DebugOverlay } from '../ui/debugOverlay.js';
 
@@ -8,6 +8,8 @@ export interface DebugKeyDeps {
   toggleFly(): void;
   toggleWireframe(): void;
   toggleBounds(): void;
+  /** ?dev=1 only: teleport the player to Vorn's surface (V). */
+  devTeleportToVorn(): void;
 }
 
 /** Install the window keydown listener; returns a disposer. */
@@ -26,6 +28,11 @@ export function installDebugKeys(deps: DebugKeyDeps): () => void {
       // B (not F5): F5 must reach the browser so the page can refresh.
       e.preventDefault();
       deps.toggleBounds();
+    } else if (e.code === 'KeyV') {
+      // M13 debug: Vorn is a long flight away; this must also work while
+      // flying (the window listener is independent of player input).
+      e.preventDefault();
+      deps.devTeleportToVorn();
     }
   };
   window.addEventListener('keydown', onKey);

@@ -90,13 +90,17 @@ export function childrenOf(config: PlanetConfig, node: OctreeNode): OctreeNode[]
  * split: their center is within half the diagonal (0.87 * size) of any
  * interior point, so level-0 detail surrounds the camera everywhere,
  * including caves and the core.
+ *
+ * `minLevel` is the detail floor (M13 far planets): a node at that level is
+ * returned as a leaf even when the split rule would refine it, so the result
+ * stays a complete partition and coarse parents never leave holes.
  */
-export function updateOctree(config: PlanetConfig, cameraLocal: Vec3d): OctreeNode[] {
+export function updateOctree(config: PlanetConfig, cameraLocal: Vec3d, minLevel = 0): OctreeNode[] {
   const leaves: OctreeNode[] = [];
   const stack: OctreeNode[] = [createRoot(config)];
   while (stack.length > 0) {
     const node = stack.pop() as OctreeNode;
-    if (node.level > 0 && distance(cameraLocal, node.center) < node.size * LOD_SPLIT_FACTOR) {
+    if (node.level > minLevel && distance(cameraLocal, node.center) < node.size * LOD_SPLIT_FACTOR) {
       for (const child of childrenOf(config, node)) stack.push(child);
     } else {
       leaves.push(node);

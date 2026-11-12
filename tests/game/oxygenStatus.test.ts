@@ -3,6 +3,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { SELA } from '../../src/planets/configs/sela.js';
+import { VORN } from '../../src/planets/configs/vorn.js';
 import { SIM_DT } from '../../src/core/constants.js';
 import { IDENTITY_QUAT } from '../../src/core/math.js';
 import { findSpawnPosition } from '../../src/sim/physics/spawn.js';
@@ -105,5 +106,31 @@ describe('oxygenStatusFor', () => {
     world.dispatch({ type: 'playerTeleport', playerId, position: deep });
     world.tick(SIM_DT);
     expect(oxygenStatusFor(world, playerId)?.heat).toBe(true);
+    expect(oxygenStatusFor(world, playerId)?.cold).toBe(false);
+  });
+
+  it("marks Vorn's cold surface and hot mantle for the right vignette", () => {
+    const world = new World(1337, { planets: [VORN] });
+    world.dispatch({ type: 'spawnPlayer', planetId: VORN.id, position: findSpawnPosition(VORN, 1337) });
+    world.tick(SIM_DT);
+    const playerId = [...world.entities.values()].find((e) => e.kind === 'player')?.id ?? '';
+    if (!playerId) throw new Error('no player');
+    const surface = oxygenStatusFor(world, playerId);
+    expect(surface?.cold).toBe(true);
+    expect(surface?.heat).toBe(false);
+    // Deep in the mantle the same planet switches to heat.
+    const player = world.entities.get(playerId);
+    if (!player) throw new Error('no player entity');
+    const up = upAt(VORN, player.position);
+    const r = VORN.radius - 200;
+    world.dispatch({
+      type: 'playerTeleport',
+      playerId,
+      position: { x: VORN.center.x + up.x * r, y: VORN.center.y + up.y * r, z: VORN.center.z + up.z * r },
+    });
+    world.tick(SIM_DT);
+    const mantle = oxygenStatusFor(world, playerId);
+    expect(mantle?.heat).toBe(true);
+    expect(mantle?.cold).toBe(false);
   });
 });

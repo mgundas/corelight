@@ -46,6 +46,11 @@ export interface OverlayStats {
   /** Research progression (M11): unspent Data and bought cards. */
   researchData?: number;
   researchUnlocked?: number;
+  /** M13: strongest-SOI planet (or "deep space"), signed distance to its SOI
+   * boundary (negative inside), and the player's current physics frame. */
+  dominantPlanet?: string;
+  soiDistanceM?: number;
+  physicsFrame?: string;
 }
 
 /** Pure formatter (unit-testable; no DOM). */
@@ -99,11 +104,22 @@ export function formatOverlayStats(stats: OverlayStats): string {
   if (stats.researchData !== undefined) {
     research = `\nresearch: ${stats.researchData} Data, ${stats.researchUnlocked ?? 0} blueprints`;
   }
+  let frame = '';
+  if (stats.dominantPlanet !== undefined) {
+    frame =
+      `\nframe: dominant ${stats.dominantPlanet}` +
+      (stats.soiDistanceM !== undefined
+        ? ` | SOI ${stats.soiDistanceM >= 0 ? '+' : ''}${stats.soiDistanceM.toFixed(0)} m (${
+            stats.soiDistanceM >= 0 ? 'outside' : 'inside'
+          })`
+        : '') +
+      (stats.physicsFrame !== undefined ? ` | physics ${stats.physicsFrame}` : '');
+  }
   return (
     `FPS: ${stats.fps.toFixed(0)} | tick: ${stats.tickMs.toFixed(2)} ms | draws: ${stats.drawCalls}\n` +
     `cam: ${c.x.toFixed(1)}, ${c.y.toFixed(1)}, ${c.z.toFixed(1)}\n` +
     `origin: ${o.x.toFixed(0)}, ${o.y.toFixed(0)}, ${o.z.toFixed(0)} (shifts: ${stats.originShifts})\n` +
-    `fly speed: ${stats.flySpeed.toFixed(1)} m/s${sun}${place}${player}${tool}${o2}${research}${terrain}`
+    `fly speed: ${stats.flySpeed.toFixed(1)} m/s${sun}${place}${player}${tool}${o2}${research}${frame}${terrain}`
   );
 }
 
