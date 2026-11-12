@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import type { PlanetConfig } from '../planets/PlanetConfig.js';
 import { ATMOSPHERE, DEPTH_FULL_DARK_M } from '../core/constants.js';
-import { smoothstep, type Vec3d } from '../core/math.js';
+import { distance, smoothstep, type Vec3d } from '../core/math.js';
 import { toLocal } from './floatingOrigin.js';
 import { ATMOSPHERE_FRAGMENT, ATMOSPHERE_VERTEX } from './atmosphereShader.js';
 
@@ -55,7 +55,7 @@ export class Atmosphere {
     this.shells.push({ planet, mesh, material });
   }
 
-  update(sunDirWorld: Vec3d, depthBelowM = 0): void {
+  update(sunDirWorld: Vec3d, cameraLocal: Vec3d, depthBelowM = 0): void {
     for (const shell of this.shells) {
       const local = toLocal(shell.planet.center);
       shell.mesh.position.set(local.x, local.y, local.z);
@@ -64,7 +64,16 @@ export class Atmosphere {
       const sun = shell.material.uniforms['sunDirection'] as { value: THREE.Vector3 };
       sun.value.set(sunDirWorld.x, sunDirWorld.y, sunDirWorld.z).normalize();
       const visibility = shell.material.uniforms['visibility'] as { value: number };
-      visibility.value = 1 - smoothstep(0, DEPTH_FULL_DARK_M, depthBelowM);
+      const altitude = distance(cameraLocal, local) - shell.planet.radius;
+      const height = shell.planet.atmosphere.height;
+      // The volume integrates to a nominal sphere, not the scene depth.
+      // Inside the air layer that paints through hills/props and exposes a
+      // false spherical horizon. Surface sky/fog own that view; the orbital
+      // volume fades in only after leaving the air layer.
+      const orbitFade = smoothstep(height * ATMOSPHERE.orbitFadeStartHeight,
+        height * ATMOSPHERE.orbitFadeEndHeight, altitude);
+      visibility.value = orbitFade * (1 - smoothstep(0, DEPTH_FULL_DARK_M, depthBelowM));
+      shell.mesh.visible = visibility.value > 0;
     }
   }
 

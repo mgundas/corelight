@@ -165,10 +165,11 @@ describe('Atmosphere', () => {
     const beta = mat.uniforms['rayleigh']?.value as THREE.Vector3;
     expect(beta.z).toBeGreaterThan(beta.y);
     expect(beta.y).toBeGreaterThan(beta.x);
-    atmosphere.update({ x: 0, y: 2, z: 0 }, 40);
+    const orbitalCamera = { x: 0, y: SELA.radius + SELA.atmosphere.height * 3, z: 0 };
+    atmosphere.update({ x: 0, y: 2, z: 0 }, orbitalCamera, 40);
     expect(mat.uniforms['visibility']?.value).toBe(0);
     expect((mat.uniforms['sunDirection']?.value as THREE.Vector3).length()).toBeCloseTo(1);
-    atmosphere.update({ x: 0, y: 1, z: 0 }, 0);
+    atmosphere.update({ x: 0, y: 1, z: 0 }, orbitalCamera, 0);
     expect(mat.uniforms['visibility']?.value).toBe(1);
     atmosphere.dispose();
   });
@@ -178,7 +179,7 @@ describe('Atmosphere', () => {
     const scene = new THREE.Scene();
     const atmosphere = new Atmosphere(scene);
     atmosphere.addPlanet(SELA);
-    atmosphere.update({ x: 0, y: 1, z: 0 });
+    atmosphere.update({ x: 0, y: 1, z: 0 }, { x: 0, y: 600, z: 0 });
     const mesh = scene.children[0] as THREE.Mesh;
     expect(mesh.position.length()).toBe(0);
     // Proxy follows configured air height; its outer edge has zero density.
@@ -202,7 +203,7 @@ describe('Atmosphere', () => {
     atmosphere.addPlanet(VORN);
     // Jump the floating origin to Vorn (as the Sela -> Vorn flight does).
     expect(maybeShiftOrigin(VORN.center)).not.toBe(null);
-    atmosphere.update({ x: 0, y: 1, z: 0 });
+    atmosphere.update({ x: 0, y: 1, z: 0 }, toLocal({ ...VORN.center, y: VORN.center.y + VORN.radius + 200 }));
     const positions = scene.children.map((child) => (child as THREE.Mesh).position.clone());
     for (const child of scene.children) {
       const mesh = child as THREE.Mesh;

@@ -176,6 +176,7 @@ export const ATMOSPHERE = {
   mieAnisotropy: 0.76, sunIntensity: 8,
   viewSamples: 16, sunSamples: 6,
   sphereSegments: 96, sphereRings: 64,
+  orbitFadeStartHeight: 1, orbitFadeEndHeight: 2,
 } as const;
 
 /** Headlamp spotlight tuning (SpotLight attached to the camera). */
