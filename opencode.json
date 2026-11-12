@@ -11,28 +11,40 @@
   ],
   "agent": {
     "build": {
-      "model": "opencode-go/muse-spark-1.3-contributor"
+      "model": "opencode-go/deepseek-v4.1-flash",
+      "variant": "max"
     },
     "plan": {
-      "model": "opencode-go/muse-spark-1.3-contributor"
+      "model": "opencode-go/muse-spark-1.3-contributor",
+      "variant": "xhigh"
+    },
+    "planner": {
+      "description": "Reads a milestone prompt and the codebase, then returns a step-by-step implementation plan. Never edits files.",
+      "mode": "subagent",
+      "model": "opencode-go/muse-spark-1.3-contributor",
+      "variant": "xhigh",
+      "permission": {
+        "edit": "deny",
+        "bash": "deny"
+      },
+      "prompt": "You are the planner for the Corelight project. Read the milestone prompt you are given, docs/ARCHITECTURE.md, docs/PROGRESS.md and the existing code it touches. Do not edit files. Return a concrete implementation plan: the existing modules to reuse, the files to create or change (each under ~400 lines), the order of small steps with a test for each piece of new logic, how every acceptance criterion will be met, and any conflict with the hard rules plus the simplest compliant resolution."
     },
     "reviewer": {
       "description": "Reviews the latest milestone against its prompt and docs/ARCHITECTURE.md without editing code.",
-      "mode": "subagent",
       "model": "opencode-go/muse-spark-1.3-contributor",
-      "prompt": "You are a strict code reviewer for the Corelight project. Read docs/ARCHITECTURE.md and the milestone prompt you are given. Check the code against every acceptance criterion and every hard rule. Report a numbered list of concrete problems with file paths and line numbers, ordered by severity. Do not edit any files.",
+      "variant": "xhigh",
+      "prompt": "You are a strict code reviewer for the Corelight project. Read docs/ARCHITECTURE.md and the milestone prompt you are given. Check the code against every acceptance criterion and every hard rule. Report a numbered list of concrete problems with file paths and line numbers, ordered by severity. Do not edit any files."
     }
   },
   "command": {
     "milestone": {
-      "description": "Implement a milestone, e.g. /milestone M03",
+      "description": "Plan, then implement a milestone, e.g. /milestone M03",
       "agent": "build",
-      "template": "Find the file in prompts/ whose name starts with $ARGUMENTS (for example prompts/M03-gravity-player.md), read it fully, and implement it exactly. Before writing code, re-read docs/ARCHITECTURE.md and docs/PROGRESS.md. Work in small steps and run `npm run check` after each step. Do not start any other milestone. When every acceptance criterion is met and `npm run check` passes, update docs/PROGRESS.md as the prompt describes and commit with the message `$ARGUMENTS: <short summary>`."
+      "template": "Milestone $ARGUMENTS. Step 1, plan: before writing any code, use the task tool to run the `planner` subagent with this instruction: \"Plan milestone $ARGUMENTS: read the file in prompts/ whose name starts with $ARGUMENTS fully and return the implementation plan.\" Wait for its plan and do not edit anything until you have it. Step 2, build: find the file in prompts/ whose name starts with $ARGUMENTS (for example prompts/M03-gravity-player.md), read it fully, re-read docs/ARCHITECTURE.md and docs/PROGRESS.md, then implement the milestone exactly, following the planner's plan (deviate only where the code proves the plan wrong, and say why). Work in small steps and run `npm run check` after each step. Do not start any other milestone. When every acceptance criterion is met and `npm run check` passes, update docs/PROGRESS.md as the prompt describes and commit with the message `$ARGUMENTS: <short summary>`."
     },
     "review": {
       "description": "Review a milestone, e.g. /review M03",
       "agent": "reviewer",
-      "subtask": true,
       "template": "Review milestone $ARGUMENTS. Read the file in prompts/ whose name starts with $ARGUMENTS and prompts/REVIEW.md, then follow REVIEW.md exactly."
     },
     "fix": {
