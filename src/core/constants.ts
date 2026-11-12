@@ -209,6 +209,10 @@ export const TETHER_PLACE_AHEAD_M = 1.5;
 export const STATION_RANGE_M = 4.5;
 /** Station input slots: the largest recipe (shuttle) needs 8 item units. */
 export const STATION_INPUT_SLOTS = 8;
+/** Open printer panel refresh interval (ms): progress is decisecond-granular
+ * and counts change on actions, so 10 Hz is plenty and avoids per-frame
+ * state/string allocation. */
+export const PRINTER_UI_SYNC_INTERVAL_MS = 100;
 /** M09 temporary power flag: stations run without a power network until M10
  * wires the real system. M10 deletes this constant and the `if` it guards. */
 export const CRAFTING_REQUIRE_POWER = false;

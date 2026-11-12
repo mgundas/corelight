@@ -47,8 +47,16 @@ export function isStationMachine(entity: Entity | undefined): boolean {
   );
 }
 
-/** Station printer component, lazily created for hand-authored saves. */
+/** Station printer component, read-only (null when absent). */
 export function printerFor(entity: Entity): PrinterComponent | null {
+  if (!isStationMachine(entity)) return null;
+  return entity.components.printer ?? null;
+}
+
+/** Sim-side heal: lazily create the printer component for old/hand-made
+ * saves. Call only from actions/systems, never from read-only game/render
+ * paths (hard rule 2). */
+export function ensurePrinter(entity: Entity): PrinterComponent | null {
   if (!isStationMachine(entity)) return null;
   let printer = entity.components.printer;
   if (!printer) {
@@ -96,14 +104,6 @@ export function recipeInputsAvailable(
   return recipe.inputs.every((input) => count(input.item) >= input.count);
 }
 
-/** Recipe output capacity: large packages need empty hands (others can drop). */
-function canAcceptOutput(player: Entity, outputId: string): boolean {
-  if (isPlaceable(outputId) && placeableDef(outputId).size === 'large') {
-    return !player.components.player?.carryingLarge;
-  }
-  return true;
-}
-
 /**
  * Create the recipe output for a player: normal items and small packages go
  * into a free backpack slot, large packages are front-carried, and a full
@@ -139,6 +139,8 @@ function giveOutput(world: World, player: Entity, outputId: string): void {
   const free = large || !inventory ? -1 : inventory.slots.indexOf(null);
   if (inventory && free !== -1) {
     inventory.slots[free] = id;
+    // Fresh outputs are held, so E (place/deposit) acts on them immediately.
+    inventory.selectedSlot = free;
     world.entities.set(id, {
       id,
       kind: 'item',
@@ -215,8 +217,7 @@ export function printBackpack(world: World, playerId: EntityId, recipeId: string
   if (
     recipe.station !== 'backpack' ||
     !isRecipeUnlocked(recipe) ||
-    !recipeInputsAvailable(recipe, (itemId) => countInBackpack(world, inventory.slots, itemId)) ||
-    !canAcceptOutput(player, recipe.output)
+    !recipeInputsAvailable(recipe, (itemId) => countInBackpack(world, inventory.slots, itemId))
   ) {
     events.emit('actionApplied', { type: 'printBackpack' });
     return;
@@ -231,7 +232,7 @@ export function depositToStation(world: World, playerId: EntityId, stationId: En
   const player = world.entities.get(playerId);
   const station = world.entities.get(stationId);
   const inventory = player ? inventoryFor(world, playerId) : null;
-  const printer = station ? printerFor(station) : null;
+  const printer = station ? ensurePrinter(station) : null;
   if (!player || !station || !inventory || !printer) {
     events.emit('actionApplied', { type: 'depositToStation' });
     return;
@@ -262,7 +263,7 @@ export function printAtStation(
 ): void {
   const player = world.entities.get(playerId);
   const station = world.entities.get(stationId);
-  const printer = station ? printerFor(station) : null;
+  const printer = station ? ensurePrinter(station) : null;
   const recipe = recipeById(recipeId);
   if (!player || !station || !printer || !recipe || !nearStation(player, station)) {
     events.emit('actionApplied', { type: 'printAtStation' });
@@ -290,7 +291,7 @@ export function printAtStation(
 export function collectStation(world: World, playerId: EntityId, stationId: EntityId): void {
   const player = world.entities.get(playerId);
   const station = world.entities.get(stationId);
-  const printer = station ? printerFor(station) : null;
+  const printer = station ? ensurePrinter(station) : null;
   if (
     !player ||
     !station ||

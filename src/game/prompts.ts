@@ -8,7 +8,7 @@ import type { EntityId } from '../sim/entities.js';
 import type { World } from '../sim/world.js';
 import { depositCandidate, printerFor } from '../sim/craftingActions.js';
 import type { ToolAim } from '../player/terrainTool.js';
-import { hasLightstick } from './interactWiring.js';
+import { hasSelectedLightstick } from './interactWiring.js';
 import { findAimedItem, findAimedStation, findAimedTether } from './pickup.js';
 import { carriedPlaceable, placementCheckFor, type PlacementMode } from './placement.js';
 
@@ -54,8 +54,8 @@ export function interactPrompt(
     return `E: pick up ${carriedId ? nameForId(carriedId) : 'item'}`;
   }
   if (findAimedTether(world, playerId)) return 'E: pick up tether post';
-  if (aim.hit && hasLightstick(world, playerId)) return 'E: place light stick';
   const carried = carriedPlaceable(world, playerId);
   if (aim.hit && carried) return `E: place ${carried.placeable.name}`;
+  if (aim.hit && hasSelectedLightstick(world, playerId)) return 'E: place light stick';
   return null;
 }

@@ -47,6 +47,10 @@ export function findAimedStation(world: World, playerId: EntityId): EntityId | n
   let bestDist = Infinity;
   for (const entity of world.entities.values()) {
     if (entity.planetId !== planet.id || !isStationMachine(entity)) continue;
+    // Range is base-to-player (the same measure the sim actions use); the
+    // wider mid-height point is only for the look-cone direction.
+    const baseDist = distance(entity.position, player.position);
+    if (baseDist > STATION_RANGE_M) continue;
     const def = placeableForMachineType(entity.components.machine?.machineType ?? '');
     const center: Vec3d = {
       x: entity.position.x + up.x * ((def?.heightM ?? 1) * 0.5),
@@ -54,7 +58,7 @@ export function findAimedStation(world: World, playerId: EntityId): EntityId | n
       z: entity.position.z + up.z * ((def?.heightM ?? 1) * 0.5),
     };
     const dist = distance(center, player.position);
-    if (dist > STATION_RANGE_M || dist >= bestDist) continue;
+    if (dist >= bestDist) continue;
     const to: Vec3d = dist < 1e-6 ? forward : normalize(sub(center, player.position));
     if (dot(to, forward) < STATION_AIM_COS) continue;
     best = entity.id;

@@ -94,13 +94,23 @@ describe('fresh-game setup', () => {
     if (!player) throw new Error('missing player');
     world.dispatch({ type: 'spawnHabitat', planetId: SELA.id, position: { ...player.position } });
     world.tick();
-    setupWorldSystems(world, [SELA], stubPool(), 1337, world);
+    const setup = setupWorldSystems(world, [SELA], stubPool(), 1337, world);
     const platforms = [...world.entities.values()].filter((e) => e.kind === 'platform');
     const printers = [...world.entities.values()].filter(
       (e) => e.kind === 'machine' && e.components.machine?.machineType === 'small_printer',
     );
     expect(platforms).toHaveLength(1);
     expect(printers).toHaveLength(1);
+    // The heal flattens a real pad and seats the base near the player.
+    expect(setup.editedKeys.length).toBeGreaterThan(0);
+    const platform = platforms[0];
+    if (!platform) throw new Error('no platform');
+    const dist = Math.hypot(
+      platform.position.x - player.position.x,
+      platform.position.y - player.position.y,
+      platform.position.z - player.position.z,
+    );
+    expect(dist).toBeLessThan(6);
     // The heal must not spawn a second habitat.
     expect(
       [...world.entities.values()].filter(

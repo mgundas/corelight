@@ -35,6 +35,9 @@ export class PlaceableViews {
   private readonly sphere = new THREE.SphereGeometry(1, 10, 8);
   private readonly cone = new THREE.ConeGeometry(1, 1, 8);
   private readonly capsule = new THREE.CapsuleGeometry(0.6, 1.1, 4, 10);
+  /** Scratch objects: light-stick sync runs every frame (no per-frame alloc). */
+  private readonly tmpQuat = new THREE.Quaternion();
+  private readonly tmpTip = new THREE.Vector3();
 
   constructor() {
     this.group.name = 'placeables';
@@ -63,10 +66,14 @@ export class PlaceableViews {
         if (itemId && isKnownItem(itemId)) {
           const glow = itemDef(itemId).emitsLight;
           if (glow) {
-            const q = new THREE.Quaternion(entity.rotation.x, entity.rotation.y, entity.rotation.z, entity.rotation.w);
-            const tip = new THREE.Vector3(0, 0.3, 0).applyQuaternion(q);
+            this.tmpQuat.set(entity.rotation.x, entity.rotation.y, entity.rotation.z, entity.rotation.w);
+            this.tmpTip.set(0, 0.3, 0).applyQuaternion(this.tmpQuat);
             emitters.push({
-              position: { x: entity.position.x + tip.x, y: entity.position.y + tip.y, z: entity.position.z + tip.z },
+              position: {
+                x: entity.position.x + this.tmpTip.x,
+                y: entity.position.y + this.tmpTip.y,
+                z: entity.position.z + this.tmpTip.z,
+              },
               color: glow.color,
               intensity: glow.intensity,
             });
@@ -202,6 +209,9 @@ export class PlacementGhost {
   private readonly badDiscMat = new THREE.MeshBasicMaterial({ color: 0xff4d4d, transparent: true, opacity: 0.45, depthWrite: false });
   private readonly bodyGeo = new THREE.BoxGeometry(1, 1, 1);
   private readonly discGeo = new THREE.CylinderGeometry(1, 1, 0.06, 24);
+  /** Scratch orientation objects (set() runs every frame while placing). */
+  private readonly upVec = new THREE.Vector3();
+  private readonly yAxis = new THREE.Vector3(0, 1, 0);
 
   constructor() {
     this.group.name = 'placementGhost';
@@ -225,8 +235,8 @@ export class PlacementGhost {
     }
     const local = toLocal(position);
     this.group.position.set(local.x, local.y, local.z);
-    const upVec = new THREE.Vector3(up.x, up.y, up.z).normalize();
-    this.group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), upVec);
+    this.upVec.set(up.x, up.y, up.z).normalize();
+    this.group.quaternion.setFromUnitVectors(this.yAxis, this.upVec);
     this.body.scale.set(def.footprintRadiusM * 1.3, def.heightM, def.footprintRadiusM * 1.3);
     this.body.position.set(0, def.heightM / 2, 0);
     this.disc.scale.set(def.footprintRadiusM, 1, def.footprintRadiusM);

@@ -3,7 +3,7 @@
 // loaded station inputs, job progress and the collect affordance. Mutations
 // still go through Actions dispatched by Game.
 
-import { STATION_INPUT_SLOTS, STATION_RANGE_M } from '../core/constants.js';
+import { PRINTER_UI_SYNC_INTERVAL_MS, STATION_INPUT_SLOTS, STATION_RANGE_M } from '../core/constants.js';
 import { distance } from '../core/math.js';
 import { isKnownItem, itemDef } from '../data/loadData.js';
 import { placeableById, placeableForMachineType } from '../data/loadPlaceables.js';
@@ -62,7 +62,7 @@ function stationState(world: World, playerId: EntityId, stationId: EntityId): Pr
   const printer = station ? printerFor(station) : null;
   const machineType = station?.components.machine?.machineType;
   if (!player || !station || !printer || !machineType) return null;
-  if (station.planetId !== player.planetId || distance(player.position, station.position) > STATION_RANGE_M + 1.5) {
+  if (station.planetId !== player.planetId || distance(player.position, station.position) > STATION_RANGE_M) {
     return null;
   }
   const stationDef = placeableForMachineType(machineType);
@@ -113,16 +113,33 @@ export function buildPrinterState(
   return stationId ? stationState(world, playerId, stationId) : backpackState(world, playerId);
 }
 
-/** Refresh the open panel; closes it when its station/player disappears. */
-export function updatePrinterUi(world: World, playerId: EntityId | null, ui: PrinterUi): void {
-  if (!ui.isOpen()) return;
-  if (!playerId) {
-    ui.close();
+/** Refresh the open panel; closes it when its station/player disappears.
+ * Throttled: the panel is a 10 Hz projection, not a per-frame allocation
+ * source (the recipe rows are rebuilt each sync). */
+const lastUiSync = new WeakMap<PrinterUi, number>();
+
+export function updatePrinterUi(
+  world: World,
+  playerId: EntityId | null,
+  ui: PrinterUi,
+  nowMs = performance.now(),
+): void {
+  if (!ui.isOpen()) {
+    lastUiSync.delete(ui);
     return;
   }
+  if (!playerId) {
+    ui.close();
+    lastUiSync.delete(ui);
+    return;
+  }
+  const last = lastUiSync.get(ui) ?? -Infinity;
+  if (nowMs - last < PRINTER_UI_SYNC_INTERVAL_MS) return;
+  lastUiSync.set(ui, nowMs);
   const state = buildPrinterState(world, playerId, ui.openStationId());
   if (!state) {
     ui.close();
+    lastUiSync.delete(ui);
     return;
   }
   ui.sync(state);

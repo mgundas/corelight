@@ -21,7 +21,7 @@ import {
   printBackpack,
 } from './craftingActions.js';
 import { dropItem, pickUpItem } from './inventoryActions.js';
-import { placeLightstick, placePlaceable, spawnPlaceable } from './placeActions.js';
+import { placeLightstick, placePlaceable } from './placeActions.js';
 import { baseFieldFor, placeTether, removeTether, spawnHabitatEntity } from './tetherActions.js';
 import type { World } from './world.js';
 
@@ -66,8 +66,7 @@ export type Action =
   | { type: 'printAtStation'; playerId: EntityId; stationId: EntityId; recipeId: string }
   | { type: 'collectStation'; playerId: EntityId; stationId: EntityId }
   | { type: 'placePlaceable'; playerId: EntityId; placeableId: string; position: Vec3d }
-  | { type: 'placeLightstick'; playerId: EntityId }
-  | { type: 'spawnPlaceable'; planetId: string; placeableId: string; position: Vec3d };
+  | { type: 'placeLightstick'; playerId: EntityId };
 
 function clampAxis(v: number): number {
   return Math.min(1, Math.max(-1, v));
@@ -346,10 +345,6 @@ export function applyAction(world: World, action: Action): void {
     }
     case 'placeLightstick': {
       placeLightstick(world, action.playerId);
-      return;
-    }
-    case 'spawnPlaceable': {
-      spawnPlaceable(world, action.planetId, action.placeableId, action.position);
       return;
     }
   }

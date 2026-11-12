@@ -18,11 +18,14 @@ import { findSpawnPosition } from '../sim/physics/spawn.js';
 import { makePhysicsSystem } from '../sim/physics/system.js';
 import { makeItemsSystem } from '../sim/systems/items.js';
 import { updateCrafting } from '../sim/systems/crafting.js';
+import { updateLightsticks } from '../sim/systems/lightsticks.js';
 import { updateNodes } from '../sim/systems/nodes.js';
 import { updateOxygen } from '../sim/systems/oxygen.js';
 import { updateTethers } from '../sim/systems/tethers.js';
 import { updateSun } from '../sim/systems/sun.js';
 import { TerrainColliders } from '../sim/physics/terrainColliders.js';
+import { spawnPlaceableEntity } from '../sim/placeActions.js';
+import { seatTetherOnGround } from '../sim/tetherActions.js';
 import type { ColliderPool } from '../terrain/colliderPool.js';
 import { createDensityField } from '../terrain/density.js';
 import type { Entity, EntityId } from '../sim/entities.js';
@@ -50,73 +53,18 @@ function lateralOffset(planet: PlanetConfig, pos: { x: number; y: number; z: num
 }
 
 /**
- * Seat a world-space anchor on the live (edited) surface by marching radially
- * inward from above and bisecting the air->solid crossing. Returns the input
- * when no crossing is found (e.g. a cave mouth).
+ * Flatten a pad for the starting base and return the pad plane + touched
+ * LOD0 keys. Direct edit-store writes are initialization (the same as the
+ * player spawn); all later changes go through dispatch.
  */
-function seatOnSurface(
-  field: ReturnType<typeof createDensityField>,
+function flattenPad(
+  world: World,
   planet: PlanetConfig,
   anchor: { x: number; y: number; z: number },
-): { x: number; y: number; z: number } {
-  const dir = normalize(sub(anchor, planet.center));
-  let r = planet.radius + 80;
-  let prevD = field.density(dir.x * (r + 20), dir.y * (r + 20), dir.z * (r + 20));
-  for (let rr = r + 19; rr > planet.radius - 60; rr -= 1) {
-    const d = field.density(dir.x * rr, dir.y * rr, dir.z * rr);
-    if (prevD < 0 && d >= 0) {
-      return {
-        x: planet.center.x + dir.x * rr,
-        y: planet.center.y + dir.y * rr,
-        z: planet.center.z + dir.z * rr,
-      };
-    }
-    prevD = d;
-  }
-  return { ...anchor };
-}
-
-/**
- * Starting base (M09): a platform with the pre-placed small printer, on the
- * opposite side of the pad from the habitat. Setup-only wiring: the entities
- * are created through the spawnPlaceable Action.
- */
-function spawnStarterBase(world: World, planet: PlanetConfig, anchor: { x: number; y: number; z: number }): void {
-  const field = createDensityField(planet, world.seed, (x, y, z) =>
-    world.terrainEdits.deltaAt(planet, planet.id, x, y, z),
-  );
-  const platformAnchor = lateralOffset(planet, anchor, -3.5);
-  const platformPos = seatOnSurface(field, planet, platformAnchor);
-  world.dispatch({
-    type: 'spawnPlaceable',
-    planetId: planet.id,
-    placeableId: 'platform',
-    position: platformPos,
-  });
-  const up = upAt(planet, platformPos);
-  const top = placeableDef('platform').heightM;
-  world.dispatch({
-    type: 'spawnPlaceable',
-    planetId: planet.id,
-    placeableId: 'small_printer',
-    position: {
-      x: platformPos.x + up.x * top,
-      y: platformPos.y + up.y * top,
-      z: platformPos.z + up.z * top,
-    },
-  });
-}
-
-/**
- * Flatten a pad for the habitat and spawn it next to an anchor point.
- * Direct edit-store writes (not an Action): this is world initialization,
- * the same as the player spawn above — all later changes go through
- * dispatch. Returns the touched LOD0 keys so Game can re-notify the
- * streamer after the boot prebuilt (which predates the pad) is adopted.
- */
-function spawnHabitatNear(world: World, planet: PlanetConfig, anchor: { x: number; y: number; z: number }): string[] {
+): { ground: { x: number; y: number; z: number }; keys: string[] } {
   const up = normalize(sub(anchor, planet.center));
-  // The player spawn hovers SPAWN_HOVER_M above the surface; the pad sits on it.
+  // The player spawn hovers above the surface; put the pad slightly below it
+  // so the spawn drops softly onto the plane (M08 shape, kept).
   const ground = {
     x: anchor.x - up.x * 2,
     y: anchor.y - up.y * 2,
@@ -146,16 +94,42 @@ function spawnHabitatNear(world: World, planet: PlanetConfig, anchor: { x: numbe
       },
     },
   );
-  const habitatPos = lateralOffset(planet, ground, HABITAT_SPAWN_OFFSET_M);
-  // Seat the dome on the pad: drop the offset point onto the flattened
-  // surface by reusing the spawn raymarch from above.
-  const field = createDensityField(planet, world.seed, (x, y, z) =>
-    world.terrainEdits.deltaAt(planet, planet.id, x, y, z),
-  );
-  const seated = seatOnSurface(field, planet, habitatPos);
+  return { ground, keys: outcome.keys };
+}
+
+/**
+ * Starting base (M09): a platform with the pre-placed small printer, on the
+ * opposite side of the pad from the habitat. Setup initialization creates
+ * the entities directly (like the dev tether pack); gameplay placement uses
+ * the validated placePlaceable Action instead.
+ */
+function spawnStarterBase(world: World, planet: PlanetConfig, anchor: { x: number; y: number; z: number }): void {
+  const platformAnchor = lateralOffset(planet, anchor, -3.5);
+  const platformPos = seatTetherOnGround(world, planet.id, platformAnchor);
+  spawnPlaceableEntity(world, planet.id, 'platform', platformPos);
+  const up = upAt(planet, platformPos);
+  const top = placeableDef('platform').heightM;
+  spawnPlaceableEntity(world, planet.id, 'small_printer', {
+    x: platformPos.x + up.x * top,
+    y: platformPos.y + up.y * top,
+    z: platformPos.z + up.z * top,
+  });
+}
+
+/**
+ * Flatten a pad for the habitat and spawn it next to an anchor point.
+ * Returns the touched LOD0 keys so Game can re-notify the streamer after the
+ * boot prebuilt (which predates the pad) is adopted.
+ */
+function spawnHabitatNear(world: World, planet: PlanetConfig, anchor: { x: number; y: number; z: number }): string[] {
+  const pad = flattenPad(world, planet, anchor);
+  const habitatPos = lateralOffset(planet, pad.ground, HABITAT_SPAWN_OFFSET_M);
+  // Seat the dome on the pad with the same precise surface march tethers use
+  // (0.25 m steps + bisection), not a 1 m-quantized approximation.
+  const seated = seatTetherOnGround(world, planet.id, habitatPos);
   world.dispatch({ type: 'spawnHabitat', planetId: planet.id, position: seated });
-  spawnStarterBase(world, planet, ground);
-  return outcome.keys;
+  spawnStarterBase(world, planet, pad.ground);
+  return pad.keys;
 }
 
 function playerById(world: World, playerId: EntityId | null): Entity | undefined {
@@ -226,6 +200,8 @@ export function setupWorldSystems(
   world.addSystem((tickWorld, dt) => updateOxygen(tickWorld, planets, dt));
   // Station print jobs (M09): advances timers, exposes finished outputs.
   world.addSystem((tickWorld, dt) => updateCrafting(tickWorld, dt));
+  // Placed light sticks follow terrain edits (dig out from under them).
+  world.addSystem((tickWorld) => updateLightsticks(tickWorld));
   // Environment clock (order-free: only re-derives sunDirection from time).
   world.addSystem(updateSun);
   let playerId: EntityId | null = null;
@@ -251,10 +227,13 @@ export function setupWorldSystems(
       editedKeys = spawnHabitatNear(world, planet, player.position);
       world.tick(SIM_DT);
     } else if (player && planetId !== undefined && !hasPrinter) {
-      // M08 saves predate the M09 starting printer: seat one by the player
-      // (the starting pad / habitat area in practice).
+      // M08 saves predate the M09 starting printer: flatten a pad and seat
+      // the starter base beside the player (or their habitat area). This
+      // mirrors the fresh-game pad so the printer is usable on Continue.
       const planet = planets.find((p) => p.id === planetId) ?? home;
-      spawnStarterBase(world, planet, player.position);
+      const pad = flattenPad(world, planet, player.position);
+      editedKeys = pad.keys;
+      spawnStarterBase(world, planet, pad.ground);
       world.tick(SIM_DT);
     }
   } else {

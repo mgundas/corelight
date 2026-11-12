@@ -47,7 +47,9 @@ describe('synced views are ray-hittable', () => {
     world.dispatch({ type: 'placeTether', playerId });
     world.tick(SIM_DT);
     const post = [...world.entities.values()].find((e) => e.kind === 'tether');
-    const hub = [...world.entities.values()].find((e) => e.kind === 'machine');
+    const hub = [...world.entities.values()].find(
+      (e) => e.kind === 'machine' && e.components.machine?.machineType === 'habitat',
+    );
     if (!post || !hub) throw new Error('missing post/habitat');
 
     const tethers = new TetherViews();

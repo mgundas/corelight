@@ -10,6 +10,7 @@ import { IDENTITY_QUAT } from '../../src/core/math.js';
 import {
   checkPlacement,
   isGroundFlat,
+  spawnPlaceableEntity,
 } from '../../src/sim/placeActions.js';
 import { itemDef } from '../../src/data/loadData.js';
 import { placeableDef } from '../../src/data/loadPlaceables.js';
@@ -103,8 +104,7 @@ describe('placement rules', () => {
     // Occupy the spot with a platform: the next placement must refuse it.
     const check = checkPlacement(world, planet.id, 'platform', surface);
     expect(check.ok).toBe(true);
-    world.dispatch({ type: 'spawnPlaceable', planetId: planet.id, placeableId: 'platform', position: surface });
-    world.tick();
+    spawnPlaceableEntity(world, planet.id, 'platform', surface);
     const occupied = checkPlacement(world, planet.id, 'platform', surface);
     expect(occupied.ok).toBe(false);
     expect(occupied.reason).toBe('Too close to another structure');
@@ -114,6 +114,27 @@ describe('placement rules', () => {
     ).toBe(true);
     // The player exists but is ignored by occupancy.
     expect(world.entities.get(playerId)).toBeDefined();
+  });
+
+  it('blocks ground placement under a structure in the same footprint column', () => {
+    const { world, planet, surface } = flatWorld();
+    const floatingId = world.nextId('platform');
+    world.entities.set(floatingId, {
+      id: floatingId,
+      kind: 'platform',
+      planetId: planet.id,
+      position: { x: surface.x, y: surface.y + 10, z: surface.z },
+      rotation: { ...IDENTITY_QUAT },
+      components: { placeable: { placeableId: 'platform' } },
+    });
+    const under = checkPlacement(world, planet.id, 'platform', surface);
+    expect(under.ok).toBe(false);
+    expect(under.reason).toBe('Too close to another structure');
+    // Move it clear laterally: the ground spot is free again.
+    const moved = world.entities.get(floatingId);
+    if (!moved) throw new Error('missing floating platform');
+    moved.position = { x: surface.x + 6, y: surface.y + 10, z: surface.z };
+    expect(checkPlacement(world, planet.id, 'platform', surface)).toEqual({ ok: true, reason: null });
   });
 
   it('places a carried platform package on the ground', () => {
@@ -187,5 +208,22 @@ describe('placement rules', () => {
     expect(dist).toBeGreaterThan(1);
     expect(dist).toBeLessThan(4);
     expect(stick.position.y).toBeCloseTo(planet.radius, 1);
+  });
+
+  it('only places a light stick from the selected slot', () => {
+    const { world, playerId } = flatWorld();
+    const stickId = give(world, playerId, 'light_stick', 0);
+    world.dispatch({ type: 'selectSlot', playerId, slot: 1 });
+    world.tick();
+    world.dispatch({ type: 'placeLightstick', playerId });
+    world.tick();
+    expect([...world.entities.values()].filter((e) => e.kind === 'lightstick')).toHaveLength(0);
+    expect(world.entities.has(stickId)).toBe(true);
+    world.dispatch({ type: 'selectSlot', playerId, slot: 0 });
+    world.tick();
+    world.dispatch({ type: 'placeLightstick', playerId });
+    world.tick();
+    expect([...world.entities.values()].filter((e) => e.kind === 'lightstick')).toHaveLength(1);
+    expect(world.entities.has(stickId)).toBe(false);
   });
 });

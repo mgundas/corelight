@@ -11,6 +11,7 @@ import { World } from '../../src/sim/world.js';
 import type { EntityId } from '../../src/sim/entities.js';
 import type { PlayerInput } from '../../src/player/input.js';
 import type { ToolAim } from '../../src/player/terrainTool.js';
+import { placeableDef } from '../../src/data/loadPlaceables.js';
 import { PlacementMode, carriedPlaceable } from '../../src/game/placement.js';
 import { tickInteraction } from '../../src/game/interactWiring.js';
 
@@ -193,12 +194,59 @@ describe('interaction priority', () => {
     expect(ctx.world.entities.has(tetherId)).toBe(false);
   });
 
-  it('places a light stick on the ground when one is carried', () => {
+  it('places a light stick on the ground when one is selected', () => {
     const ctx = context();
     give(ctx.world, ctx.playerId, 'light_stick');
     interact(ctx);
     ctx.world.tick();
     expect([...ctx.world.entities.values()].filter((e) => e.kind === 'lightstick')).toHaveLength(1);
+  });
+
+  it('ignores a light stick that is not in the selected slot', () => {
+    const ctx = context();
+    const stickId = give(ctx.world, ctx.playerId, 'light_stick');
+    const player = ctx.world.entities.get(ctx.playerId);
+    const inv = player?.components.inventory;
+    if (!inv) throw new Error('no inventory');
+    // Move the stick out of the selected slot; E must not fall back to it.
+    inv.slots[0] = null;
+    inv.slots[3] = stickId;
+    inv.selectedSlot = 2;
+    interact(ctx);
+    ctx.world.tick();
+    expect([...ctx.world.entities.values()].filter((e) => e.kind === 'lightstick')).toHaveLength(0);
+    expect(ctx.world.entities.has(stickId)).toBe(true);
+    // Select it explicitly: now E places it.
+    ctx.world.dispatch({ type: 'selectSlot', playerId: ctx.playerId, slot: 3 });
+    ctx.world.tick();
+    interact(ctx);
+    ctx.world.tick();
+    expect([...ctx.world.entities.values()].filter((e) => e.kind === 'lightstick')).toHaveLength(1);
+  });
+
+  it('prefers a front-carried placeable over a light stick', () => {
+    const ctx = context();
+    // The light stick is selected; a large package is picked up in front.
+    give(ctx.world, ctx.playerId, 'light_stick');
+    const player = ctx.world.entities.get(ctx.playerId);
+    if (!player) throw new Error('no player');
+    const packageItem = placeableDef('platform').packageItem;
+    const looseId = ctx.world.nextId('item');
+    ctx.world.entities.set(looseId, {
+      id: looseId,
+      kind: 'item',
+      planetId: player.planetId,
+      position: { ...player.position },
+      rotation: { ...IDENTITY_QUAT },
+      components: { item: { itemId: packageItem } },
+    });
+    ctx.world.dispatch({ type: 'pickUp', playerId: ctx.playerId, itemId: looseId });
+    ctx.world.tick();
+    expect(ctx.world.entities.get(ctx.playerId)?.components.player?.carryingLarge).toBe(looseId);
+    const placement = new PlacementMode();
+    interact(ctx, placement);
+    expect(placement.isActive()).toBe(true);
+    expect([...ctx.world.entities.values()].filter((e) => e.kind === 'lightstick')).toHaveLength(0);
   });
 
   it('enters placement with a packaged placeable, and E cancels it', () => {

@@ -132,7 +132,14 @@ export function checkPlacement(
     if (entity.planetId !== planetId) continue;
     if (entity.kind !== 'platform' && entity.kind !== 'machine' && entity.kind !== 'shuttle') continue;
     const sum = def.footprintRadiusM + structureFootprint(entity);
-    if (distance(entity.position, position) < sum * SPACING_FACTOR) {
+    // Footprints are ground-plane areas: compare the lateral offset, not the
+    // full 3D distance (a machine 10 m overhead still occupies the column).
+    const dx = entity.position.x - position.x;
+    const dy = entity.position.y - position.y;
+    const dz = entity.position.z - position.z;
+    const alongUp = dx * up.x + dy * up.y + dz * up.z;
+    const lateral = Math.hypot(dx - up.x * alongUp, dy - up.y * alongUp, dz - up.z * alongUp);
+    if (lateral < sum * SPACING_FACTOR) {
       return { ok: false, reason: 'Too close to another structure' };
     }
   }
@@ -178,12 +185,6 @@ export function spawnPlaceableEntity(
     components,
   });
   return id;
-}
-
-/** Setup/debug action: place a catalog object without a package. */
-export function spawnPlaceable(world: World, planetId: string, placeableId: string, position: Vec3d): void {
-  spawnPlaceableEntity(world, planetId, placeableId, position);
-  events.emit('actionApplied', { type: 'spawnPlaceable' });
 }
 
 function findPackage(
@@ -249,8 +250,8 @@ export function placePlaceable(
 }
 
 /**
- * E on the ground with a light stick: spend one backpack stick, seat it on
- * the surface ahead of the player, and leave a static emitter behind.
+ * E on the ground with a light stick selected: spend it, seat it on the
+ * surface ahead of the player, and leave a static emitter behind.
  */
 export function placeLightstick(world: World, playerId: EntityId): void {
   const player = world.entities.get(playerId);
@@ -261,20 +262,16 @@ export function placeLightstick(world: World, playerId: EntityId): void {
     events.emit('actionApplied', { type: 'placeLightstick' });
     return;
   }
-  const slots = inventory.slots;
-  const selected = slots[inventory.selectedSlot];
-  let slot = selected && world.entities.get(selected)?.components.item?.itemId === 'light_stick'
-    ? inventory.selectedSlot
-    : slots.findIndex(
-        (id) => id !== null && world.entities.get(id)?.components.item?.itemId === 'light_stick',
-      );
-  if (slot === -1) {
+  // "Holding" means the selected slot: a stick elsewhere in the pack must
+  // not fire (and must not shadow a carried placeable's placement mode).
+  const slot = inventory.selectedSlot;
+  const spentId = inventory.slots[slot];
+  if (!spentId || world.entities.get(spentId)?.components.item?.itemId !== 'light_stick') {
     events.emit('actionApplied', { type: 'placeLightstick' });
     return;
   }
-  const spentId = slots[slot] as EntityId;
   world.entities.delete(spentId);
-  slots[slot] = null;
+  inventory.slots[slot] = null;
   const position = seatAheadOnGround(world, planet, player.position, playerComp.yaw);
   const id = world.nextId('lightstick');
   world.entities.set(id, {

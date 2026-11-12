@@ -3,7 +3,7 @@
 // stations and output timing.
 
 import { beforeEach, describe, expect, it } from 'vitest';
-import { SIM_DT } from '../../src/core/constants.js';
+import { CRAFTING_REQUIRE_POWER, SIM_DT } from '../../src/core/constants.js';
 import { events } from '../../src/core/events.js';
 import { IDENTITY_QUAT } from '../../src/core/math.js';
 import { SELA } from '../../src/planets/configs/sela.js';
@@ -11,9 +11,9 @@ import { findSpawnPosition } from '../../src/sim/physics/spawn.js';
 import { World } from '../../src/sim/world.js';
 import { updateCrafting } from '../../src/sim/systems/crafting.js';
 import type { EntityId } from '../../src/sim/entities.js';
-import { CRAFTING_REQUIRE_POWER } from '../../src/core/constants.js';
 import { placeableDef } from '../../src/data/loadPlaceables.js';
 import { recipeDef } from '../../src/data/loadRecipes.js';
+import { ensurePrinter, printerFor } from '../../src/sim/craftingActions.js';
 
 function spawnWorld(): { world: World; playerId: EntityId } {
   const world = new World(1337, { planets: [SELA] });
@@ -134,6 +134,18 @@ describe('backpack printing', () => {
       null,
       null,
     ]);
+  });
+
+  it('holds a freshly printed item (selected slot follows the output)', () => {
+    const { world, playerId } = spawnWorld();
+    giveItem(world, playerId, 'lumen_crystal', 2);
+    const inv = world.entities.get(playerId)?.components.inventory;
+    if (!inv) throw new Error('no inventory');
+    inv.selectedSlot = 5;
+    world.dispatch({ type: 'printBackpack', playerId, recipeId: 'light_stick' });
+    world.tick();
+    expect(slotItemIds(world, playerId)[0]).toBe('light_stick');
+    expect(inv.selectedSlot).toBe(0);
   });
 });
 
@@ -272,5 +284,53 @@ describe('station printing', () => {
     world.dispatch({ type: 'printAtStation', playerId, stationId, recipeId: 'platform' });
     world.tick();
     expect(world.entities.get(stationId)?.components.printer?.progressS).toBeGreaterThan(0);
+  });
+});
+
+describe('printer component access (hard rule 2)', () => {
+  it('printerFor is read-only; ensurePrinter heals only in sim paths', () => {
+    const { world, playerId } = spawnWorld();
+    const stationId = spawnStation(world, playerId, 'small_printer');
+    const station = world.entities.get(stationId);
+    if (!station) throw new Error('no station');
+    delete station.components.printer;
+    // Read-only access must not create state (prompt/UI paths call this).
+    expect(printerFor(station)).toBe(null);
+    expect(station.components.printer).toBeUndefined();
+    // The action/system-side heal is explicit and creates the component.
+    const healed = ensurePrinter(station);
+    expect(healed).not.toBe(null);
+    expect(station.components.printer).toBe(healed);
+    expect(printerFor(station)).toBe(healed);
+    // Non-station machines stay untouched.
+    const player = world.entities.get(playerId);
+    if (!player) throw new Error('no player');
+    expect(ensurePrinter(player)).toBe(null);
+  });
+
+  it('ignores unknown recipe ids without throwing or losing state', () => {
+    const { world, playerId } = spawnWorld();
+    const stationId = spawnStation(world, playerId, 'small_printer');
+    giveItem(world, playerId, 'silicate');
+    world.dispatch({ type: 'depositToStation', playerId, stationId });
+    world.tick();
+    // Unknown ids from crafted actions are ordinary rejections, not crashes.
+    expect(() => {
+      world.dispatch({ type: 'printBackpack', playerId, recipeId: 'does_not_exist' });
+      world.tick();
+    }).not.toThrow();
+    expect(() => {
+      world.dispatch({ type: 'printAtStation', playerId, stationId, recipeId: 'does_not_exist' });
+      world.tick();
+    }).not.toThrow();
+    expect(world.entities.get(stationId)?.components.printer?.recipeId).toBe(null);
+    // A stale/corrupt saved job is dropped by the system instead of throwing.
+    const printer = world.entities.get(stationId)?.components.printer;
+    if (!printer) throw new Error('no printer');
+    printer.recipeId = 'does_not_exist';
+    printer.progressS = 1;
+    expect(() => world.tick()).not.toThrow();
+    expect(printer.recipeId).toBe(null);
+    expect(printer.progressS).toBe(0);
   });
 });

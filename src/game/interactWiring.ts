@@ -1,7 +1,7 @@
 // E / Tab interaction wiring (M09). One deterministic priority chain so the
 // single E key never becomes modal: cancel placement > aimed station
-// (collect/deposit/open) > aimed item > aimed tether > light stick >
-// packaged placeable (enter placement). Tab toggles the backpack printer.
+// (collect/deposit/open) > aimed item > aimed tether > packaged placeable
+// (enter placement) > selected light stick. Tab toggles the backpack printer.
 // Queues drain every tick even when the player cannot act (no late fires).
 
 import { STATION_INPUT_SLOTS } from '../core/constants.js';
@@ -29,17 +29,12 @@ export interface InteractDeps {
   togglePrinter(): void;
 }
 
-/** True when a light stick is in the selected slot or anywhere in the pack. */
-export function hasLightstick(world: World, playerId: EntityId): boolean {
+/** True when the selected slot holds a light stick ("holding" in the HUD). */
+export function hasSelectedLightstick(world: World, playerId: EntityId): boolean {
   const inventory = world.entities.get(playerId)?.components.inventory;
   if (!inventory) return false;
   const selected = inventory.slots[inventory.selectedSlot];
-  if (selected && world.entities.get(selected)?.components.item?.itemId === 'light_stick') {
-    return true;
-  }
-  return inventory.slots.some(
-    (id) => id !== null && world.entities.get(id)?.components.item?.itemId === 'light_stick',
-  );
+  return selected !== null && selected !== undefined && world.entities.get(selected)?.components.item?.itemId === 'light_stick';
 }
 
 export function tickInteraction(deps: InteractDeps): void {
@@ -85,10 +80,14 @@ export function tickInteraction(deps: InteractDeps): void {
     return;
   }
   const hit: Vec3d | null = aim.hit;
-  if (hit && hasLightstick(world, playerId)) {
-    world.dispatch({ type: 'placeLightstick', playerId });
+  // Carried placeables enter placement mode before the light stick branch:
+  // a light stick in the pack must not swallow E while a platform is carried.
+  const carried = hit ? carriedPlaceable(world, playerId) : null;
+  if (carried) {
+    placement.enter(carried.placeable.id);
     return;
   }
-  const carried = hit ? carriedPlaceable(world, playerId) : null;
-  if (carried) placement.enter(carried.placeable.id);
+  if (hit && hasSelectedLightstick(world, playerId)) {
+    world.dispatch({ type: 'placeLightstick', playerId });
+  }
 }
