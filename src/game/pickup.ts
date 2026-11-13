@@ -64,18 +64,17 @@ export function findAimedMachine(world: World, playerId: EntityId, aim?: ToolAim
  */
 export function findAimedShuttle(world: World, playerId: EntityId, aim?: ToolAim): EntityId | null {
   if (aim?.ray) {
-    const hit = findStructureAlongRay(
+    // A live cursor ray is authoritative: if it misses, do not silently grab
+    // a different ship in the look cone behind/next to the cursor.
+    return findStructureAlongRay(
       world,
       playerId,
       aim.ray,
       SHUTTLE_ENTER_RANGE_M,
       (entity) => entity.kind === 'shuttle',
     );
-    if (hit) return hit;
   }
-  // "E near the shuttle": a cursor ray that misses (e.g. pointing at the
-  // horizon beside the nose) still boards when the astronaut stands close
-  // and faces the body.
+  // Legacy/headless caller without a view ray: the on-foot look cone.
   const player = world.entities.get(playerId);
   const playerComp = player?.components.player;
   if (!player || player.kind !== 'player' || !playerComp) return null;

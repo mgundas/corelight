@@ -6,6 +6,7 @@
 // index, delta, ...]; indices < 2^24 round-trip exactly through float32).
 
 import type { Quat, Vec3d } from '../core/math.js';
+import { SHUTTLE_FUEL_MAX, SHUTTLE_LAUNCH_HOLD_S } from '../core/constants.js';
 import { isKnownResearch } from '../data/loadResearch.js';
 import type { PlanetConfig } from '../planets/PlanetConfig.js';
 import type { Entity, EntityId, EntityKind } from '../sim/entities.js';
@@ -221,21 +222,28 @@ function deserializeEntity(data: unknown): Entity {
   // before it can produce NaN positions.
   const shuttle = components.shuttle as Record<string, unknown> | undefined;
   if (shuttle) {
-    if (!isFiniteNumber(shuttle['fuel']) || shuttle['fuel'] < 0) {
+    if (!isFiniteNumber(shuttle['fuel']) || shuttle['fuel'] < 0 || shuttle['fuel'] > SHUTTLE_FUEL_MAX) {
       throw new Error('bad save: shuttle.fuel malformed');
     }
     if (shuttle['pilotId'] !== null && typeof shuttle['pilotId'] !== 'string') {
       throw new Error('bad save: shuttle.pilotId malformed');
     }
     if (!isVec3d(shuttle['velocity'])) throw new Error('bad save: shuttle.velocity malformed');
-    if (!isVec3d(shuttle['up'])) throw new Error('bad save: shuttle.up malformed');
+    const up = shuttle['up'];
+    if (!isVec3d(up) || Math.hypot(up.x, up.y, up.z) < 1e-6) {
+      throw new Error('bad save: shuttle.up malformed');
+    }
     if (!isFiniteNumber(shuttle['yaw']) || !isFiniteNumber(shuttle['pitch'])) {
       throw new Error('bad save: shuttle heading malformed');
     }
     if (shuttle['lastLookYaw'] !== undefined && !isFiniteNumber(shuttle['lastLookYaw'])) {
       throw new Error('bad save: shuttle.lastLookYaw malformed');
     }
-    if (!isFiniteNumber(shuttle['launchChargeS']) || shuttle['launchChargeS'] < 0) {
+    if (
+      !isFiniteNumber(shuttle['launchChargeS']) ||
+      shuttle['launchChargeS'] < 0 ||
+      shuttle['launchChargeS'] > SHUTTLE_LAUNCH_HOLD_S
+    ) {
       throw new Error('bad save: shuttle.launchChargeS malformed');
     }
     if (typeof shuttle['airborne'] !== 'boolean') {

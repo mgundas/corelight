@@ -335,7 +335,7 @@ export class Renderer {
 
   /** Interpolated render anchor for the piloted shuttle (M14 chase camera). */
   setShuttleRenderAnchor(id: EntityId | null, position: Vec3d | null): void {
-    this.placeableViews.setShuttleAnchor(id && position ? { id, position } : null);
+    this.placeableViews.setShuttleAnchor(id, position);
   }
 
   /**

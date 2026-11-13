@@ -61,16 +61,18 @@ export function enterShuttle(world: World, playerId: EntityId, shuttleId: Entity
   const player = world.entities.get(playerId);
   const playerComp = player?.components.player;
   const shuttle = shuttleEntity(world, shuttleId);
+  const shuttleComp = shuttle?.components.shuttle;
   if (
     !player ||
     player.kind !== 'player' ||
     !playerComp ||
     !shuttle ||
-    !shuttle.components.shuttle ||
+    !shuttleComp ||
     player.planetId === null ||
     shuttle.planetId !== player.planetId ||
     playerComp.pilotingShuttleId ||
-    isPiloted(shuttle.components.shuttle) ||
+    isPiloted(shuttleComp) ||
+    shuttleComp.airborne ||
     distance(player.position, shuttle.position) > SHUTTLE_ENTER_RANGE_M
   ) {
     fail('enterShuttle');
@@ -78,7 +80,7 @@ export function enterShuttle(world: World, playerId: EntityId, shuttleId: Entity
   }
   releaseGrab(world, player);
   playerComp.pilotingShuttleId = shuttle.id;
-  shuttle.components.shuttle.pilotId = playerId;
+  shuttleComp.pilotId = playerId;
   // The pilot sits inside: keep the entity on the shuttle transform so the
   // collider ring and camera follow it, but never draw the suit.
   attachPilotToShuttle(player, shuttle);
@@ -94,6 +96,12 @@ export function exitShuttle(world: World, playerId: EntityId): void {
   const shuttleComp = shuttle?.components.shuttle;
   if (!player || !playerComp || !shuttle || !shuttleComp) {
     if (playerComp) playerComp.pilotingShuttleId = null;
+    fail('exitShuttle');
+    return;
+  }
+  // Deep space has no surface to step onto (and the M13 fallback freezes
+  // players outside every SOI): stay aboard rather than stranding the suit.
+  if (shuttle.planetId === null) {
     fail('exitShuttle');
     return;
   }

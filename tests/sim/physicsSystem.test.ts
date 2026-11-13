@@ -71,6 +71,20 @@ describe('physics system on real terrain', () => {
     colliders.dispose();
   }, 60000);
 
+  it('heals a stale pilot link instead of freezing the player', () => {
+    const colliders = new TerrainColliders(directSource(), physicsWorldFor);
+    const world = new World(1337);
+    world.addSystem(makePhysicsSystem({ planets: [SELA], worldSeed: 1337, colliders }));
+    world.dispatch({ type: 'spawnPlayer', planetId: 'sela', position: findSpawnPosition(SELA, 1337) });
+    world.tick();
+    const player = [...world.entities.values()].find((e) => e.kind === 'player');
+    if (!player?.components.player) throw new Error('no player');
+    player.components.player.pilotingShuttleId = 'shuttle_that_was_deleted';
+    world.tick();
+    expect(player.components.player.pilotingShuttleId).toBe(null);
+    colliders.dispose();
+  }, 30000);
+
   it('low gravity in the core chamber: slow floaty fall', async () => {
     const colliders = new TerrainColliders(directSource(), physicsWorldFor);
     const world = new World(1337);

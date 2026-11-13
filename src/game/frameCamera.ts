@@ -7,6 +7,7 @@ import type { Vec3d } from '../core/math.js';
 import type { PlanetConfig } from '../planets/PlanetConfig.js';
 import type { FreeFlyCamera } from '../player/freeFlyCamera.js';
 import type { CameraRig } from '../player/cameraRig.js';
+import type { PlayerInput } from '../player/input.js';
 import type { Renderer } from '../render/Renderer.js';
 import { maybeShiftOrigin, toLocal } from '../render/floatingOrigin.js';
 import type { EntityId } from '../sim/entities.js';
@@ -23,6 +24,7 @@ export interface FrameCameraDeps {
   planets: PlanetConfig[];
   renderer: Renderer;
   rig: CameraRig;
+  input: PlayerInput;
   colliders: TerrainColliders;
   flyCamera: FreeFlyCamera;
   playerId: EntityId | null;
@@ -37,12 +39,11 @@ export interface FrameCameraResult {
   activePos: Vec3d;
   focusWorld: Vec3d;
   depthBelowM: number;
-  /** True while the player is riding a shuttle (chase camera active). */
-  piloting: boolean;
 }
 
 /** One session-scoped chase camera (no DOM/GPU resources to release). */
 const shuttleCamera = new ShuttleCamera();
+let shuttleCameraWorld: World | null = null;
 
 export function updateCameraAndEnvironment(deps: FrameCameraDeps): FrameCameraResult {
   const { renderer, world, planets, playerId, flying, alpha } = deps;
@@ -51,6 +52,13 @@ export function updateCameraAndEnvironment(deps: FrameCameraDeps): FrameCameraRe
   // A pilot's suit is hidden inside the ship; the shuttle mesh renders from
   // the interpolated pilot anchor so the chase camera sees no 30 Hz steps.
   const pilotEntity = playerId ? pilotedShuttle(world, playerId) : undefined;
+  const freeLookDeltas = deps.input.pilotLook.consume();
+  if (world !== shuttleCameraWorld) {
+    // New session (Continue/menu): never inherit the previous ship's basis.
+    shuttleCameraWorld = world;
+    shuttleCamera.reset();
+  }
+  if (!pilotEntity) shuttleCamera.reset();
   renderer.setShuttleRenderAnchor(
     pilotEntity?.id ?? null,
     pilotEntity ? (renderer.playerView.interpolatedWorld(alpha) ?? pilotEntity.position) : null,
@@ -71,6 +79,8 @@ export function updateCameraAndEnvironment(deps: FrameCameraDeps): FrameCameraRe
       (playerId ? world.entities.get(playerId)?.position : undefined) ??
       piloted.position;
     const planet = planets.find((p) => p.id === piloted.planetId) ?? null;
+    const freeLookActive = deps.input.isOrbiting();
+    if (freeLookActive) shuttleCamera.addFreeLook(freeLookDeltas.dx, freeLookDeltas.dy);
     const view = shuttleCamera.update(
       anchor,
       piloted.components.shuttle,
@@ -78,6 +88,7 @@ export function updateCameraAndEnvironment(deps: FrameCameraDeps): FrameCameraRe
       deps.colliders,
       deps.paused ? 0 : deps.frameDt,
       planet,
+      freeLookActive,
     );
     activePos = view.position;
     focusOverride = view.anchor;
@@ -114,5 +125,5 @@ export function updateCameraAndEnvironment(deps: FrameCameraDeps): FrameCameraRe
     lampPlayer?.components.player?.headlampOn ?? true,
   );
   renderer.updateEnvironment(env);
-  return { activePos, focusWorld, depthBelowM: env.depthBelowM, piloting: piloted !== undefined };
+  return { activePos, focusWorld, depthBelowM: env.depthBelowM };
 }

@@ -266,4 +266,14 @@ describe('landing assist', () => {
     fixture.world.tick();
     expect(shuttleOf(fixture).velocity.y).toBeLessThan(-40);
   });
+
+  it('drops to assist speed when the ground probe misses while low', () => {
+    const fixture = makeFixture();
+    fixture.ground.distance = null;
+    airborneAt(fixture, 50);
+    const shuttle = shuttleOf(fixture);
+    shuttle.velocity = { x: 120, y: 0, z: 0 };
+    fixture.world.tick();
+    expect(Math.hypot(...Object.values(shuttleOf(fixture).velocity))).toBeLessThan(45);
+  });
 });

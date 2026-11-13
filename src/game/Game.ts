@@ -319,15 +319,14 @@ export class Game {
       }
     }
 
-    // Active camera + day/night environment (frameCamera.ts): fly cam in F3
-    // mode, orbit rig otherwise; origin shifts and lighting follow whichever
-    // the player sees through.
+    // Active camera + day/night environment (fly, shuttle chase or orbit).
     const alpha = this.accumulator / SIM_DT;
     const { activePos, focusWorld, depthBelowM } = updateCameraAndEnvironment({
       world: this.world,
       planets: this.planets,
       renderer: this.renderer,
       rig: this.rig,
+      input: this.input,
       colliders: this.colliders,
       flyCamera: this.flyCamera,
       playerId: this.playerId,

@@ -13,6 +13,7 @@ import type { PlayerInput } from '../../src/player/input.js';
 import { dispatchTickInput } from '../../src/game/tickInput.js';
 import { interactPrompt } from '../../src/game/prompts.js';
 import { flightStatusFor } from '../../src/game/shuttleHud.js';
+import { findAimedShuttle } from '../../src/game/pickup.js';
 import { PlacementMode } from '../../src/game/placement.js';
 import { ToolMode } from '../../src/game/toolMode.js';
 import type { ToolAim } from '../../src/player/terrainTool.js';
@@ -59,6 +60,7 @@ class StubInput {
   sprintHeld = false;
   moveX = 0;
   moveZ = 0;
+  readonly pilotLook = { setActive: () => undefined };
   constructor(private readonly oneShot: Partial<Record<'headlamp' | 'jump' | 'printer', boolean>> = {}) {}
   consumeHeadlampToggle(): boolean { return this.oneShot.headlamp === true; }
   consumeInteract(): boolean { const v = this.interact; this.interact = false; return v; }
@@ -177,8 +179,25 @@ describe('shuttle E prompt parity', () => {
     expect(interactPrompt(world, playerId, aim, new PlacementMode())).toBe('E: board Shuttle');
   });
 
-  it('shows disembark only while landed', () => {
-    const { world, playerId, shuttleId } = spawnWorld();
+  it('does not board a different ship when the cursor ray misses', () => {
+    const { world, playerId, shuttleId } = spawnWorld(4);
+    const player = world.entities.get(playerId)!;
+    const awayAim: ToolAim = {
+      hit: null,
+      normal: null,
+      planet: SELA,
+      ray: {
+        origin: { x: player.position.x, y: player.position.y + 1.5, z: player.position.z },
+        dir: { x: -1, y: 0, z: 0 },
+      },
+    };
+    // The ray misses, even though the ship is inside the on-foot cone.
+    expect(findAimedShuttle(world, playerId, awayAim)).toBe(null);
+    // Headless callers without a ray keep the forgiving cone fallback.
+    expect(findAimedShuttle(world, playerId)).toBe(shuttleId);
+  });
+
+  it('shows disembark only while landed', () => {    const { world, playerId, shuttleId } = spawnWorld();
     world.dispatch({ type: 'enterShuttle', playerId, shuttleId });
     world.tick();
     const aim: ToolAim = { hit: null, normal: null, planet: null };

@@ -442,6 +442,18 @@ describe('save round trip', () => {
     if (!shuttleEntry) throw new Error('missing shuttle');
     (shuttleEntry.components['shuttle'] as Record<string, unknown>)['fuel'] = 'full';
     expect(() => deserializeWorld(badFuel, [SELA])).toThrow();
+    for (const patch of [
+      { fuel: 999 },
+      { launchChargeS: 3 },
+      { up: { x: 0, y: 0, z: 0 } },
+      { airborne: 'yes' },
+    ]) {
+      const bad = JSON.parse(JSON.stringify(good)) as typeof good;
+      const entry = bad.entities.find((e) => e.id === shuttleId);
+      if (!entry) throw new Error('missing shuttle');
+      Object.assign(entry.components['shuttle'] as Record<string, unknown>, patch);
+      expect(() => deserializeWorld(bad, [SELA]), JSON.stringify(patch)).toThrow();
+    }
     const badLink = JSON.parse(JSON.stringify(good)) as typeof good;
     const playerEntry = badLink.entities.find((e) => e.id === player.id);
     if (!playerEntry) throw new Error('missing player');

@@ -309,6 +309,9 @@ export const RESEARCH_TIME_S = 20;
 export const RESEARCH_POWER = 1;
 /** Open research panel refresh interval (ms), same rationale as printers. */
 export const RESEARCH_UI_SYNC_INTERVAL_MS = 100;
+/** Flight HUD projection interval (ms): planet/base bearings are stable at
+ * this rate and the panel need not walk every entity at display rate. */
+export const FLIGHT_UI_SYNC_INTERVAL_MS = 100;
 /** How long the "New blueprint" toast stays visible (ms). */
 export const TOAST_DURATION_MS = 3200;
 
@@ -335,6 +338,9 @@ export const SHUTTLE_YAW_RATE = 1.5;
 export const SHUTTLE_PITCH_LIMIT = 1;
 /** Below this altitude the landing assist clamps descent and levels out. */
 export const SHUTTLE_LANDING_ASSIST_M = 40;
+/** If the ground probe misses below this altitude, the ring is still loading:
+ * clamp speed so the ship cannot outrun collider streaming into a hill. */
+export const SHUTTLE_TERRAIN_PENDING_ALTITUDE_M = 80;
 export const SHUTTLE_ASSIST_DESCENT_MPS = 4;
 /** Horizontal cap during the landing assist so a dive cannot overshoot. */
 export const SHUTTLE_ASSIST_SPEED_MPS = 40;

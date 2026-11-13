@@ -74,7 +74,7 @@ tests/                 vitest tests, mirrors src/ structure
 - `render/floatingOrigin.ts` holds `origin: Vec3d`.
 - Every three.js object position = `worldPos - origin` (converted to float).
 - When the camera is more than 1000 m from the origin, set `origin = cameraWorldPos` (rounded to chunk size) and shift every object. Emit `originShifted` event.
-- Rapier also uses a local frame per planet: physics bodies near a planet live in that planet's local frame. In space (outside any sphere of influence), the shuttle uses a space physics frame centered on itself. Switching frames is handled in `sim/physics/frames.ts`.
+- Rapier also uses a local frame per planet: physics bodies near a planet live in that planet's local frame. Outside every sphere of influence there is no terrain to contact, so the piloted shuttle integrates in world-space doubles with no Rapier body; it binds back into the dominant planet's local frame as soon as it enters an SOI. The frame relabel is handled in `sim/physics/frames.ts` and `sim/systems/shuttle.ts`.
 
 ## Terrain
 

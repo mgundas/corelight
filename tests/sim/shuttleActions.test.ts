@@ -75,13 +75,13 @@ describe('shuttle placement', () => {
       playerId,
       placeableId: 'shuttle',
       position: { ...surface },
-      slot: { entityId: platformId, slotIndex: 1 },
+      slot: { entityId: platformId, slotIndex: 0 },
     });
     world.tick();
     const shuttles = [...world.entities.values()].filter((e) => e.kind === 'shuttle');
     expect(shuttles).toHaveLength(1);
     expect(shuttles[0]?.components.placeable?.attachedTo).toBe(platformId);
-    expect(slotFree(world, { entityId: platformId, slotIndex: 1 })).toBe(false);
+    expect(slotFree(world, { entityId: platformId, slotIndex: 0 })).toBe(false);
     const platform = world.entities.get(platformId);
     if (!platform) throw new Error('platform gone');
     expect(isEntityEmpty(world, platform)).toBe(false);
@@ -153,6 +153,30 @@ describe('boarding and disembarking', () => {
     world.dispatch({ type: 'enterShuttle', playerId, shuttleId });
     world.tick();
     expect(world.entities.get(playerId)?.components.player?.pilotingShuttleId ?? null).toBe(null);
+  });
+
+  it('refuses boarding a moving ship', () => {
+    const { world, playerId, shuttleId } = spawnWorld();
+    const shuttle = world.entities.get(shuttleId)!;
+    shuttle.components.shuttle!.airborne = true;
+    world.dispatch({ type: 'enterShuttle', playerId, shuttleId });
+    world.tick();
+    expect(world.entities.get(playerId)?.components.player?.pilotingShuttleId ?? null).toBe(null);
+    expect(shuttle.components.shuttle?.pilotId ?? null).toBe(null);
+  });
+
+  it('stays aboard in deep space (no surface to step onto)', () => {
+    const { world, playerId, shuttleId } = spawnWorld();
+    world.dispatch({ type: 'enterShuttle', playerId, shuttleId });
+    world.tick();
+    const shuttle = world.entities.get(shuttleId)!;
+    const player = world.entities.get(playerId)!;
+    shuttle.planetId = null;
+    player.planetId = null;
+    world.dispatch({ type: 'exitShuttle', playerId });
+    world.tick();
+    expect(player.components.player?.pilotingShuttleId).toBe(shuttleId);
+    expect(shuttle.components.shuttle?.pilotId).toBe(playerId);
   });
 
   it('disembarks only when landed and slow, stepping out beside the ship', () => {

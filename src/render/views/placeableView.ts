@@ -57,7 +57,8 @@ export class PlaceableViews {
   private readonly tmpSun = new THREE.Vector3();
   private readonly tmpLocalSun = new THREE.Vector3();
   /** Interpolated display position for the piloted shuttle (render-only). */
-  private shuttleAnchor: { id: EntityId; position: Vec3d } | null = null;
+  private shuttleAnchorId: EntityId | null = null;
+  private shuttleAnchorPos: Vec3d | null = null;
 
   constructor() {
     this.group.name = 'placeables';
@@ -68,8 +69,9 @@ export class PlaceableViews {
    * The piloted shuttle renders from the interpolated pilot position so its
    * 30 Hz sim steps do not visibly stutter against the chase camera.
    */
-  setShuttleAnchor(anchor: { id: EntityId; position: Vec3d } | null): void {
-    this.shuttleAnchor = anchor ? { id: anchor.id, position: { ...anchor.position } } : null;
+  setShuttleAnchor(id: EntityId | null, position: Vec3d | null): void {
+    this.shuttleAnchorId = id;
+    this.shuttleAnchorPos = position;
   }
 
   /** Reconcile placeables/machines/shuttles/light sticks; returns emitters. */
@@ -96,8 +98,8 @@ export class PlaceableViews {
         this.group.add(object);
       }
       const local = toLocal(
-        this.shuttleAnchor && this.shuttleAnchor.id === entity.id
-          ? this.shuttleAnchor.position
+        this.shuttleAnchorId === entity.id && this.shuttleAnchorPos
+          ? this.shuttleAnchorPos
           : entity.position,
       );
       object.position.set(local.x, local.y, local.z);

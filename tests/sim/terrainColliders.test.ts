@@ -142,6 +142,25 @@ describe('TerrainColliders', () => {
     rapierWorld.free();
   });
 
+  it('loads a ring around an extra focus (low shuttle)', async () => {
+    const rapierWorld = new RAPIER.World({ x: 0, y: 0, z: 0 });
+    const calls = { count: 0 };
+    const colliders = new TerrainColliders(directSource(calls), () => rapierWorld);
+    const spawn = findSpawnPosition(SELA, 1337);
+    const extra = { x: spawn.x + 200, y: spawn.y, z: spawn.z };
+    // Far outside the player's 48 m ring: pending until the extra is passed.
+    colliders.update(spawn, [SELA], 1337);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(colliders.groundState(extra, [SELA])).toBe('pending');
+    colliders.update(spawn, [SELA], 1337, [extra]);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(colliders.groundState(extra, [SELA])).toBe('ready');
+    colliders.dispose();
+    rapierWorld.free();
+  });
+
   it('recovers from source failures on the next update', async () => {
     const rapierWorld = new RAPIER.World({ x: 0, y: 0, z: 0 });
     let fail = true;

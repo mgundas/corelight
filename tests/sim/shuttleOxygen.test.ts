@@ -86,6 +86,30 @@ describe('last-habitat respawn', () => {
     expect(world.entities.get(playerId)?.components.player?.lastHabitatId).toBe(habitatId);
   });
 
+  it('records a habitat the ship is parked next to', () => {
+    const world = new World(1337, { planets: [SELA, VORN] });
+    world.dispatch({
+      type: 'spawnPlayer',
+      planetId: VORN.id,
+      position: { x: 0, y: VORN.radius, z: 0 },
+    });
+    world.tick();
+    const playerId = [...world.entities.values()].find((e) => e.kind === 'player')?.id ?? '';
+    const hubId = spawnHabitatEntity(world, VORN.id, { x: 1, y: VORN.radius, z: 0 });
+    const shuttleId = spawnPlaceableEntity(world, VORN.id, 'shuttle', {
+      x: 0,
+      y: VORN.radius,
+      z: 0,
+    });
+    if (!playerId || !hubId || !shuttleId) throw new Error('fixture failed');
+    const player = world.entities.get(playerId)!;
+    const shuttle = world.entities.get(shuttleId)!;
+    player.components.player!.pilotingShuttleId = shuttleId;
+    shuttle.components.shuttle!.pilotId = playerId;
+    updateOxygen(world, [SELA, VORN], SIM_DT);
+    expect(player.components.player?.lastHabitatId).toBe(hubId);
+  });
+
   it('respawns at a Vorn outpost instead of Sela', () => {
     const world = new World(1337, { planets: [SELA, VORN] });
     world.dispatch({

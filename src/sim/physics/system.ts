@@ -122,6 +122,15 @@ export function makePhysicsSystem(opts: PhysicsOptions): System {
         bodies.delete(id);
       }
     }
+    // Shuttles are dynamic bodies too: their low-altitude ring must load
+    // even if nobody is aboard (the attached pilot covers the common case,
+    // but the parked/limp ship should still have ground under it).
+    const shuttleFocuses: Vec3d[] = [];
+    for (const entity of world.entities.values()) {
+      if (entity.kind === 'shuttle' && entity.planetId && entity.components.shuttle) {
+        shuttleFocuses.push(entity.position);
+      }
+    }
     for (const entity of world.entities.values()) {
       if (entity.kind !== 'player' || !entity.components.player) continue;
       // SOI handoff (M13): the dominant planet owns the frame. Relabel first
@@ -129,16 +138,30 @@ export function makePhysicsSystem(opts: PhysicsOptions): System {
       // the controller rebinds to the new Rapier world when it steps.
       const dominant = transferPlanetId(opts.planets, entity.position);
       if (entity.planetId !== dominant) entity.planetId = dominant;
-      opts.colliders.update(entity.position, opts.planets, opts.worldSeed);
+      opts.colliders.update(entity.position, opts.planets, opts.worldSeed, shuttleFocuses);
       // A pilot is attached to a shuttle: the shuttle system owns their
       // motion and the astronaut collider must not fight the ship body.
-      if (entity.components.player.pilotingShuttleId) {
-        const pilotBody = bodies.get(entity.id);
-        if (pilotBody) {
-          pilotBody.dispose();
-          bodies.delete(entity.id);
+      // Validate the link first; a stale id (deleted ship / hand-edited save)
+      // would otherwise freeze the player forever instead of healing.
+      const pilotingId = entity.components.player.pilotingShuttleId;
+      if (pilotingId) {
+        const shuttle = world.entities.get(pilotingId);
+        const valid =
+          shuttle?.kind === 'shuttle' &&
+          shuttle.components.shuttle?.pilotId === entity.id;
+        if (valid) {
+          const pilotBody = bodies.get(entity.id);
+          if (pilotBody) {
+            pilotBody.dispose();
+            bodies.delete(entity.id);
+          }
+          // A valid pilot's position is owned by the shuttle's dynamic body
+          // (CCD + terrain contacts); running safetyStep here would push the
+          // entity and be undone by syncPilot every tick, so the ship body is
+          // the collision authority while attached.
+          continue;
         }
-        continue;
+        entity.components.player.pilotingShuttleId = null;
       }
       // Embedded safety first: inside solid rock normal integration only
       // builds fall velocity (solid chunks have no trimesh), so freeze and

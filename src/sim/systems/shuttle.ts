@@ -27,6 +27,7 @@ import {
   SHUTTLE_LIFT_ACCEL,
   SHUTTLE_PITCH_LIMIT,
   SHUTTLE_SAFE_TOUCHDOWN_MPS,
+  SHUTTLE_TERRAIN_PENDING_ALTITUDE_M,
   SHUTTLE_THRUST_ACCEL,
   SHUTTLE_YAW_RATE,
   SHUTTLE_FUEL_MAX,
@@ -209,6 +210,12 @@ function updateShuttle(
       SHUTTLE_LANDING_ASSIST_M + 25,
     );
     const altitude = altitudeAbove(planet, entity.position);
+    // No ground hit while low means the collider ring has not caught up
+    // (or the ship is over a deep hole). Do not let a fast ship outrun the
+    // worker stream into a hill: fall back to the assist speed.
+    if (ground === null && altitude < SHUTTLE_TERRAIN_PENDING_ALTITUDE_M) {
+      shuttle.velocity = clampSpeed(shuttle.velocity, SHUTTLE_ASSIST_SPEED_MPS);
+    }
     const assist = ground !== null
       ? ground < SHUTTLE_LANDING_ASSIST_M
       : altitude < SHUTTLE_LANDING_ASSIST_M;

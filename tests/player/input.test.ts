@@ -85,6 +85,24 @@ describe('PlayerInput pointer model', () => {
     expect(input.consumeBrushToggle()).toBe(false);
   });
 
+  it('separates pilot steering from RMB free-look', () => {
+    const { input, canvas, look, lockRequests } = setup();
+    input.pilotLook.setActive(true);
+    expect(input.pilotLook.isActive()).toBe(true);
+    expect(lockRequests.count).toBeGreaterThan(0);
+    // RMB while piloting buffers camera-only movement; the steering rig
+    // (look) must not move, so the ship keeps its heading.
+    mouseDown(canvas, 2);
+    mouseMove(110, 105);
+    expect(input.pilotLook.consume()).toEqual({ dx: 10, dy: 5 });
+    expect(look).toEqual({ dx: 0, dy: 0 });
+    mouseUp(2);
+    // Released: no stale free-look delta is left for the camera.
+    expect(input.pilotLook.consume()).toEqual({ dx: 0, dy: 0 });
+    input.pilotLook.setActive(false);
+    expect(input.pilotLook.isActive()).toBe(false);
+  });
+
   it('clears orbit and input queues when disabled', () => {
     const { input, canvas } = setup();
     mouseDown(canvas, 2);

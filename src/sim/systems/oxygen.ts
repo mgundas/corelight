@@ -233,36 +233,11 @@ export function updateOxygen(world: World, planets: PlanetConfig[], dt: number):
     if (player.kind !== 'player' || !player.components.player) continue;
     const planet = planets.find((p) => p.id === player.planetId);
     const oxygen = oxygenFor(player);
-    // A pilot breathes from the shuttle's life support: full suit, no drain,
-    // no canisters, no death while inside (M14). A stale link (shuttle sold
-    // or removed) heals to on-foot breathing instead of freezing forever.
-    const pilotingId = player.components.player?.pilotingShuttleId ?? null;
-    if (pilotingId) {
-      const shuttle = world.entities.get(pilotingId);
-      if (
-        shuttle &&
-        shuttle.kind === 'shuttle' &&
-        shuttle.components.shuttle?.pilotId === player.id &&
-        player.components.player
-      ) {
-        oxygen.value = OXYGEN_MAX;
-        continue;
-      }
-      if (player.components.player) player.components.player.pilotingShuttleId = null;
-    }
-    // A recovered pack clears its marker once the player walks back to it.
     const playerComp = player.components.player;
-    if (playerComp.deathMarkerId) {
-      const marker = world.entities.get(playerComp.deathMarkerId);
-      if (!marker) {
-        playerComp.deathMarkerId = null;
-      } else if (distance(marker.position, player.position) <= PICKUP_RANGE_M) {
-        world.entities.delete(marker.id);
-        playerComp.deathMarkerId = null;
-      }
-    }
+    if (!playerComp) continue;
     // "Last habitat the player was near" is the M14 respawn point. Record it
-    // whenever they stand inside habitat oxygen range (any planet).
+    // before the pilot early-continue so landing next to an outpost counts
+    // even while still sitting in the shuttle.
     if (planet) {
       let nearest: Entity | null = null;
       let nearestDist = OXYGEN_RANGE_M;
@@ -274,6 +249,28 @@ export function updateOxygen(world: World, planets: PlanetConfig[], dt: number):
         }
       }
       if (nearest) playerComp.lastHabitatId = nearest.id;
+    }
+    // A pilot breathes from the shuttle's life support: full suit, no drain,
+    // no canisters, no death while inside (M14). A stale link (shuttle sold
+    // or removed) heals to on-foot breathing instead of freezing forever.
+    const pilotingId = playerComp.pilotingShuttleId ?? null;
+    if (pilotingId) {
+      const shuttle = world.entities.get(pilotingId);
+      if (shuttle && shuttle.kind === 'shuttle' && shuttle.components.shuttle?.pilotId === player.id) {
+        oxygen.value = OXYGEN_MAX;
+        continue;
+      }
+      playerComp.pilotingShuttleId = null;
+    }
+    // A recovered pack clears its marker once the player walks back to it.
+    if (playerComp.deathMarkerId) {
+      const marker = world.entities.get(playerComp.deathMarkerId);
+      if (!marker) {
+        playerComp.deathMarkerId = null;
+      } else if (distance(marker.position, player.position) <= PICKUP_RANGE_M) {
+        world.entities.delete(marker.id);
+        playerComp.deathMarkerId = null;
+      }
     }
     const onNetwork = planet ? isOnOxygenNetwork(world, player.id) : false;
     if (onNetwork) {

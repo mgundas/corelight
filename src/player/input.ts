@@ -9,6 +9,7 @@
 
 import { BACKPACK_SLOTS } from '../core/constants.js';
 import { isUiKey } from './uiInput.js';
+import { PilotLook } from './pilotLook.js';
 
 export class PlayerInput {
   private keys = new Set<string>();
@@ -26,7 +27,10 @@ export class PlayerInput {
   /** True while E is physically down (hold-to-pack). */
   private interactHeld = false;
   /** True while right/middle mouse (camera orbit) is held. */
-  private orbiting = false;  private enabled = true;
+  private orbiting = false;
+  /** Pilot pointer/free-look ownership (M14); public for game wiring. */
+  readonly pilotLook = new PilotLook();
+  private enabled = true;
   private canvas: HTMLCanvasElement | null = null;
   private lookTarget: { addLook: (dx: number, dy: number) => void } | null = null;
   private zoomTarget: { zoom: (delta: number) => void } | null = null;
@@ -48,6 +52,7 @@ export class PlayerInput {
     this.lookTarget = lookTarget;
     this.zoomTarget = zoomTarget;
     this.radiusTarget = radiusTarget ?? null;
+    this.pilotLook.attach(canvas);
     this.cursorX = window.innerWidth / 2;
     this.cursorY = window.innerHeight / 2;
     window.addEventListener('keydown', this.handleKeyDown);
@@ -74,6 +79,7 @@ export class PlayerInput {
     this.releaseOrbit();
     this.keys.clear();
     this.mouseButtons.clear();
+    this.pilotLook.detach();
     this.canvas = null;
   }
 
@@ -94,7 +100,13 @@ export class PlayerInput {
     this.selectQueued = null;
     this.interactHeld = false;
     this.dragging = false;
+    this.pilotLook.resetDeltas();
     this.releaseOrbit();
+    if (enabled && this.pilotLook.isActive()) this.pilotLook.requestLock();
+  }
+
+  private requestPilotLock(): void {
+    this.pilotLook.requestLock();
   }
 
   /** Strafe/forward intent in [-1, 1]. */
@@ -296,6 +308,12 @@ export class PlayerInput {
 
   private handleMouseDown = (e: MouseEvent): void => {
     if (!this.enabled) return;
+    // Pilot mode owns the pointer. LMB is drained by the pilot input branch,
+    // so it is a natural "re-lock after Esc/pause" gesture. RMB/MMB below
+    // takes the existing orbit path (which also requests the lock).
+    if (this.pilotLook.isActive() && e.button !== 1 && e.button !== 2 && document.pointerLockElement !== this.canvas) {
+      this.requestPilotLock();
+    }
     this.mouseButtons.add(e.button);
     if (e.button === 0) this.primaryQueued = true;
     if (e.button === 1 || e.button === 2) {
@@ -325,22 +343,38 @@ export class PlayerInput {
   private handleMouseMove = (e: MouseEvent): void => {
     this.cursorX = e.clientX;
     this.cursorY = e.clientY;
-    if (!this.enabled || !this.orbiting) return;
-    let dx = 0;
-    let dy = 0;
-    if (document.pointerLockElement === this.canvas) {
-      dx = e.movementX;
-      dy = e.movementY;
-    } else if (this.dragging) {
-      dx = e.clientX - this.lastX;
-      dy = e.clientY - this.lastY;
-      this.lastX = e.clientX;
-      this.lastY = e.clientY;
-    } else {
+    if (!this.enabled) return;
+    if (this.pilotLook.isActive()) {
+      if (this.orbiting) {
+        // RMB while piloting is free-look: buffer camera-only movement and
+        // leave the rig (ship steering) untouched.
+        const delta = this.readLookDelta(e);
+        if (delta) this.pilotLook.addLook(delta.dx, delta.dy);
+      } else if (document.pointerLockElement === this.canvas) {
+        // Pointer-locked pilot steering (no button needed).
+        this.lookTarget?.addLook(e.movementX, e.movementY);
+      }
       return;
     }
-    this.lookTarget?.addLook(dx, dy);
+    if (!this.orbiting) return;
+    const delta = this.readLookDelta(e);
+    if (delta) this.lookTarget?.addLook(delta.dx, delta.dy);
   };
+
+  /** Mouse delta from pointer lock, or the drag fallback while orbiting. */
+  private readLookDelta(e: MouseEvent): { dx: number; dy: number } | null {
+    if (document.pointerLockElement === this.canvas) {
+      return { dx: e.movementX, dy: e.movementY };
+    }
+    if (this.dragging) {
+      const dx = e.clientX - this.lastX;
+      const dy = e.clientY - this.lastY;
+      this.lastX = e.clientX;
+      this.lastY = e.clientY;
+      return { dx, dy };
+    }
+    return null;
+  }
 
   private handleMouseUp = (e: MouseEvent): void => {
     this.mouseButtons.delete(e.button);

@@ -81,6 +81,11 @@ function slotPlacement(
     return fail('Only machines and shuttles fit a slot');
   }
   if (def.machineType === 'habitat') return fail('The habitat cannot sit on a platform');
+  // A shuttle is wide: only the center pad carries it without overhanging
+  // into a neighbouring structure.
+  if (def.entityKind === 'shuttle' && target.slotIndex !== 0) {
+    return fail('The shuttle needs the platform center');
+  }
   const platform = world.entities.get(target.entityId);
   if (!platform || platform.kind !== 'platform' || platform.planetId !== planetId) {
     return fail('Unknown platform');

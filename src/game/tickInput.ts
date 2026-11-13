@@ -57,6 +57,8 @@ export function dispatchTickInput(deps: TickInputDeps): void {
   // shuttleInput Action per tick.
   const pilotShuttleId = activePilotShuttle(deps.world, deps.playerId);
   if (pilotShuttleId) {
+    // Pilot mode: pointer-locked mouse steering, RMB diverts to free-look.
+    deps.input.pilotLook?.setActive(true);
     if (deps.placement.isActive()) deps.placement.cancel();
     deps.cable?.cancel();
     deps.toolMode.cancel();
@@ -90,6 +92,7 @@ export function dispatchTickInput(deps: TickInputDeps): void {
     }
     return;
   }
+  deps.input.pilotLook?.setActive(false);
   const canAct = !deps.flying && deps.playerId !== null && !deps.uiOpen;
   // A grab-carry must never outlive a mode switch: stowing the tool, entering
   // placement or activating the cable tool drops the item loose (no placement).

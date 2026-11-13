@@ -5,10 +5,12 @@
 // so the camera glides at display rate even though sim ticks are 30 Hz.
 
 import {
+  CAMERA_LOOK_RADIANS_PER_PIXEL,
   SHUTTLE_CHASE_DISTANCE_M,
   SHUTTLE_CHASE_HEIGHT_M,
 } from '../core/constants.js';
-import { add, normalize, scale, sub, type Vec3d } from '../core/math.js';
+import { add, clampScalar, normalize, scale, sub, type Vec3d } from '../core/math.js';
+import { getSettings } from '../core/settings.js';
 import type { PlanetConfig } from '../planets/PlanetConfig.js';
 import type { ShuttleComponent } from '../sim/entities.js';
 import { moveBasis, upAt } from '../sim/physics/frames.js';
@@ -19,6 +21,8 @@ const WALL_MARGIN = 0.6;
 const WALL_MIN = 2;
 /** Ease render yaw/up toward sim values (frame-rate independent). */
 const CAMERA_EASE_RATE = 12;
+/** RMB free-look pitch limit (radians). */
+const FREE_LOOK_PITCH_LIMIT = 1.1;
 
 export interface ShuttleCameraView {
   position: Vec3d;
@@ -32,6 +36,26 @@ export interface ShuttleCameraView {
 export class ShuttleCamera {
   private yaw: number | null = null;
   private up: Vec3d | null = null;
+  /** Camera-only RMB look offset, relative to the ship's steering heading. */
+  private freeLookYaw = 0;
+  private freeLookPitch = 0;
+
+  /** Forget the previous session/planet basis (new game, exit to menu). */
+  reset(): void {
+    this.yaw = null;
+    this.up = null;
+    this.freeLookYaw = 0;
+    this.freeLookPitch = 0;
+  }
+
+  /** Accumulate one RMB free-look delta (CSS pixels). */
+  addFreeLook(dx: number, dy: number): void {
+    const settings = getSettings();
+    const sensitivity = CAMERA_LOOK_RADIANS_PER_PIXEL * settings.sensitivity;
+    this.freeLookYaw -= dx * sensitivity;
+    this.freeLookPitch -= dy * sensitivity * (settings.invertY ? -1 : 1);
+    this.freeLookPitch = clampScalar(this.freeLookPitch, -FREE_LOOK_PITCH_LIMIT, FREE_LOOK_PITCH_LIMIT);
+  }
 
   /** Follow the ship from `anchorWorld` (the pilot's interpolated origin). */
   update(
@@ -41,6 +65,7 @@ export class ShuttleCamera {
     colliders: TerrainColliders,
     frameDt: number,
     planet: PlanetConfig | null,
+    freeLookActive: boolean,
   ): ShuttleCameraView {
     const targetUp = planet ? upAt(planet, anchorWorld) : normalize(shuttle.up);
     if (this.yaw === null || this.up === null) {
@@ -53,11 +78,19 @@ export class ShuttleCamera {
       const blended = normalize(add(scale(this.up, 1 - k), scale(targetUp, k)));
       if (blended.x !== 0 || blended.y !== 0 || blended.z !== 0) this.up = blended;
     }
+    if (!freeLookActive) {
+      // Release RMB: ease the look offset back behind the ship.
+      const k = 1 - Math.exp(-CAMERA_EASE_RATE * Math.max(0, frameDt));
+      this.freeLookYaw *= 1 - k;
+      this.freeLookPitch *= 1 - k;
+    }
     const up = this.up;
-    const { forward } = moveBasis(up, this.yaw, 0);
-    const flat = normalize(sub(forward, scale(up, forward.x * up.x + forward.y * up.y + forward.z * up.z)));
+    const { forward } = moveBasis(up, this.yaw + this.freeLookYaw, this.freeLookPitch);
     const focus = add(anchorWorld, scale(up, 1.6));
-    const desired = add(add(anchorWorld, scale(flat, -SHUTTLE_CHASE_DISTANCE_M)), scale(up, SHUTTLE_CHASE_HEIGHT_M));
+    const desired = add(
+      add(anchorWorld, scale(forward, -SHUTTLE_CHASE_DISTANCE_M)),
+      scale(up, SHUTTLE_CHASE_HEIGHT_M),
+    );
     const toCamera = sub(desired, focus);
     const distance = Math.hypot(toCamera.x, toCamera.y, toCamera.z);
     let actual = distance;

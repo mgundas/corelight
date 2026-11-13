@@ -4,6 +4,7 @@
 // sim mutation); all state changes still go through dispatched Actions.
 
 import type { Vec3d } from '../core/math.js';
+import { FLIGHT_UI_SYNC_INTERVAL_MS } from '../core/constants.js';
 import type { Renderer } from '../render/Renderer.js';
 import type { World } from '../sim/world.js';
 import type { EntityId } from '../sim/entities.js';
@@ -17,8 +18,25 @@ import { backpackFrame } from './backpackWiring.js';
 import { oxygenStatusFor } from './oxygenStatus.js';
 import { powerStatusFor } from './powerStatus.js';
 import { interactPrompt } from './prompts.js';
-import { flightStatusFor } from './shuttleHud.js';
+import { flightStatusFor, type FlightStatus } from './shuttleHud.js';
 import { upAt } from '../sim/physics/frames.js';
+
+/** 10 Hz flight projection cache (WeakMap so a closed session can be GC'd). */
+const flightCache = new WeakMap<
+  World,
+  { playerId: EntityId | null; at: number; value: FlightStatus | null }
+>();
+
+function flightFor(world: World, playerId: EntityId | null): FlightStatus | null {
+  const now = performance.now();
+  const cached = flightCache.get(world);
+  if (cached && cached.playerId === playerId && now - cached.at < FLIGHT_UI_SYNC_INTERVAL_MS) {
+    return cached.value;
+  }
+  const value = flightStatusFor(world, world.planets, playerId);
+  flightCache.set(world, { playerId, at: now, value });
+  return value;
+}
 
 export interface FrameHudDeps {
   renderer: Renderer;
@@ -43,7 +61,7 @@ export function updateFrameHud(deps: FrameHudDeps): void {
   const frame = backpackFrame(deps.world, activePlayer, deps.flying);
   const o2 = oxygenStatusFor(deps.world, activePlayer);
   const power = powerStatusFor(deps.world, activePlayer, deps.aim);
-  const flight = flightStatusFor(deps.world, deps.world.planets, activePlayer);
+  const flight = flightFor(deps.world, activePlayer);
   const grabbed = activePlayer ? deps.world.entities.get(activePlayer)?.components.player?.grabbed : null;
   deps.renderer.renderEntities(
     deps.world.entities.values(),

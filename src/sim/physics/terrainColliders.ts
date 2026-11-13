@@ -94,17 +94,24 @@ export class TerrainColliders {
   }
 
   /**
-   * Request missing chunks around the player, drop ones left far behind.
-   * Call every tick with the player position (fire-and-forget worker jobs).
+   * Request missing chunks around the player (and any extra focus, e.g. a
+   * low shuttle), drop ones left far behind. Call every tick with the player
+   * position (fire-and-forget worker jobs).
    */
-  update(playerWorld: Vec3d, planets: PlanetConfig[], worldSeed: number): void {
+  update(playerWorld: Vec3d, planets: PlanetConfig[], worldSeed: number, extraWorld: Vec3d[] = []): void {
     const sample = gravityAt(planets, playerWorld);
     if (!sample.planet) return;
     const planet = sample.planet;
-    const local = toLocalFrame(planet, playerWorld);
     const size = chunkSizeForLevel(0);
     const min = rootMin(planet);
     const perAxis = 2 ** planet.lodMaxLevel;
+    // Extra focuses only join the ring when they share the player's planet
+    // frame; a second planet's surface belongs to a different Rapier world.
+    const focuses: Vec3d[] = [playerWorld];
+    for (const extra of extraWorld) {
+      const extraSample = gravityAt(planets, extra);
+      if (extraSample.planet?.id === planet.id) focuses.push(extra);
+    }
 
     const needed = new Set<string>();
     const coords: ChunkCoord[] = [];
@@ -112,36 +119,39 @@ export class TerrainColliders {
     // the edge slab, so a player dropped from high above still loads the
     // top chunks (ready/empty) instead of freezing on an empty request set.
     const clampAxis = (v: number): number => Math.min(perAxis - 1, Math.max(0, v));
-    const lo = {
-      x: clampAxis(Math.floor((local.x - COLLIDER_RANGE_M - min.x) / size)),
-      y: clampAxis(Math.floor((local.y - COLLIDER_RANGE_M - min.y) / size)),
-      z: clampAxis(Math.floor((local.z - COLLIDER_RANGE_M - min.z) / size)),
-    };
-    const hi = {
-      x: clampAxis(Math.floor((local.x + COLLIDER_RANGE_M - min.x) / size)),
-      y: clampAxis(Math.floor((local.y + COLLIDER_RANGE_M - min.y) / size)),
-      z: clampAxis(Math.floor((local.z + COLLIDER_RANGE_M - min.z) / size)),
-    };
-    for (let x = lo.x; x <= hi.x; x += 1) {
-      for (let y = lo.y; y <= hi.y; y += 1) {
-        for (let z = lo.z; z <= hi.z; z += 1) {
-          const coord = { x, y, z };
-          const origin = nodeOrigin(planet, 0, coord);
-          const worldMin: Vec3d = {
-            x: planet.center.x + origin.x,
-            y: planet.center.y + origin.y,
-            z: planet.center.z + origin.z,
-          };
-          if (pointBoxDistance(playerWorld, worldMin, size) > COLLIDER_RANGE_M) continue;
-          needed.add(colliderKey(planet.id, coord));
-          coords.push(coord);
+    for (const focus of focuses) {
+      const local = toLocalFrame(planet, focus);
+      const lo = {
+        x: clampAxis(Math.floor((local.x - COLLIDER_RANGE_M - min.x) / size)),
+        y: clampAxis(Math.floor((local.y - COLLIDER_RANGE_M - min.y) / size)),
+        z: clampAxis(Math.floor((local.z - COLLIDER_RANGE_M - min.z) / size)),
+      };
+      const hi = {
+        x: clampAxis(Math.floor((local.x + COLLIDER_RANGE_M - min.x) / size)),
+        y: clampAxis(Math.floor((local.y + COLLIDER_RANGE_M - min.y) / size)),
+        z: clampAxis(Math.floor((local.z + COLLIDER_RANGE_M - min.z) / size)),
+      };
+      for (let x = lo.x; x <= hi.x; x += 1) {
+        for (let y = lo.y; y <= hi.y; y += 1) {
+          for (let z = lo.z; z <= hi.z; z += 1) {
+            const coord = { x, y, z };
+            const origin = nodeOrigin(planet, 0, coord);
+            const worldMin: Vec3d = {
+              x: planet.center.x + origin.x,
+              y: planet.center.y + origin.y,
+              z: planet.center.z + origin.z,
+            };
+            if (pointBoxDistance(focus, worldMin, size) > COLLIDER_RANGE_M) continue;
+            const key = colliderKey(planet.id, coord);
+            if (needed.has(key)) continue;
+            needed.add(key);
+            coords.push(coord);
+          }
         }
       }
-    }
-    // Always include the containing chunk: groundState depends on it, and a
-    // player dropped from high above must learn "all air, keep falling"
-    // (empty -> ready) instead of freezing on an unrequested chunk.
-    {
+      // Always include the containing chunk: groundState depends on it, and a
+      // player dropped from high above must learn "all air, keep falling"
+      // (empty -> ready) instead of freezing on an unrequested chunk.
       const here = containingCoord(local, planet);
       const key = colliderKey(planet.id, here);
       if (!needed.has(key)) {
@@ -186,7 +196,7 @@ export class TerrainColliders {
             y: planet.center.y + origin.y,
             z: planet.center.z + origin.z,
           };
-          if (pointBoxDistance(this.lastPlayer, worldMin, size) > COLLIDER_RANGE_M + size) return;
+          if (this.minFocusDistance(worldMin, size) > COLLIDER_RANGE_M + size) return;
           // Atomic swap: the old collider (ghost support) leaves the same
           // tick the fresh data lands, so the controller never sees a gap.
           this.removeCollider(key);
@@ -207,7 +217,7 @@ export class TerrainColliders {
     }
 
     // Drop colliders left behind (with a one-chunk hysteresis band).
-    this.lastPlayer = { ...playerWorld };
+    this.lastFocuses = focuses.map((focus) => ({ ...focus }));
     this.collectGarbage(needed, planets);
     // Bound the empty cache: forget far empty keys (re-verify costs one job).
     if (this.empty.size > 512) {
@@ -217,10 +227,18 @@ export class TerrainColliders {
     }
   }
 
-  private lastPlayer: Vec3d = { x: 0, y: 0, z: 0 };
+  private lastFocuses: Vec3d[] = [];
 
-  private removeCollider(key: string): void {
-    const entry = this.colliders.get(key);
+  /** Distance to the nearest active focus ring (Infinity when none). */
+  private minFocusDistance(worldMin: Vec3d, size: number): number {
+    let best = Infinity;
+    for (const focus of this.lastFocuses) {
+      best = Math.min(best, pointBoxDistance(focus, worldMin, size));
+    }
+    return best;
+  }
+
+  private removeCollider(key: string): void {    const entry = this.colliders.get(key);
     if (!entry) return;
     try {
       this.worldFor(entry.planetId).removeCollider(entry.collider, false);
@@ -243,7 +261,7 @@ export class TerrainColliders {
           y: planet.center.y + origin.y,
           z: planet.center.z + origin.z,
         };
-        far = pointBoxDistance(this.lastPlayer, worldMin, size) > COLLIDER_RANGE_M + size;
+        far = this.minFocusDistance(worldMin, size) > COLLIDER_RANGE_M + size;
       }
       if (far) {
         try {
@@ -312,5 +330,6 @@ export class TerrainColliders {
     this.empty.clear();
     this.dirty.clear();
     this.editVersions.clear();
+    this.lastFocuses = [];
   }
 }
