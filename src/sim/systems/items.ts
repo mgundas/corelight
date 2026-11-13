@@ -116,7 +116,9 @@ export function makeItemsSystem(opts: ItemsOptions): (world: World, dt: number) 
       if (!entry) {
         const rapierWorld = opts.worldFor(planet.id);
         const local = toLocalFrame(planet, entity.position);
-        let desc = RAPIER.RigidBodyDesc.dynamic().setTranslation(local.x, local.y, local.z);
+        // The ball is a shape-independent contact proxy, not a rolling toy.
+        // Free rotation defeats static friction even on almost-flat ground.
+        let desc = RAPIER.RigidBodyDesc.dynamic().lockRotations().setTranslation(local.x, local.y, local.z);
         const moved = transferred.get(entity.id);
         if (moved) {
           desc = desc

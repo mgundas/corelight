@@ -9,6 +9,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import {
   CARRY_SLOW_MULT,
   PLAYER_CONTROLLER_OFFSET,
+  PLAYER_CONTROLLER_NUDGE,
   PLAYER_HALF_HEIGHT,
   PLAYER_JUMP_SPEED,
   PLAYER_MAX_CLIMB_DEG,
@@ -124,7 +125,27 @@ export class PlayerBody {
       upVel = dot(player.velocity, up) + dot(sample.vector, up) * dt;
     }
     const horizontal = scale(wish, speed);
-    const desired = add(scale(horizontal, dt), scale(up, upVel * dt));
+    let desired = add(scale(horizontal, dt), scale(up, upVel * dt));
+
+    // Rapier's separation nudge pushes along each hit normal. Repeating it
+    // while idle creeps sideways on gentle slopes. Keep it for travel and
+    // airborne collision recovery, where it prevents getting stuck.
+    const idle = player.grounded && dot(wish, wish) === 0 && !intent.jump;
+    const ground = idle ? this.world?.castRayAndGetNormal(
+      new RAPIER.Ray(local, scale(up, -1)),
+      PLAYER_HALF_HEIGHT + (PLAYER_RADIUS + PLAYER_CONTROLLER_OFFSET) / Math.cos(PLAYER_MIN_SLIDE_DEG * DEG)
+        + PLAYER_SNAP_DISTANCE,
+      true, undefined, undefined, collider,
+    ) : null;
+    // Shape-cast normals at triangle edges can be rounded toward the capsule;
+    // a support ray gives the terrain face angle for the steep-slope rule.
+    const stableGround = ground && dot(ground.normal, up) >= Math.cos(PLAYER_MIN_SLIDE_DEG * DEG);
+    controller.setNormalNudgeFactor(stableGround ? 0 : PLAYER_CONTROLLER_NUDGE);
+    if (ground && !stableGround) {
+      // Supply explicit downhill intent on steep support: capsule contact
+      // normals at mesh edges can otherwise classify a steep face as flat.
+      desired = sub(desired, scale(ground.normal, dot(desired, ground.normal)));
+    }
 
     collider.setTranslation(local);
     collider.setRotation(orientationForUpYaw(up, player.yaw));

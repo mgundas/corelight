@@ -92,6 +92,8 @@ export const PLAYER_STEP_HEIGHT = 0.3;
 export const PLAYER_SNAP_DISTANCE = 0.5;
 /** Small gap the character controller keeps from colliders. */
 export const PLAYER_CONTROLLER_OFFSET = 0.02;
+/** Collision recovery nudge while moving; idle grounded players use zero. */
+export const PLAYER_CONTROLLER_NUDGE = 0.0001;
 
 /** Terrain collider ring around the player (ARCHITECTURE.md). */
 export const COLLIDER_RANGE_M = 48;
