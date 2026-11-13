@@ -2,6 +2,8 @@
 
 /** Fixed simulation step in seconds (30 ticks per second). */
 export const SIM_DT = 1 / 30;
+/** Limit dev grants to a backpack-sized batch per click. */
+export const DEV_ITEM_MAX_COUNT = 8;
 
 /** Max sim ticks applied per rendered frame (caps spiral of death). */
 export const MAX_TICKS_PER_FRAME = 5;

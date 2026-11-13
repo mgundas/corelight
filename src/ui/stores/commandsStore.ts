@@ -3,6 +3,7 @@
 // Action (hard rule 2): UI code never mutates the World.
 
 import { create } from 'zustand';
+import { setDevItemsOpen } from './devItemsStore.js';
 
 export interface UiCommands {
   selectSlot(slot: number): void;
@@ -13,6 +14,8 @@ export interface UiCommands {
   printStation(stationId: string, recipeId: string): void;
   collectStation(stationId: string): void;
   unloadStationInput(stationId: string, itemId: string): void;
+  devGiveItem(itemId: string, count: number): void;
+  setDevItemsOpen(open: boolean): void;
   closePrinter(): void;
   unlockResearch(id: string): void;
   depositResearchSample(stationId: string): void;
@@ -31,6 +34,7 @@ export function setUiCommands(commands: UiCommands): void {
 }
 
 export function resetUiCommands(): void {
+  setDevItemsOpen(false);
   useCommandsStore.setState({ commands: null });
 }
 

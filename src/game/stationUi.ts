@@ -10,6 +10,7 @@ import { PrinterUi } from '../ui/printerUi.js';
 import { ResearchUi, unlockToastText } from '../ui/researchUi.js';
 import { updatePrinterUi } from './printerWiring.js';
 import { updateResearchUi } from './researchWiring.js';
+import { isDevItemsOpen, setDevItemsOpen } from '../ui/stores/devItemsStore.js';
 
 export class StationUi {
   readonly printer = new PrinterUi();
@@ -27,7 +28,7 @@ export class StationUi {
 
   /** True while any modal station panel owns input. */
   isOpen(): boolean {
-    return this.printer.isOpen() || this.research.isOpen();
+    return this.printer.isOpen() || this.research.isOpen() || isDevItemsOpen();
   }
 
   openStation(stationId: EntityId): void {
@@ -62,6 +63,7 @@ export class StationUi {
   }
 
   closeAll(): void {
+    setDevItemsOpen(false);
     this.printer.close();
     this.research.close();
   }

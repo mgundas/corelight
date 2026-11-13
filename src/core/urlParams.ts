@@ -5,7 +5,7 @@ export interface UrlParams {
   skipBoot: boolean;
   /** Start time of day as a fraction of a full cycle (0 to 1), or null. */
   time: number | null;
-  /** Dev shortcut (?dev=1): spawn with 8 tethers for oxygen testing. */
+  /** Dev tools (?dev=1): item spawner, teleport and starting tethers. */
   dev: boolean;
   /** Dev shortcut (?build=1): spawn with power-base packages for testing. */
   build: boolean;

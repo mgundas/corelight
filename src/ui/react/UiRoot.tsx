@@ -8,6 +8,7 @@ import { HudView } from './HudView.js';
 import { MenuViews } from './MenuViews.js';
 import { PrinterPanel } from './PrinterPanel.js';
 import { ResearchPanel } from './ResearchPanel.js';
+import { DevItemsPanel } from './DevItemsPanel.js';
 
 export function UiRoot() {
   return (
@@ -15,6 +16,7 @@ export function UiRoot() {
       <HudView />
       <PrinterPanel />
       <ResearchPanel />
+      <DevItemsPanel />
       <DebugOverlayView />
       <MenuViews />
       <DragGhost />

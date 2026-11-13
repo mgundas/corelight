@@ -13,6 +13,7 @@ import { mountUi } from './ui/react/mount.js';
 import './main.css';
 import './ui/styles/hud.css';
 import './ui/styles/panels.css';
+import './ui/styles/devItems.css';
 import './ui/styles/menus.css';
 
 /** One live session: game + autosave + pause wiring, all disposed on quit. */

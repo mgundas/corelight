@@ -32,6 +32,7 @@ import {
 } from './shuttleActions.js';
 import type { World } from './world.js';
 import { unloadStationInput } from './stationUnloadAction.js';
+import { debugGiveItem } from './devActions.js';
 
 // All gameplay changes go through Actions (ARCHITECTURE.md hard rule 2).
 // M00 skeleton: noop + a debug marker spawner used by tests/debug tools.
@@ -39,6 +40,7 @@ import { unloadStationInput } from './stationUnloadAction.js';
 export type Action =
   | { type: 'noop' }
   | { type: 'debugSpawnMarker'; position: Vec3d }
+  | { type: 'debugGiveItem'; playerId: EntityId; itemId: string; count: number }
   | { type: 'spawnPlayer'; planetId: string; position: Vec3d }
   | {
       type: 'playerInput';
@@ -121,6 +123,9 @@ function clampAxis(v: number): number {
 export function applyAction(world: World, action: Action): void {
   switch (action.type) {
     case 'noop':
+      return;
+    case 'debugGiveItem':
+      debugGiveItem(world, action.playerId, action.itemId, action.count);
       return;
     case 'debugSpawnMarker': {
       const id = world.nextId('marker');

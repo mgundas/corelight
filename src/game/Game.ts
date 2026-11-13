@@ -128,6 +128,7 @@ export class Game {
       () => this.playerId,
       () => this.stationUi.closePrinter(),
       () => this.stationUi.closeResearch(),
+      (open) => this.input.setEnabled(!open && !this.paused && !this.flyCamera.enabled),
     );
 
     this.renderer = new Renderer(canvas, worldSeed, planets, prebuilt);
@@ -331,7 +332,7 @@ export class Game {
       flyCamera: this.flyCamera,
       playerId: this.playerId,
       flying,
-      paused: this.paused,
+      paused: this.paused || this.stationUi.isOpen(),
       frameDt,
       alpha,
     });

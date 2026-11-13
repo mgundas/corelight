@@ -5,18 +5,31 @@
 import type { EntityId } from '../sim/entities.js';
 import type { World } from '../sim/world.js';
 import { setUiCommands } from '../ui/stores/commandsStore.js';
+import { getUrlParams } from '../core/urlParams.js';
+import { setDevItemsOpen } from '../ui/stores/devItemsStore.js';
+import { resetDragStore } from '../ui/stores/dragStore.js';
 
 export function installUiCommands(
   world: World,
   playerId: () => EntityId | null,
   closePrinter: () => void,
   closeResearch: () => void,
+  onDevPanelChange: (open: boolean) => void = () => undefined,
 ): void {
   const withPlayer = (run: (id: EntityId) => void): void => {
     const id = playerId();
     if (id) run(id);
   };
   setUiCommands({
+    setDevItemsOpen: (open) => {
+      if (open && (!getUrlParams().dev || !playerId())) return;
+      if (open) { closePrinter(); closeResearch(); resetDragStore(); }
+      setDevItemsOpen(open);
+      onDevPanelChange(open);
+    },
+    devGiveItem: (itemId, count) => {
+      if (getUrlParams().dev) withPlayer((id) => world.dispatch({ type: 'debugGiveItem', playerId: id, itemId, count }));
+    },
     selectSlot: (slot) => withPlayer((id) => world.dispatch({ type: 'selectSlot', playerId: id, slot })),
     moveItem: (from, to) =>
       withPlayer((id) => world.dispatch({ type: 'moveItem', playerId: id, from, to })),
