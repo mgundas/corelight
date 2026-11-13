@@ -89,8 +89,16 @@ function respawnFor(
   deathPlanet: PlanetConfig | undefined,
 ): { planetId: string; position: { x: number; y: number; z: number } } | null {
   let hub: { planet: PlanetConfig; position: { x: number; y: number; z: number } } | null = null;
+  // M14: the last habitat the player stood near wins, even across planets
+  // (that is how an outpost on Vorn becomes the respawn point).
+  const lastId = player.components.player?.lastHabitatId ?? null;
+  const last = lastId ? world.entities.get(lastId) : undefined;
+  if (last && last.components.machine?.machineType === 'habitat' && last.planetId) {
+    const planet = planets.find((p) => p.id === last.planetId);
+    if (planet) hub = { planet, position: last.position };
+  }
   const samePlanet = deathPlanet ? habitatsOn(world, deathPlanet.id)[0] : undefined;
-  if (samePlanet && deathPlanet) hub = { planet: deathPlanet, position: samePlanet.position };
+  if (!hub && samePlanet && deathPlanet) hub = { planet: deathPlanet, position: samePlanet.position };
   if (!hub) {
     let best = Infinity;
     for (const planet of planets) {
@@ -225,6 +233,23 @@ export function updateOxygen(world: World, planets: PlanetConfig[], dt: number):
     if (player.kind !== 'player' || !player.components.player) continue;
     const planet = planets.find((p) => p.id === player.planetId);
     const oxygen = oxygenFor(player);
+    // A pilot breathes from the shuttle's life support: full suit, no drain,
+    // no canisters, no death while inside (M14). A stale link (shuttle sold
+    // or removed) heals to on-foot breathing instead of freezing forever.
+    const pilotingId = player.components.player?.pilotingShuttleId ?? null;
+    if (pilotingId) {
+      const shuttle = world.entities.get(pilotingId);
+      if (
+        shuttle &&
+        shuttle.kind === 'shuttle' &&
+        shuttle.components.shuttle?.pilotId === player.id &&
+        player.components.player
+      ) {
+        oxygen.value = OXYGEN_MAX;
+        continue;
+      }
+      if (player.components.player) player.components.player.pilotingShuttleId = null;
+    }
     // A recovered pack clears its marker once the player walks back to it.
     const playerComp = player.components.player;
     if (playerComp.deathMarkerId) {
@@ -235,6 +260,20 @@ export function updateOxygen(world: World, planets: PlanetConfig[], dt: number):
         world.entities.delete(marker.id);
         playerComp.deathMarkerId = null;
       }
+    }
+    // "Last habitat the player was near" is the M14 respawn point. Record it
+    // whenever they stand inside habitat oxygen range (any planet).
+    if (planet) {
+      let nearest: Entity | null = null;
+      let nearestDist = OXYGEN_RANGE_M;
+      for (const habitat of habitatsOn(world, planet.id)) {
+        const d = distance(habitat.position, player.position);
+        if (d <= nearestDist) {
+          nearestDist = d;
+          nearest = habitat;
+        }
+      }
+      if (nearest) playerComp.lastHabitatId = nearest.id;
     }
     const onNetwork = planet ? isOnOxygenNetwork(world, player.id) : false;
     if (onNetwork) {

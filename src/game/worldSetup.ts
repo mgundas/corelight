@@ -25,6 +25,7 @@ import { updateSamples } from '../sim/systems/samples.js';
 import { updateOxygen } from '../sim/systems/oxygen.js';
 import { updatePower } from '../sim/systems/power.js';
 import { updateResearch } from '../sim/systems/research.js';
+import { makeShuttleSystem } from '../sim/systems/shuttle.js';
 import { updateTethers } from '../sim/systems/tethers.js';
 import { updateSun } from '../sim/systems/sun.js';
 import { TerrainColliders } from '../sim/physics/terrainColliders.js';
@@ -285,6 +286,10 @@ export function setupWorldSystems(
   world.addSystem((tickWorld, dt) => updateCrafting(tickWorld, dt));
   // Research station analysis (M11): one sample -> Data, power-gated above.
   world.addSystem((tickWorld, dt) => updateResearch(tickWorld, dt));
+  // Shuttle flight (M14), after research per ARCHITECTURE.md's system order.
+  // The collider ring is the same probe the player stands on, and it follows
+  // the attached pilot, so terrain colliders load around a low shuttle.
+  world.addSystem(makeShuttleSystem({ planets, probe: colliders }));
   // Placed light sticks follow terrain edits (dig out from under them).
   world.addSystem((tickWorld) => updateLightsticks(tickWorld));
   // Environment clock (order-free: only re-derives sunDirection from time).
@@ -307,11 +312,16 @@ export function setupWorldSystems(
     );
     const hasHabitat = machines.some((e) => e.components.machine?.machineType === 'habitat');
     const hasPrinter = machines.some((e) => e.components.machine?.machineType === 'small_printer');
-    if (player && planetId !== undefined && !hasHabitat) {
+    // M14: a world that already owns a shuttle has traveled (or was built by
+    // this milestone), so the pre-M08/pre-M09 free starter-base heals must
+    // never hand out a habitat/printer on Vorn. Genuine old saves have no
+    // shuttle and still heal.
+    const hasShuttle = [...world.entities.values()].some((e) => e.kind === 'shuttle');
+    if (player && planetId !== undefined && !hasShuttle && !hasHabitat) {
       const planet = planets.find((p) => p.id === planetId) ?? home;
       editedKeys = spawnHabitatNear(world, planet, player.position);
       world.tick(SIM_DT);
-    } else if (player && planetId !== undefined && !hasPrinter) {
+    } else if (player && planetId !== undefined && !hasShuttle && !hasPrinter) {
       // M08 saves predate the M09 starting printer: flatten a pad and seat
       // the starter base beside the player (or their habitat area). This
       // mirrors the fresh-game pad so the printer is usable on Continue.

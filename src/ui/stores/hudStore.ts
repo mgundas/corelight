@@ -5,6 +5,7 @@
 import { create } from 'zustand';
 import type { PowerStatus } from '../../game/powerStatus.js';
 import type { NavHint } from '../../game/oxygenStatus.js';
+import type { FlightStatus } from '../../game/shuttleHud.js';
 import type { DrillTier } from '../../sim/drill.js';
 
 export interface HudSlotView {
@@ -33,6 +34,8 @@ export interface HudViewState {
   brushMode: 'dig' | 'add';
   /** Drill tier from the selected backpack slot (M12). */
   drillTier: DrillTier;
+  /** Shuttle flight readout while piloting (M14), else null. */
+  flight: FlightStatus | null;
   /** Incremented on death; the fade element remounts per token. */
   deathFadeToken: number;
   /** Short "New blueprint: …" message (M11), null when hidden. */
@@ -57,6 +60,7 @@ const INITIAL: HudViewState = {
   interactionMode: 'explore',
   brushMode: 'dig',
   drillTier: 1,
+  flight: null,
   deathFadeToken: 0,
   toast: null,
   toastToken: 0,

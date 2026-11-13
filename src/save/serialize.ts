@@ -217,10 +217,44 @@ function deserializeEntity(data: unknown): Entity {
       throw new Error('bad save: sample.chunkKey malformed');
     }
   }
+  // M14 shuttle flight state feeds integration; reject a hand-edited shape
+  // before it can produce NaN positions.
+  const shuttle = components.shuttle as Record<string, unknown> | undefined;
+  if (shuttle) {
+    if (!isFiniteNumber(shuttle['fuel']) || shuttle['fuel'] < 0) {
+      throw new Error('bad save: shuttle.fuel malformed');
+    }
+    if (shuttle['pilotId'] !== null && typeof shuttle['pilotId'] !== 'string') {
+      throw new Error('bad save: shuttle.pilotId malformed');
+    }
+    if (!isVec3d(shuttle['velocity'])) throw new Error('bad save: shuttle.velocity malformed');
+    if (!isVec3d(shuttle['up'])) throw new Error('bad save: shuttle.up malformed');
+    if (!isFiniteNumber(shuttle['yaw']) || !isFiniteNumber(shuttle['pitch'])) {
+      throw new Error('bad save: shuttle heading malformed');
+    }
+    if (shuttle['lastLookYaw'] !== undefined && !isFiniteNumber(shuttle['lastLookYaw'])) {
+      throw new Error('bad save: shuttle.lastLookYaw malformed');
+    }
+    if (!isFiniteNumber(shuttle['launchChargeS']) || shuttle['launchChargeS'] < 0) {
+      throw new Error('bad save: shuttle.launchChargeS malformed');
+    }
+    if (typeof shuttle['airborne'] !== 'boolean') {
+      throw new Error('bad save: shuttle.airborne malformed');
+    }
+  }
   // Inverse of the serialize normalization: null JSON "never" -> -Infinity.
   const player = components.player as { lastTooHard?: unknown } | undefined;
   if (player && player.lastTooHard === null) {
     player.lastTooHard = Number.NEGATIVE_INFINITY;
+  }
+  const playerLinks = components.player as Record<string, unknown> | undefined;
+  if (playerLinks) {
+    for (const key of ['pilotingShuttleId', 'lastHabitatId']) {
+      const value = playerLinks[key];
+      if (value !== undefined && value !== null && typeof value !== 'string') {
+        throw new Error(`bad save: player.${key} malformed`);
+      }
+    }
   }
   return {
     id: r['id'],

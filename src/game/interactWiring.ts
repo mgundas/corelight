@@ -9,6 +9,8 @@ import type { EntityId } from '../sim/entities.js';
 import type { World } from '../sim/world.js';
 import { depositCandidate, inputSlotsFor } from '../sim/stationInputs.js';
 import { printerFor } from '../sim/craftingActions.js';
+import { SHUTTLE_FUEL_MAX } from '../core/constants.js';
+import { shuttleFuel } from '../sim/shuttle.js';
 import {
   isResearchStation,
   researchFor,
@@ -18,7 +20,7 @@ import type { PlayerInput } from '../player/input.js';
 import type { ToolAim } from '../player/terrainTool.js';
 import type { PlacementMode } from './placement.js';
 import { carriedPlaceable } from './placement.js';
-import { findAimedItem, findAimedStation, findAimedTether } from './pickup.js';
+import { findAimedItem, findAimedShuttle, findAimedStation, findAimedTether } from './pickup.js';
 import type { PackHold } from './packHold.js';
 import { primaryPackTarget } from './packTarget.js';
 
@@ -54,6 +56,16 @@ export function hasSelectedLightstick(world: World, playerId: EntityId): boolean
   return selected !== null && selected !== undefined && world.entities.get(selected)?.components.item?.itemId === 'light_stick';
 }
 
+/** True when the backpack carries a fuel cell (selected slot is preferred). */
+export function carriesFuelCell(world: World, playerId: EntityId): boolean {
+  const inventory = world.entities.get(playerId)?.components.inventory;
+  if (!inventory) return false;
+  const isFuel = (id: EntityId | null): boolean =>
+    id !== null && world.entities.get(id)?.components.item?.itemId === 'fuel_cell';
+  const selected = inventory.slots[inventory.selectedSlot] ?? null;
+  return isFuel(selected) || inventory.slots.some((id) => isFuel(id ?? null));
+}
+
 export function tickInteraction(deps: InteractDeps): void {
   const tab = deps.input.consumePrinter();
   if (tab && deps.playerId) deps.togglePrinter();
@@ -62,6 +74,11 @@ export function tickInteraction(deps: InteractDeps): void {
     return;
   }
   const { world, playerId, aim, placement } = deps;
+  // Pilot: E disembarks. Nothing else on foot is reachable inside the ship.
+  if (world.entities.get(playerId)?.components.player?.pilotingShuttleId) {
+    if (deps.interact) world.dispatch({ type: 'exitShuttle', playerId });
+    return;
+  }
   // E while placing cancels the ghost and never starts a pack gesture.
   if (placement.isActive()) {
     if (deps.interact) placement.cancel();
@@ -88,6 +105,22 @@ export function tickInteraction(deps: InteractDeps): void {
     if (result === 'release') forceInteract = true;
   }
   if (!forceInteract) return;
+  // M14: board the shuttle, or load a carried fuel cell into one of its two
+  // side slots first. Fuel wins while the ship still has room.
+  const shuttleId = findAimedShuttle(world, playerId, aim);
+  if (shuttleId) {
+    const shuttleComp = world.entities.get(shuttleId)?.components.shuttle;
+    if (
+      shuttleComp &&
+      shuttleFuel(shuttleComp) < SHUTTLE_FUEL_MAX &&
+      carriesFuelCell(world, playerId)
+    ) {
+      world.dispatch({ type: 'loadShuttleFuel', playerId, shuttleId });
+    } else {
+      world.dispatch({ type: 'enterShuttle', playerId, shuttleId });
+    }
+    return;
+  }
   const stationId = findAimedStation(world, playerId, aim);
   if (stationId) {
     const station = world.entities.get(stationId);

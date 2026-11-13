@@ -138,6 +138,6 @@
     "footprintRadiusM": 3.0,
     "heightM": 3.0,
     "snapPoints": [{ "x": 0, "y": 0.8, "z": -2.6 }],
-    "description": "Flat-packed starting dome (unfolds into a habitat in M13)."
+    "description": "Flat-packed habitat dome; unfolds on the ground into a new oxygen base."
   }
 ]

@@ -5,7 +5,7 @@
 // attached to the platform). The client ghost calls resolvePlacement for
 // tinting; only the action mutates the world.
 
-import { BATTERY_CAPACITY, HABITAT_CAPACITY } from '../core/constants.js';
+import { BATTERY_CAPACITY, HABITAT_CAPACITY, SHUTTLE_GROUND_CLEARANCE_M } from '../core/constants.js';
 import { events } from '../core/events.js';
 import { quatFromTo, type Quat, type Vec3d } from '../core/math.js';
 import { placeableById, type PlaceableDef } from '../data/loadPlaceables.js';
@@ -55,7 +55,19 @@ export function spawnPlaceableEntity(
   const planet = world.planets.find((p) => p.id === planetId);
   if (!def || !planet) return null;
   const id = world.nextId(def.entityKind);
-  const rotation = opts.rotation ? { ...opts.rotation } : quatFromTo({ x: 0, y: 1, z: 0 }, upAt(planet, position));
+  const up = upAt(planet, position);
+  // A shuttle's origin sits between its landing legs, so seat it on the
+  // ground/deck with the same clearance the landing assist uses. Without
+  // this the parked body's legs graze the terrain and the solver nudges the
+  // visual every tick.
+  const seat = def.entityKind === 'shuttle'
+    ? {
+        x: position.x + up.x * SHUTTLE_GROUND_CLEARANCE_M,
+        y: position.y + up.y * SHUTTLE_GROUND_CLEARANCE_M,
+        z: position.z + up.z * SHUTTLE_GROUND_CLEARANCE_M,
+      }
+    : { ...position };
+  const rotation = opts.rotation ? { ...opts.rotation } : quatFromTo({ x: 0, y: 1, z: 0 }, up);
   const placeable: NonNullable<Entity['components']['placeable']> = { placeableId: def.id };
   if (opts.attachTo !== undefined) placeable.attachedTo = opts.attachTo;
   if (opts.attachSlot !== undefined) placeable.attachedSlot = opts.attachSlot;
@@ -81,11 +93,27 @@ export function spawnPlaceableEntity(
       components.research = { inputId: null, progressS: 0, dataReady: 0 };
     }
   }
+  if (def.entityKind === 'shuttle') {
+    // Flight state starts parked, empty and level with the local up. The
+    // model origin is the base (between the landing legs).
+    components.shuttle = {
+      fuel: 0,
+      pilotId: null,
+      velocity: { x: 0, y: 0, z: 0 },
+      yaw: 0,
+      pitch: 0,
+      up: upAt(planet, position),
+      launchChargeS: 0,
+      lastLookYaw: 0,
+      airborne: false,
+      input: null,
+    };
+  }
   world.entities.set(id, {
     id,
     kind: def.entityKind,
     planetId: planet.id,
-    position: { ...position },
+    position: { ...seat },
     rotation,
     components,
   });

@@ -191,7 +191,7 @@
     "station": "refinery",
     "output": "fuel_cell",
     "inputs": [{ "item": "biomass", "count": 2 }],
-    "time": 3,
+    "time": 15,
     "power": 3,
     "unlockedByDefault": false
   },
@@ -200,7 +200,7 @@
     "station": "refinery",
     "output": "fuel_cell",
     "inputs": [{ "item": "hydrite", "count": 1 }],
-    "time": 3,
+    "time": 15,
     "power": 3,
     "unlockedByDefault": false
   }

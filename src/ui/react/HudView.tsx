@@ -9,11 +9,15 @@ function hintText(hint: NavHint | null): string {
   return `${arrowForBearing(hint.bearingDeg)} ${hint.label} · ${Math.round(hint.distM)} m`;
 }
 
+function distanceText(m: number): string {
+  return m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${Math.round(m)} m`;
+}
+
 export function HudView() {
   const state = useHudStore();
   const menuOpen = useMenuStore((s) => s.view.kind !== 'none');
   const { slots, selectedSlot, soil, prompt, oxygen, onNetwork, heat, cold,
-    habitatHint, deathHint, power, toolMode, brushMode, drillTier,
+    habitatHint, deathHint, power, toolMode, brushMode, drillTier, flight,
     deathFadeToken, toast, toastToken } = state;
   const equipped = toolMode === 'deform';
   const modeLabel = state.interactionMode === 'cable' ? 'Cable tool'
@@ -50,6 +54,40 @@ export function HudView() {
           {equipped ? <div className="brush-controls"><kbd>LMB</kbd> use <kbd>X</kbd> dig / add<br /><kbd>F</kbd> hold to flatten <kbd>Ctrl + wheel</kbd> size</div> : null}
           {navParts.length > 0 ? <div id="hud-nav">{navParts.map((part) => <div key={part}>{part}</div>)}</div> : null}
         </aside>
+        {flight ? (
+          <aside className="flight-panel" aria-label="Flight instruments">
+            <div className="eyebrow">FLIGHT <span className="status-dot" /></div>
+            <div className="flight-main">
+              <strong>{Math.round(flight.speedMps)}<small> m/s</small></strong>
+              <span>ALT {distanceText(flight.altitudeM)}</span>
+              <span className="flight-fuel">FUEL {flight.fuel}/{flight.maxFuel}</span>
+            </div>
+            {flight.launchCharge > 0 ? (
+              <div id="flight-launch" role="progressbar" aria-label="Launch charge"
+                aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(flight.launchCharge * 100)}>
+                <div style={{ width: `${flight.launchCharge * 100}%` }} />
+              </div>
+            ) : null}
+            <div className="flight-markers">
+              {flight.planets.map((marker) => (
+                <div key={`planet:${marker.label}`} className="flight-marker">
+                  <span>{!flight.landed ? arrowForBearing(marker.bearingDeg) : '●'} {marker.label}</span>
+                  <span>{distanceText(marker.distanceM)}</span>
+                </div>
+              ))}
+              {flight.habitats.map((marker, index) => (
+                <div key={`base:${marker.label}:${index}`} className="flight-marker base">
+                  <span>{marker.samePlanet ? arrowForBearing(marker.bearingDeg) : '◆'} {marker.label}</span>
+                  <span>{distanceText(marker.distanceM)}</span>
+                </div>
+              ))}
+            </div>
+            <div className="flight-hint">
+              W/S thrust · A/D yaw · RMB steer<br />
+              <kbd>Space</kbd> {flight.landed ? 'hold 2 s to launch' : 'lift'} · <kbd>Shift</kbd> boost · <kbd>E</kbd> {flight.landed ? 'disembark' : 'land to disembark'}
+            </div>
+          </aside>
+        ) : null}
         {power ? <div id="hud-power" className={power.state === 'paused' ? 'paused' : ''}>
           <span className="eyebrow">POWER NETWORK</span>
           <strong>{power.state === 'paused' ? 'Paused · no power' : power.state}</strong>

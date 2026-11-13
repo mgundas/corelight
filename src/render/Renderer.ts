@@ -3,7 +3,7 @@ import type { PlanetConfig, Rgb } from '../planets/PlanetConfig.js';
 import { PLANETS, nearestPlanet } from '../planets/solarSystem.js';
 import type { Quat, Vec3d } from '../core/math.js';
 import { isKnownItem, itemDef, type ItemDef } from '../data/loadData.js';
-import type { Entity } from '../sim/entities.js';
+import type { Entity, EntityId } from '../sim/entities.js';
 import { ChunkManager } from '../terrain/chunkManager.js';
 import { toWorldPlanes, type StreamStats } from '../terrain/streaming.js';
 import { MeshWorkerPool, type MeshResult } from '../terrain/workerPool.js';
@@ -14,7 +14,8 @@ import { getOrigin, toLocal } from './floatingOrigin.js';
 import { frustumPlanes } from './frustum.js';
 import { ItemLights } from './itemLights.js';
 import { HabitatViews, MarkerViews, TetherViews } from './views/tetherView.js';
-import { PlaceableViews, PlacementGhost } from './views/placeableView.js';
+import { PlaceableViews } from './views/placeableView.js';
+import { PlacementGhost } from './views/placementGhost.js';
 import { disposeItemCaches } from './views/itemGeometry.js';
 import { syncEntityViews } from './views/syncViews.js';
 import { ItemViews } from './views/itemView.js';
@@ -325,6 +326,16 @@ export class Renderer {
   /** Place the astronaut view between the last two tick samples. */
   renderPlayer(alpha: number): void {
     this.playerView.render(alpha);
+  }
+
+  /** Hide/show the astronaut mesh while its entity is inside a shuttle. */
+  setPlayerSuitVisible(visible: boolean): void {
+    this.playerView.setSuitVisible(visible);
+  }
+
+  /** Interpolated render anchor for the piloted shuttle (M14 chase camera). */
+  setShuttleRenderAnchor(id: EntityId | null, position: Vec3d | null): void {
+    this.placeableViews.setShuttleAnchor(id && position ? { id, position } : null);
   }
 
   /**

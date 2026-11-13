@@ -7,7 +7,8 @@ import * as THREE from 'three';
 import { IDENTITY_QUAT } from '../../src/core/math.js';
 import { itemDef } from '../../src/data/loadData.js';
 import type { Entity } from '../../src/sim/entities.js';
-import { PlaceableViews, PlacementGhost } from '../../src/render/views/placeableView.js';
+import { PlaceableViews } from '../../src/render/views/placeableView.js';
+import { PlacementGhost } from '../../src/render/views/placementGhost.js';
 import { PlayerView } from '../../src/render/views/playerView.js';
 
 function entity(kind: Entity['kind'], components: Entity['components'], id = `${kind}_1`): Entity {

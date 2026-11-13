@@ -396,4 +396,56 @@ describe('save round trip', () => {
     expect(revived.entities.get(playerId)?.components.player?.carryingLarge).toBe(packageId);
     expect(revived.entities.get(inputId)?.components.item?.holder).toBe(stationId);
   });
+
+  it('round-trips a piloted shuttle and the last-habitat respawn link', () => {
+    events.clear();
+    const world = makeEditedWorld(1337);
+    const player = [...world.entities.values()].find((e) => e.kind === 'player');
+    if (!player) throw new Error('no player');
+    const shuttleId = spawnPlaceableEntity(world, SELA.id, 'shuttle', { ...player.position });
+    if (!shuttleId) throw new Error('no shuttle');
+    const shuttle = world.entities.get(shuttleId)?.components.shuttle;
+    const playerComp = player.components.player;
+    if (!shuttle || !playerComp) throw new Error('missing components');
+    shuttle.fuel = 2;
+    shuttle.pilotId = player.id;
+    shuttle.velocity = { x: 12, y: -3, z: 4 };
+    shuttle.yaw = 0.4;
+    shuttle.pitch = -0.2;
+    shuttle.up = { x: 0.1, y: 0.9, z: 0.2 };
+    shuttle.launchChargeS = 0.5;
+    shuttle.airborne = true;
+    playerComp.pilotingShuttleId = shuttleId;
+    playerComp.lastHabitatId = 'habitat_from_an_earlier_visit';
+    const revived = deserializeWorld(
+      JSON.parse(JSON.stringify(serializeWorld(world))) as unknown,
+      [SELA],
+    );
+    expect(revived.entities.get(shuttleId)?.components.shuttle).toEqual(shuttle);
+    expect(revived.entities.get(player.id)?.components.player?.pilotingShuttleId).toBe(shuttleId);
+    expect(revived.entities.get(player.id)?.components.player?.lastHabitatId).toBe(
+      'habitat_from_an_earlier_visit',
+    );
+  });
+
+  it('rejects malformed shuttle flight state and player links', () => {
+    const world = makeEditedWorld(1337);
+    const player = [...world.entities.values()].find((e) => e.kind === 'player');
+    if (!player) throw new Error('no player');
+    const shuttleId = spawnPlaceableEntity(world, SELA.id, 'shuttle', { ...player.position });
+    if (!shuttleId) throw new Error('no shuttle');
+    const good = JSON.parse(JSON.stringify(serializeWorld(world))) as {
+      entities: Array<{ id: string; components: Record<string, unknown> }>;
+    };
+    const badFuel = JSON.parse(JSON.stringify(good)) as typeof good;
+    const shuttleEntry = badFuel.entities.find((e) => e.id === shuttleId);
+    if (!shuttleEntry) throw new Error('missing shuttle');
+    (shuttleEntry.components['shuttle'] as Record<string, unknown>)['fuel'] = 'full';
+    expect(() => deserializeWorld(badFuel, [SELA])).toThrow();
+    const badLink = JSON.parse(JSON.stringify(good)) as typeof good;
+    const playerEntry = badLink.entities.find((e) => e.id === player.id);
+    if (!playerEntry) throw new Error('missing player');
+    (playerEntry.components['player'] as Record<string, unknown>)['pilotingShuttleId'] = 7;
+    expect(() => deserializeWorld(badLink, [SELA])).toThrow();
+  });
 });

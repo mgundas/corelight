@@ -6,6 +6,7 @@ import { TOAST_DURATION_MS } from '../core/constants.js';
 import type { ItemDef } from '../data/loadData.js';
 import type { PowerStatus } from '../game/powerStatus.js';
 import type { NavHint } from '../game/oxygenStatus.js';
+import type { FlightStatus } from '../game/shuttleHud.js';
 import type { DrillTier } from '../sim/drill.js';
 import {
   clearHudToast,
@@ -42,6 +43,8 @@ export interface HudState {
   brushMode: 'dig' | 'add';
   /** Current drill tier (M12): from the selected backpack slot. */
   drillTier: DrillTier;
+  /** Shuttle flight readout while piloting (M14), else null. */
+  flight: FlightStatus | null;
 }
 
 export class Hud {
@@ -83,6 +86,17 @@ export class Hud {
       state.interactionMode,
       state.brushMode,
       state.drillTier,
+      state.flight
+        ? [
+            Math.round(state.flight.speedMps),
+            Math.round(state.flight.altitudeM),
+            state.flight.fuel,
+            state.flight.launchCharge.toFixed(2),
+            state.flight.landed,
+            ...state.flight.planets.map((p) => `${p.label}:${Math.round(p.distanceM)}:${Math.round(p.bearingDeg)}`),
+            ...state.flight.habitats.map((h) => `${h.label}:${Math.round(h.distanceM)}:${Math.round(h.bearingDeg)}`),
+          ].join(':')
+        : '',
       ...state.slots.map((d) => d?.id ?? ''),
     ].join('|');
     if (key === this.lastKey) return;
@@ -105,6 +119,7 @@ export class Hud {
       interactionMode: state.interactionMode,
       brushMode: state.brushMode,
       drillTier: state.drillTier,
+      flight: state.flight,
     });
   }
 

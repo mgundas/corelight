@@ -2,13 +2,14 @@
 // chain so the HUD always says what E will do next. M10 adds the cable tool
 // and the hold-E pack gesture. Read-only.
 
-import { RESEARCH_TIME_S } from '../core/constants.js';
+import { RESEARCH_TIME_S, SHUTTLE_FUEL_MAX } from '../core/constants.js';
 import { isKnownItem, itemDef } from '../data/loadData.js';
 import { placeableById, placeableForMachineType, placeableForPackageItem } from '../data/loadPlaceables.js';
 import type { EntityId } from '../sim/entities.js';
 import type { World } from '../sim/world.js';
 import { depositCandidate, inputSlotsFor } from '../sim/stationInputs.js';
 import { printerFor } from '../sim/craftingActions.js';
+import { isLanded, shuttleFuel } from '../sim/shuttle.js';
 import {
   isResearchStation,
   researchFor,
@@ -17,8 +18,8 @@ import {
 import { cableOnSnap, snapFree } from '../sim/snapUtils.js';
 import type { ToolAim } from '../player/terrainTool.js';
 import type { CableMode } from './cableMode.js';
-import { hasSelectedLightstick } from './interactWiring.js';
-import { findAimedItem, findAimedStation, findAimedTether } from './pickup.js';
+import { carriesFuelCell, hasSelectedLightstick } from './interactWiring.js';
+import { findAimedItem, findAimedShuttle, findAimedStation, findAimedTether } from './pickup.js';
 import { carriedPlaceable, placementCheckFor, type PlacementMode } from './placement.js';
 import { primaryPackTarget } from './packTarget.js';
 import { findAimedSnap, findPlacementTarget } from './snapTarget.js';
@@ -39,6 +40,14 @@ export function interactPrompt(
   cursorPackId: EntityId | null = null,
 ): string | null {
   if (!playerId) return null;
+  // Piloting: E is only the disembark key while parked on the ground.
+  const playerComp = world.entities.get(playerId)?.components.player;
+  const pilotingId = playerComp?.pilotingShuttleId ?? null;
+  if (pilotingId) {
+    const shuttle = world.entities.get(pilotingId)?.components.shuttle;
+    if (!shuttle) return null;
+    return isLanded(shuttle) ? 'E: disembark' : 'Land to disembark';
+  }
   if (cable?.isActive()) {
     const aimed = findAimedSnap(world, playerId, aim);
     if (aimed && cableOnSnap(world, aimed)) return 'Cable: click to cut this cable (E: exit)';
@@ -84,6 +93,18 @@ export function interactPrompt(
     return `Hold E: pack up ${def?.name ?? 'structure'}${isStation ? ' (tap E: open)' : ''}`;
   }
   const stationId = findAimedStation(world, playerId, aim);
+  const shuttleId = findAimedShuttle(world, playerId, aim);
+  if (shuttleId) {
+    const shuttleComp = world.entities.get(shuttleId)?.components.shuttle;
+    if (
+      shuttleComp &&
+      shuttleFuel(shuttleComp) < SHUTTLE_FUEL_MAX &&
+      carriesFuelCell(world, playerId)
+    ) {
+      return `E: load Fuel cell (${shuttleFuel(shuttleComp)}/${SHUTTLE_FUEL_MAX})`;
+    }
+    return 'E: board Shuttle';
+  }
   if (stationId) {
     const station = world.entities.get(stationId);
     if (isResearchStation(station)) {

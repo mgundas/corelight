@@ -17,6 +17,7 @@ import { backpackFrame } from './backpackWiring.js';
 import { oxygenStatusFor } from './oxygenStatus.js';
 import { powerStatusFor } from './powerStatus.js';
 import { interactPrompt } from './prompts.js';
+import { flightStatusFor } from './shuttleHud.js';
 import { upAt } from '../sim/physics/frames.js';
 
 export interface FrameHudDeps {
@@ -42,6 +43,7 @@ export function updateFrameHud(deps: FrameHudDeps): void {
   const frame = backpackFrame(deps.world, activePlayer, deps.flying);
   const o2 = oxygenStatusFor(deps.world, activePlayer);
   const power = powerStatusFor(deps.world, activePlayer, deps.aim);
+  const flight = flightStatusFor(deps.world, deps.world.planets, activePlayer);
   const grabbed = activePlayer ? deps.world.entities.get(activePlayer)?.components.player?.grabbed : null;
   deps.renderer.renderEntities(
     deps.world.entities.values(),
@@ -75,6 +77,7 @@ export function updateFrameHud(deps: FrameHudDeps): void {
       : deps.toolMode.active ? 'terrain' : grabbed ? 'carry' : 'explore',
     brushMode: deps.toolMode.brush,
     drillTier: frame.drillTier,
+    flight,
   });
 }
 

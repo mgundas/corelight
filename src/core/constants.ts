@@ -311,3 +311,47 @@ export const RESEARCH_POWER = 1;
 export const RESEARCH_UI_SYNC_INTERVAL_MS = 100;
 /** How long the "New blueprint" toast stays visible (ms). */
 export const TOAST_DURATION_MS = 3200;
+
+/** Shuttle (M14). Arcade flight: gravity inside an SOI, free drift in space. */
+export const SHUTTLE_FUEL_MAX = 2;
+/** Launch needs a full pair of fuel cells and a held Space press. */
+export const SHUTTLE_LAUNCH_HOLD_S = 2;
+/** Upward kick at launch so the shuttle clears its own landing legs. */
+export const SHUTTLE_LAUNCH_SPEED = 40;
+/** Near-surface speed cap; grows toward the space cap with altitude. */
+export const SHUTTLE_MAX_SPEED_SURFACE = 120;
+/** Cruise cap in space without Shift. */
+export const SHUTTLE_SPACE_CRUISE_SPEED = 300;
+/** Space cap with Shift (PROJECT.md trip: ~30-60 s between planets). */
+export const SHUTTLE_MAX_SPEED_SPACE = 600;
+/** Surface cap multiplier while boosting inside an SOI. */
+export const SHUTTLE_BOOST_MULT = 1.25;
+/** Altitude over which the surface cap scales to the space cap (m). */
+export const SHUTTLE_SPEED_RAMP_M = 400;
+export const SHUTTLE_THRUST_ACCEL = 30;
+export const SHUTTLE_LIFT_ACCEL = 35;
+/** A/D yaw rate (rad/s) and mouse pitch clamp. */
+export const SHUTTLE_YAW_RATE = 1.5;
+export const SHUTTLE_PITCH_LIMIT = 1;
+/** Below this altitude the landing assist clamps descent and levels out. */
+export const SHUTTLE_LANDING_ASSIST_M = 40;
+export const SHUTTLE_ASSIST_DESCENT_MPS = 4;
+/** Horizontal cap during the landing assist so a dive cannot overshoot. */
+export const SHUTTLE_ASSIST_SPEED_MPS = 40;
+/** Touchdown at or below this descent speed is safe. */
+export const SHUTTLE_SAFE_TOUCHDOWN_MPS = 6;
+/** Fraction of the impact speed kept when a hard touchdown bounces. */
+export const SHUTTLE_BOUNCE_DAMP = 0.35;
+/** Landing legs hold the origin this far above the terrain. */
+export const SHUTTLE_GROUND_CLEARANCE_M = 0.15;
+/** E board/load range from the shuttle base. */
+export const SHUTTLE_ENTER_RANGE_M = 4.5;
+/** E exit is allowed below this speed (and only while landed). */
+export const SHUTTLE_EXIT_SPEED_MPS = 1;
+/** Cone half-angle for the on-foot shuttle pick (no cursor ray). */
+export const SHUTTLE_AIM_DEG = 35;
+/** Chase camera distance/height behind the shuttle. */
+export const SHUTTLE_CHASE_DISTANCE_M = 10;
+export const SHUTTLE_CHASE_HEIGHT_M = 3;
+/** Auto-orient rate (1/s) when the shuttle enters a planet SOI. */
+export const SHUTTLE_AUTO_ORIENT_RATE = 3;

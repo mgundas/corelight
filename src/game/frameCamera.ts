@@ -12,9 +12,11 @@ import { maybeShiftOrigin, toLocal } from '../render/floatingOrigin.js';
 import type { EntityId } from '../sim/entities.js';
 import type { TerrainColliders } from '../sim/physics/terrainColliders.js';
 import { upAt } from '../sim/physics/frames.js';
+import { pilotedShuttle } from '../sim/shuttle.js';
 import type { World } from '../sim/world.js';
 import { computeEnvironment, findFollowed } from './environment.js';
 import { CAMERA_FOCUS_HEIGHT } from '../core/constants.js';
+import { ShuttleCamera } from './shuttleCamera.js';
 
 export interface FrameCameraDeps {
   world: World;
@@ -35,17 +37,51 @@ export interface FrameCameraResult {
   activePos: Vec3d;
   focusWorld: Vec3d;
   depthBelowM: number;
+  /** True while the player is riding a shuttle (chase camera active). */
+  piloting: boolean;
 }
+
+/** One session-scoped chase camera (no DOM/GPU resources to release). */
+const shuttleCamera = new ShuttleCamera();
 
 export function updateCameraAndEnvironment(deps: FrameCameraDeps): FrameCameraResult {
   const { renderer, world, planets, playerId, flying, alpha } = deps;
   let activePos: Vec3d;
+  let focusOverride: Vec3d | null = null;
+  // A pilot's suit is hidden inside the ship; the shuttle mesh renders from
+  // the interpolated pilot anchor so the chase camera sees no 30 Hz steps.
+  const pilotEntity = playerId ? pilotedShuttle(world, playerId) : undefined;
+  renderer.setShuttleRenderAnchor(
+    pilotEntity?.id ?? null,
+    pilotEntity ? (renderer.playerView.interpolatedWorld(alpha) ?? pilotEntity.position) : null,
+  );
+  renderer.setPlayerSuitVisible(!pilotEntity);
+  const piloted = flying ? undefined : pilotEntity;
   if (flying) {
     // Frozen while paused: the debug camera must not drift behind the menu.
     if (!deps.paused) deps.flyCamera.update(deps.frameDt);
     activePos = deps.flyCamera.position;
     const local = toLocal(activePos);
     deps.flyCamera.applyToCamera(renderer.camera, local);
+  } else if (piloted && piloted.components.shuttle) {
+    // The pilot entity shares the shuttle transform; interpolating it gives
+    // the chase camera a display-rate anchor instead of 30 Hz steps.
+    const anchor =
+      renderer.playerView.interpolatedWorld(alpha) ??
+      (playerId ? world.entities.get(playerId)?.position : undefined) ??
+      piloted.position;
+    const planet = planets.find((p) => p.id === piloted.planetId) ?? null;
+    const view = shuttleCamera.update(
+      anchor,
+      piloted.components.shuttle,
+      planets,
+      deps.colliders,
+      deps.paused ? 0 : deps.frameDt,
+      planet,
+    );
+    activePos = view.position;
+    focusOverride = view.anchor;
+    renderer.applyRigCamera(view.focus, view.position, view.up);
   } else {
     const followed = findFollowed(world, planets, playerId);
     if (followed) {
@@ -67,9 +103,9 @@ export function updateCameraAndEnvironment(deps: FrameCameraDeps): FrameCameraRe
   if (shift) renderer.applyOriginShift(shift);
 
   const lampPlayer = playerId ? world.entities.get(playerId) : undefined;
-  const focusWorld = flying
+  const focusWorld = focusOverride ?? (flying
     ? activePos
-    : (renderer.playerView.interpolatedWorld(alpha) ?? lampPlayer?.position ?? activePos);
+    : (renderer.playerView.interpolatedWorld(alpha) ?? lampPlayer?.position ?? activePos));
   const env = computeEnvironment(
     world,
     planets,
@@ -78,5 +114,5 @@ export function updateCameraAndEnvironment(deps: FrameCameraDeps): FrameCameraRe
     lampPlayer?.components.player?.headlampOn ?? true,
   );
   renderer.updateEnvironment(env);
-  return { activePos, focusWorld, depthBelowM: env.depthBelowM };
+  return { activePos, focusWorld, depthBelowM: env.depthBelowM, piloting: piloted !== undefined };
 }

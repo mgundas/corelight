@@ -4,13 +4,14 @@
 // the forward comes from the player's yaw/pitch, so the client and any
 // future server agree on what "looking at" means.
 
-import { PICKUP_RANGE_M, POWER_VIEW_RANGE_M, STATION_RANGE_M } from '../core/constants.js';
+import { PICKUP_RANGE_M, POWER_VIEW_RANGE_M, SHUTTLE_AIM_DEG, SHUTTLE_ENTER_RANGE_M, STATION_RANGE_M } from '../core/constants.js';
 import { distance, dot, normalize, sub, type Vec3d } from '../core/math.js';
 import { placeableForMachineType } from '../data/loadPlaceables.js';
 import { isItemLike, type Entity, type EntityId } from '../sim/entities.js';
 import { isStationMachine } from '../sim/craftingActions.js';
 import { isResearchStation } from '../sim/researchActions.js';
 import { moveBasis, upAt } from '../sim/physics/frames.js';
+import { defForEntity } from '../sim/snapUtils.js';
 import type { World } from '../sim/world.js';
 import type { ToolAim } from '../player/terrainTool.js';
 import { findStructureAlongRay } from './packPick.js';
@@ -54,6 +55,56 @@ export function findAimedMachine(world: World, playerId: EntityId, aim?: ToolAim
       (entity) => entity.kind === 'machine');
   }
   return findAimedMachineMatching(world, playerId, POWER_VIEW_RANGE_M, () => true);
+}
+
+/**
+ * Shuttle under the cursor (or in the on-foot look cone) within board range.
+ * The shuttle is a big catalog body, so the cursor box pick is forgiving at
+ * any camera zoom and works while facing away from the nose.
+ */
+export function findAimedShuttle(world: World, playerId: EntityId, aim?: ToolAim): EntityId | null {
+  if (aim?.ray) {
+    const hit = findStructureAlongRay(
+      world,
+      playerId,
+      aim.ray,
+      SHUTTLE_ENTER_RANGE_M,
+      (entity) => entity.kind === 'shuttle',
+    );
+    if (hit) return hit;
+  }
+  // "E near the shuttle": a cursor ray that misses (e.g. pointing at the
+  // horizon beside the nose) still boards when the astronaut stands close
+  // and faces the body.
+  const player = world.entities.get(playerId);
+  const playerComp = player?.components.player;
+  if (!player || player.kind !== 'player' || !playerComp) return null;
+  const planet = world.planets.find((p) => p.id === player.planetId);
+  if (!planet) return null;
+  const up = upAt(planet, player.position);
+  const { forward } = moveBasis(up, playerComp.yaw, playerComp.pitch);
+  const cos = Math.cos((SHUTTLE_AIM_DEG * Math.PI) / 180);
+  let best: EntityId | null = null;
+  let bestDist = Infinity;
+  for (const entity of world.entities.values()) {
+    if (entity.kind !== 'shuttle' || entity.planetId !== planet.id) continue;
+    const baseDist = distance(entity.position, player.position);
+    if (baseDist > SHUTTLE_ENTER_RANGE_M) continue;
+    const def = defForEntity(entity);
+    const mid = (def?.heightM ?? 3) * 0.5;
+    const center: Vec3d = {
+      x: entity.position.x + up.x * mid,
+      y: entity.position.y + up.y * mid,
+      z: entity.position.z + up.z * mid,
+    };
+    const dist = distance(center, player.position);
+    if (dist >= bestDist) continue;
+    const to: Vec3d = dist < 1e-6 ? forward : normalize(sub(center, player.position));
+    if (dot(to, forward) < cos) continue;
+    best = entity.id;
+    bestDist = dist;
+  }
+  return best;
 }
 
 function findAimedMachineMatching(

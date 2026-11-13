@@ -28,6 +28,17 @@
 #hud-power { top: 200px; left: 24px; display: flex; flex-direction: column; gap: 7px; font-size: 11px; min-width: 200px; }
 #hud-power strong { font-size: 14px; font-weight: 500; text-transform: capitalize; color: var(--accent); }
 #hud-power.paused strong { color: #ff987d; }
+.flight-panel { position: absolute; top: 24px; left: 50%; transform: translateX(-50%); width: min(430px, calc(100vw - 48px)); padding: 14px 18px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); box-shadow: 0 6px 24px rgb(0 0 0 / 12%); }
+.flight-main { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-top: 8px; font-size: 11px; color: #bdd1d7; }
+.flight-main strong { font-size: 27px; font-weight: 400; color: var(--accent); font-variant-numeric: tabular-nums; }
+.flight-main small { font-size: 11px; color: var(--muted); margin-left: 4px; }
+.flight-fuel { color: #ffce8a; }
+#flight-launch { height: 3px; margin-top: 9px; background: rgb(255 255 255 / 10%); border-radius: 3px; overflow: hidden; }
+#flight-launch > div { height: 100%; background: var(--accent); transition: width .12s linear; }
+.flight-markers { margin-top: 10px; display: flex; flex-direction: column; gap: 4px; }
+.flight-marker { display: flex; justify-content: space-between; gap: 14px; font-size: 11px; color: #cfe4e8; }
+.flight-marker.base { color: #d4d4a2; }
+.flight-hint { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); color: var(--muted); font-size: 10px; line-height: 1.8; }
 .backpack-dock { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); width: min(704px, calc(100vw - 40px)); padding: 14px 16px 11px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); }
 .dock-heading { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-size: 11px; color: var(--muted); }
 .dock-heading .muted { margin-left: 10px; letter-spacing: 0; }
@@ -56,6 +67,7 @@
 @media (max-width: 760px) {
   .suit-panel { top: 14px; left: 14px; width: 188px; padding: 13px; }
   .field-panel { top: 14px; right: 14px; width: 205px; padding: 13px; }
+  .flight-panel { top: auto; bottom: 184px; width: min(360px, calc(100vw - 28px)); padding: 11px 14px; }
   .backpack-dock { padding: 10px; bottom: 12px; }
   #hud-slots { gap: 4px; }
   .dock-footer { flex-wrap: wrap; }
@@ -65,6 +77,7 @@
 @media (max-height: 600px) {
   .suit-panel, .field-panel { top: 12px; padding: 10px 14px; }
   .oxygen-readout { margin: 4px 0; }
+  .flight-panel { top: 12px; bottom: auto; transform: translateX(-50%) scale(.92); }
   .backpack-dock { bottom: 10px; }
   .hud-slot { height: 56px; }
   .dock-footer { display: none; }

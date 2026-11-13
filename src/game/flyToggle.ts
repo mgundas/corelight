@@ -21,17 +21,24 @@ export interface FlyToggleDeps {
 
 export function toggleFly(deps: FlyToggleDeps): void {
   const { flyCamera, input, world, playerId } = deps;
+  const player = playerId ? world.entities.get(playerId) : undefined;
+  const shuttleId = player?.components.player?.pilotingShuttleId ?? null;
+  const shuttle = shuttleId ? world.entities.get(shuttleId) : undefined;
+  // F3 must not abandon a moving ship (the pilot entity is attached and
+  // would snap back). Parked shuttles may use the debug camera freely.
+  if (!flyCamera.enabled && shuttle?.components.shuttle?.airborne) return;
   flyCamera.enabled = !flyCamera.enabled;
   deps.packHold.reset();
   deps.cable.cancel();
-  const player = playerId ? world.entities.get(playerId) : undefined;
   if (flyCamera.enabled) {
     if (player) flyCamera.position = { ...player.position };
     input.setEnabled(false);
     deps.closeAllUi();
   } else {
     input.setEnabled(true);
-    if (player && playerId) {
+    // A piloted player stays attached to the shuttle: teleporting to the
+    // debug camera would only be undone (and could bury them on return).
+    if (player && playerId && !shuttleId) {
       world.dispatch({
         type: 'playerTeleport',
         playerId,

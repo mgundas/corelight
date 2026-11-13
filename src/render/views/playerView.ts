@@ -30,6 +30,8 @@ export class PlayerView {
   private prev: Sample | null = null;
   private curr: Sample | null = null;
   private visible = false;
+  /** Render-only suppression (pilot inside a shuttle); samples keep flowing. */
+  private hidden = false;
   /** Backpack slot meshes (8): reconciled by renderBackpack. */
   private readonly packSlots: (THREE.Mesh | null)[] = Array<THREE.Mesh | null>(8).fill(null);
   private readonly packItemIds: (string | null)[] = Array<string | null>(8).fill(null);
@@ -66,6 +68,13 @@ export class PlayerView {
     this.lastRenderPos = null;
   }
 
+  /** Hide the whole astronaut (pilot inside a shuttle); samples keep flowing. */
+  setSuitVisible(visible: boolean): void {
+    this.hidden = !visible;
+    this.suit.group.visible = visible;
+    if (this.hidden) this.group.visible = false;
+  }
+
   /** Interpolated world position between the last two tick samples. */
   interpolatedWorld(alpha: number): Vec3d | null {
     if (!this.visible || !this.prev || !this.curr) return null;
@@ -81,7 +90,7 @@ export class PlayerView {
 
   /** Place the group from the two samples and the tick alpha. */
   render(alpha: number): void {
-    this.group.visible = this.visible;
+    this.group.visible = this.visible && !this.hidden;
     const world = this.interpolatedWorld(alpha);
     if (!world) return;
     const local = toLocal(world);

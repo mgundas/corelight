@@ -87,6 +87,15 @@ describe('recipe catalog', () => {
     ]);
     expect(recipeDef('fuel_cell_biomass').output).toBe('fuel_cell');
     expect(recipeDef('fuel_cell_hydrite').output).toBe('fuel_cell');
+    // M14 fuel refinery: 2 biomass or 1 hydrite -> 1 cell, 15 s at 3 power/s.
+    for (const id of ['fuel_cell_biomass', 'fuel_cell_hydrite']) {
+      expect(recipeDef(id).station, id).toBe('refinery');
+      expect(recipeDef(id).output, id).toBe('fuel_cell');
+      expect(recipeDef(id).time, id).toBe(15);
+      expect(recipeDef(id).power, id).toBe(3);
+    }
+    expect(recipeDef('fuel_cell_biomass').inputs).toEqual([{ item: 'biomass', count: 2 }]);
+    expect(recipeDef('fuel_cell_hydrite').inputs).toEqual([{ item: 'hydrite', count: 1 }]);
     // Starter set from PROJECT.md: backpack recipes + platform, plus M11's
     // research station (the bootstrap for the research tree).
     const unlocked = RECIPES.filter((recipe) => isRecipeUnlocked(recipe, new Set())).map((r) => r.id).sort();

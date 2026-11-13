@@ -52,6 +52,44 @@ export function dispatchTickInput(deps: TickInputDeps): void {
   if (deps.input.consumeHeadlampToggle() && deps.playerId) {
     deps.world.dispatch({ type: 'toggleHeadlamp', playerId: deps.playerId });
   }
+  // M14: a pilot owns the controls. Every on-foot edge queue still drains so
+  // nothing fires late; E disembarks and Space/Shift/WASD/mouse become one
+  // shuttleInput Action per tick.
+  const pilotShuttleId = activePilotShuttle(deps.world, deps.playerId);
+  if (pilotShuttleId) {
+    if (deps.placement.isActive()) deps.placement.cancel();
+    deps.cable?.cancel();
+    deps.toolMode.cancel();
+    deps.packHold?.reset();
+    const interact = deps.input.consumeInteract();
+    deps.input.consumePrimaryClick();
+    deps.input.consumeCableToggle();
+    deps.input.consumeToolToggle();
+    deps.input.consumeBrushToggle();
+    deps.input.consumeJump();
+    deps.input.consumePrinter();
+    tickBackpackInput(deps.world, deps.playerId, deps.input, false);
+    if (interact) {
+      deps.world.dispatch({ type: 'exitShuttle', playerId: deps.playerId as EntityId });
+    }
+    if (!deps.flying && !deps.uiOpen && deps.playerId) {
+      const move = deps.input.move();
+      deps.world.dispatch({
+        type: 'shuttleInput',
+        playerId: deps.playerId,
+        shuttleId: pilotShuttleId,
+        input: {
+          thrust: move.z,
+          yawRate: move.x,
+          lift: deps.input.spaceHeld(),
+          boost: deps.input.sprint(),
+          lookYaw: deps.rig.yaw,
+          lookPitch: deps.rig.pitch,
+        },
+      });
+    }
+    return;
+  }
   const canAct = !deps.flying && deps.playerId !== null && !deps.uiOpen;
   // A grab-carry must never outlive a mode switch: stowing the tool, entering
   // placement or activating the cable tool drops the item loose (no placement).
@@ -180,6 +218,16 @@ export function dispatchTickInput(deps: TickInputDeps): void {
     return;
   }
   if (primaryClick) dispatchGrabClick(deps, playerId);
+}
+
+/** Valid piloted shuttle id, or null when the player is on foot. */
+export function activePilotShuttle(world: World, playerId: EntityId | null): EntityId | null {
+  if (!playerId) return null;
+  const player = world.entities.get(playerId);
+  const id = player?.components.player?.pilotingShuttleId ?? null;
+  if (!id) return null;
+  const shuttle = world.entities.get(id);
+  return shuttle?.kind === 'shuttle' && shuttle.components.shuttle?.pilotId === playerId ? id : null;
 }
 
 function dispatchPlayerInput(deps: TickInputDeps): void {

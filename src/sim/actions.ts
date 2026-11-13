@@ -3,7 +3,7 @@ import { IDENTITY_QUAT } from '../core/math.js';
 import { BACKPACK_SLOTS, DRILL_MK1_HARDNESS, OXYGEN_MAX } from '../core/constants.js';
 import { events } from '../core/events.js';
 import type { EditMode } from '../terrain/edits.js';
-import type { EntityId, SnapRef } from './entities.js';
+import type { EntityId, SnapRef, ShuttleInputState } from './entities.js';
 import {
   collectStation,
   depositSlotToStation,
@@ -24,6 +24,12 @@ import {
 } from './researchActions.js';
 import { applyTerrainEdit } from './terrainEditAction.js';
 import { placeTether, removeTether, spawnHabitatEntity } from './tetherActions.js';
+import {
+  applyShuttleInput,
+  enterShuttle,
+  exitShuttle,
+  loadShuttleFuel,
+} from './shuttleActions.js';
 import type { World } from './world.js';
 
 // All gameplay changes go through Actions (ARCHITECTURE.md hard rule 2).
@@ -95,7 +101,16 @@ export type Action =
   | { type: 'placeLightstick'; playerId: EntityId }
   | { type: 'unlockResearch'; playerId: EntityId; id: string }
   | { type: 'depositResearchSample'; playerId: EntityId; stationId: EntityId; slot?: number }
-  | { type: 'collectResearch'; playerId: EntityId; stationId: EntityId };
+  | { type: 'collectResearch'; playerId: EntityId; stationId: EntityId }
+  | { type: 'enterShuttle'; playerId: EntityId; shuttleId: EntityId }
+  | { type: 'exitShuttle'; playerId: EntityId }
+  | { type: 'loadShuttleFuel'; playerId: EntityId; shuttleId: EntityId }
+  | {
+      type: 'shuttleInput';
+      playerId: EntityId;
+      shuttleId: EntityId;
+      input: ShuttleInputState;
+    };
 
 function clampAxis(v: number): number {
   return Math.min(1, Math.max(-1, v));
@@ -313,6 +328,22 @@ export function applyAction(world: World, action: Action): void {
     }
     case 'collectResearch': {
       collectResearch(world, action.playerId, action.stationId);
+      return;
+    }
+    case 'enterShuttle': {
+      enterShuttle(world, action.playerId, action.shuttleId);
+      return;
+    }
+    case 'exitShuttle': {
+      exitShuttle(world, action.playerId);
+      return;
+    }
+    case 'loadShuttleFuel': {
+      loadShuttleFuel(world, action.playerId, action.shuttleId);
+      return;
+    }
+    case 'shuttleInput': {
+      applyShuttleInput(world, action.playerId, action.shuttleId, action.input);
       return;
     }
   }

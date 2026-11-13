@@ -130,6 +130,16 @@ export function makePhysicsSystem(opts: PhysicsOptions): System {
       const dominant = transferPlanetId(opts.planets, entity.position);
       if (entity.planetId !== dominant) entity.planetId = dominant;
       opts.colliders.update(entity.position, opts.planets, opts.worldSeed);
+      // A pilot is attached to a shuttle: the shuttle system owns their
+      // motion and the astronaut collider must not fight the ship body.
+      if (entity.components.player.pilotingShuttleId) {
+        const pilotBody = bodies.get(entity.id);
+        if (pilotBody) {
+          pilotBody.dispose();
+          bodies.delete(entity.id);
+        }
+        continue;
+      }
       // Embedded safety first: inside solid rock normal integration only
       // builds fall velocity (solid chunks have no trimesh), so freeze and
       // push out instead. Works even while colliders are still loading.

@@ -32,6 +32,7 @@ export interface Components {
   cable: CableComponent;
   sample: SampleComponent;
   research: ResearchComponent;
+  shuttle: ShuttleComponent;
 }
 
 export interface OxygenComponent {
@@ -191,6 +192,52 @@ export interface PlayerInputState {
   sprint: boolean;
 }
 
+/**
+ * One-tick flight intent (M14). All values come from `shuttleInput` Actions,
+ * so a future co-op server runs the identical vehicle model. `lookYaw` and
+ * `lookPitch` are absolute steering angles in the current up basis (the mouse
+ * look), while `yawRate` is the A/D nudge applied on top for this tick.
+ */
+export interface ShuttleInputState {
+  /** W/S: +1 forward, -1 reverse, 0 idle. */
+  thrust: number;
+  /** A/D: -1 left, +1 right, 0 idle. */
+  yawRate: number;
+  /** Space held (launch charge / upward thrust). */
+  lift: boolean;
+  /** Shift held (speed cap boost). */
+  boost: boolean;
+  lookYaw: number;
+  lookPitch: number;
+}
+
+/** Shuttle flight state (M14). Positions stay in the entity, not here. */
+export interface ShuttleComponent {
+  /** Loaded fuel cells (0..SHUTTLE_FUEL_MAX). */
+  fuel: number;
+  /** Piloting player entity id, or null when parked. */
+  pilotId: EntityId | null;
+  /** World-frame velocity in m/s (the arcade state driving the body). */
+  velocity: Vec3d;
+  /** Steering angles in the current up basis. */
+  yaw: number;
+  pitch: number;
+  /**
+   * Basis "up" used to build the flight orientation. Kept through deep space
+   * (where there is no planet) so the ship never snaps when the SOI changes;
+   * inside an SOI it eases toward the radial up (auto-orient).
+   */
+  up: Vec3d;
+  /** Seconds Space has been held for launch (reset on release). */
+  launchChargeS: number;
+  /** Last absolute mouse-look yaw, so A/D steering can accumulate. */
+  lastLookYaw?: number;
+  /** False while resting on its legs; true once launched. */
+  airborne: boolean;
+  /** Latest shuttleInput, consumed once per tick by the shuttle system. */
+  input: ShuttleInputState | null;
+}
+
 export interface PlayerComponent {
   /** World-frame velocity in m/s (vertical part is gravity-integrated). */
   velocity: Vec3d;
@@ -222,6 +269,10 @@ export interface PlayerComponent {
   carryingLarge?: EntityId | null;
   /** Item levitating in front of the player during grab-carry (cursor mode). */
   grabbed?: EntityId | null;
+  /** Shuttle currently piloted (M14); missing/undefined = on foot. */
+  pilotingShuttleId?: EntityId | null;
+  /** Last habitat the player stood near (M14 respawn point). */
+  lastHabitatId?: EntityId | null;
 }
 
 export interface Entity {

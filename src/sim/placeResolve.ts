@@ -77,7 +77,9 @@ function slotPlacement(
   playerPosition: Vec3d,
 ): ResolvedPlacement {
   const def = placeableById(placeableId);
-  if (!def || def.entityKind !== 'machine') return fail('Only machines fit a slot');
+  if (!def || (def.entityKind !== 'machine' && def.entityKind !== 'shuttle')) {
+    return fail('Only machines and shuttles fit a slot');
+  }
   if (def.machineType === 'habitat') return fail('The habitat cannot sit on a platform');
   const platform = world.entities.get(target.entityId);
   if (!platform || platform.kind !== 'platform' || platform.planetId !== planetId) {

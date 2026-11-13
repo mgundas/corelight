@@ -112,6 +112,11 @@ export class PlayerInput {
     return this.keys.has('ShiftLeft') || this.keys.has('ShiftRight');
   }
 
+  /** True while Space is physically down (shuttle lift/launch, M14). */
+  spaceHeld(): boolean {
+    return this.keys.has('Space');
+  }
+
   /** Edge-triggered: true once per Space keydown. */
   consumeJump(): boolean {
     const jump = this.jumpQueued;

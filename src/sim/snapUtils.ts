@@ -117,14 +117,14 @@ export function snapFree(world: World, ref: SnapRef): boolean {
   return !platformJoinedAt(world, entity, ref.snapIndex);
 }
 
-/** True when no machine is attached to a platform slot. */
+/** True when no machine/shuttle is attached to a platform slot. */
 export function slotFree(world: World, ref: SlotRef): boolean {
   const entity = world.entities.get(ref.entityId);
   if (!entity || entity.kind !== 'platform') return false;
   const def = defForEntity(entity);
   if (!def || !localSlot(def, ref.slotIndex)) return false;
   for (const other of world.entities.values()) {
-    if (other.kind !== 'machine') continue;
+    if (other.kind !== 'machine' && other.kind !== 'shuttle') continue;
     const placeable = other.components.placeable;
     if (placeable?.attachedTo === ref.entityId && placeable.attachedSlot === ref.slotIndex) {
       return false;

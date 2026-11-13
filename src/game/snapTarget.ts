@@ -146,5 +146,10 @@ export function findPlacementTarget(
     const slot = findAimedSlot(world, playerId, aim);
     return slot ? { slot } : null;
   }
+  // M14: a shuttle may stand on a platform's top pad or flat ground.
+  if (def.entityKind === 'shuttle') {
+    const slot = findAimedSlot(world, playerId, aim);
+    return slot ? { slot } : null;
+  }
   return null;
 }

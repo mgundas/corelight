@@ -42,7 +42,7 @@ export function isEntityEmpty(world: World, entity: Entity): boolean {
   if ((entity.components.power?.stored ?? 0) > 1e-6) return false;
   if (entity.kind === 'platform') {
     for (const other of world.entities.values()) {
-      if (other.kind !== 'machine') continue;
+      if (other.kind !== 'machine' && other.kind !== 'shuttle') continue;
       if (other.components.placeable?.attachedTo === entity.id) return false;
     }
   }
