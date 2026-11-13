@@ -18,6 +18,7 @@ import type { World } from '../sim/world.js';
 import { computeEnvironment, findFollowed } from './environment.js';
 import { CAMERA_FOCUS_HEIGHT } from '../core/constants.js';
 import { ShuttleCamera } from './shuttleCamera.js';
+import { shuttleGroundProbe } from '../sim/shuttleGround.js';
 
 export interface FrameCameraDeps {
   world: World;
@@ -44,6 +45,7 @@ export interface FrameCameraResult {
 /** One session-scoped chase camera (no DOM/GPU resources to release). */
 const shuttleCamera = new ShuttleCamera();
 let shuttleCameraWorld: World | null = null;
+let cameraGround: ReturnType<typeof shuttleGroundProbe> | null = null;
 
 export function updateCameraAndEnvironment(deps: FrameCameraDeps): FrameCameraResult {
   const { renderer, world, planets, playerId, flying, alpha } = deps;
@@ -57,13 +59,14 @@ export function updateCameraAndEnvironment(deps: FrameCameraDeps): FrameCameraRe
     // New session (Continue/menu): never inherit the previous ship's basis.
     shuttleCameraWorld = world;
     shuttleCamera.reset();
+    cameraGround = shuttleGroundProbe(world, deps.colliders);
   }
   if (!pilotEntity) shuttleCamera.reset();
+  renderer.setPlayerSuitVisible(!pilotEntity);
   renderer.setShuttleRenderAnchor(
     pilotEntity?.id ?? null,
     pilotEntity ? (renderer.playerView.interpolatedWorld(alpha) ?? pilotEntity.position) : null,
   );
-  renderer.setPlayerSuitVisible(!pilotEntity);
   const piloted = flying ? undefined : pilotEntity;
   if (flying) {
     // Frozen while paused: the debug camera must not drift behind the menu.
@@ -85,7 +88,7 @@ export function updateCameraAndEnvironment(deps: FrameCameraDeps): FrameCameraRe
       anchor,
       piloted.components.shuttle,
       planets,
-      deps.colliders,
+      cameraGround ?? deps.colliders,
       deps.paused ? 0 : deps.frameDt,
       planet,
       freeLookActive,
@@ -99,7 +102,7 @@ export function updateCameraAndEnvironment(deps: FrameCameraDeps): FrameCameraRe
       const renderPos = renderer.playerView.interpolatedWorld(alpha) ?? followed.position;
       const up = upAt(followed.planet, renderPos);
       deps.rig.update(renderPos, up, (origin, dir, maxDist) =>
-        deps.colliders.castTerrainRay(origin, dir, planets, maxDist),
+        (cameraGround ?? deps.colliders).castTerrainRay(origin, dir, planets, maxDist),
         deps.paused ? 0 : deps.frameDt,
       );
       renderer.applyRigCamera({

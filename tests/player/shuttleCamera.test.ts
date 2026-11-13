@@ -32,6 +32,16 @@ const anchor = { x: 0, y: SELA.radius, z: 0 };
 const frame = 1 / 60;
 
 describe('ShuttleCamera', () => {
+  it('follows flight pitch and never extends beyond a close terrain hit', () => {
+    const camera = new ShuttleCamera();
+    const level = camera.update(anchor, shuttle(), [SELA], colliders, frame, SELA, false);
+    let pitched = level;
+    for (let i = 0; i < 120; i++) pitched = camera.update(anchor, shuttle({ pitch: 0.8 }), [SELA], colliders, frame, SELA, false);
+    expect(Math.abs(pitched.position.y - level.position.y)).toBeGreaterThan(4);
+    const blocked = { castTerrainRay: () => 0.4 } as unknown as TerrainColliders;
+    const close = camera.update(anchor, shuttle(), [SELA], blocked, frame, SELA, false);
+    expect(distance(close.position, close.focus)).toBeLessThan(0.4);
+  });
   it('starts behind the ship and above its origin', () => {
     const camera = new ShuttleCamera();
     const view = camera.update(anchor, shuttle(), [SELA], colliders, frame, SELA, false);

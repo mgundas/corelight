@@ -62,7 +62,7 @@ export class CameraRig {
     let dist = this.distance;
     const hit = raycast(head, back, this.distance + WALL_MARGIN);
     if (hit !== null) {
-      dist = Math.max(WALL_MIN, Math.min(dist, hit - WALL_MARGIN));
+      dist = Math.max(Math.min(WALL_MIN, hit / 2), Math.min(dist, hit - WALL_MARGIN));
     }
     // Pull inward immediately to avoid clipping. Ease only the return to
     // full distance, so walking past an edge does not kick the camera out.

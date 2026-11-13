@@ -16,10 +16,11 @@ import {
   add,
   clampScalar,
   length,
-  lerp,
   normalize,
   quatFromAxisAngle,
   quatMultiply,
+  quatFromTo,
+  rotateVector,
   smoothstep,
   sub,
   type Quat,
@@ -107,7 +108,7 @@ export function shuttleOrientation(up: Vec3d, yaw: number, pitch: number): Quat 
 }
 
 /**
- * Ease one up vector toward another (nlerp). Used for the SOI auto-orient:
+ * Ease one up vector toward another via its shortest-arc rotation:
  * on entry the ship gently rotates until its "down" points at the planet
  * instead of snapping a whole hemisphere at the boundary.
  */
@@ -116,8 +117,15 @@ export function easeUp(current: Vec3d, target: Vec3d, rate: number, dt: number):
   const to = normalize(target);
   if (from.x === 0 && from.y === 0 && from.z === 0) return to;
   const t = 1 - Math.exp(-Math.max(0, rate) * Math.max(0, dt));
-  const blended = normalize(lerp(from, to, t));
-  return blended.x === 0 && blended.y === 0 && blended.z === 0 ? to : blended;
+  // Interpolating vectors cannot leave an exactly opposite hemisphere.
+  // Interpolate the shortest-arc rotation instead, including its stable
+  // perpendicular axis for antipodal arrivals.
+  const rotation = quatFromTo(from, to);
+  const blended = { x: rotation.x * t, y: rotation.y * t, z: rotation.z * t, w: 1 - t + rotation.w * t };
+  const magnitude = Math.hypot(blended.x, blended.y, blended.z, blended.w);
+  return normalize(rotateVector(from, {
+    x: blended.x / magnitude, y: blended.y / magnitude, z: blended.z / magnitude, w: blended.w / magnitude,
+  }));
 }
 
 /** Integrate the velocity by one arcade step (gravity + thrust + lift). */

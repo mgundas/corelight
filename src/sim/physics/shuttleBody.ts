@@ -75,6 +75,9 @@ export class ShuttleBody {
     const world = this.worldFor(planet.id);
     const local = toLocalFrame(planet, worldPos);
     const desc = RAPIER.RigidBodyDesc.dynamic()
+      // The arcade controller owns attitude; contacts must not add spin that
+      // fights its explicit rotation on the following tick.
+      .lockRotations()
       .setTranslation(local.x, local.y, local.z)
       .setRotation(rotation)
       .setLinvel(velocity.x, velocity.y, velocity.z)

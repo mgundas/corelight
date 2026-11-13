@@ -12,7 +12,7 @@ import { events } from '../core/events.js';
 import { clampScalar, distance, IDENTITY_QUAT } from '../core/math.js';
 import type { Entity, EntityId, ShuttleInputState } from './entities.js';
 import { inventoryFor } from './inventoryActions.js';
-import { seatAheadOnGround } from './tetherActions.js';
+import { shuttleExitPosition } from './shuttleExit.js';
 import { isLanded, isPiloted, shuttleFuel, shuttleSpeed } from './shuttle.js';
 import type { World } from './world.js';
 
@@ -79,6 +79,8 @@ export function enterShuttle(world: World, playerId: EntityId, shuttleId: Entity
     return;
   }
   releaseGrab(world, player);
+  delete shuttleComp.lastLookYaw;
+  delete shuttleComp.lastLookPitch;
   playerComp.pilotingShuttleId = shuttle.id;
   shuttleComp.pilotId = playerId;
   // The pilot sits inside: keep the entity on the shuttle transform so the
@@ -110,19 +112,11 @@ export function exitShuttle(world: World, playerId: EntityId): void {
     return;
   }
   const planet = world.planets.find((p) => p.id === shuttle.planetId);
+  const exit = planet ? shuttleExitPosition(world, planet, shuttle.position, shuttleComp.yaw, SHUTTLE_EXIT_AHEAD_M) : null;
+  if (!exit) { fail('exitShuttle'); return; }
   playerComp.pilotingShuttleId = null;
   shuttleComp.pilotId = null;
-  if (planet) {
-    // Step out beside the ship (yaw-leveled so a pitched camera cannot bury
-    // the astronaut), then let the normal physics system settle them.
-    player.position = seatAheadOnGround(world, planet, shuttle.position, shuttleComp.yaw, SHUTTLE_EXIT_AHEAD_M);
-  } else {
-    player.position = {
-      x: shuttle.position.x + shuttleComp.up.x * 1.5,
-      y: shuttle.position.y + shuttleComp.up.y * 1.5,
-      z: shuttle.position.z + shuttleComp.up.z * 1.5,
-    };
-  }
+  player.position = exit;
   player.planetId = shuttle.planetId;
   playerComp.velocity = { x: 0, y: 0, z: 0 };
   playerComp.input = null;

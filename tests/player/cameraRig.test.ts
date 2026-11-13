@@ -6,6 +6,12 @@ import { distance, normalize } from '../../src/core/math.js';
 beforeEach(() => { updateSettings(DEFAULT_SETTINGS); });
 
 describe('CameraRig', () => {
+  it('does not force the on-foot camera beyond a nearby terrain hit after exit', () => {
+    const rig = new CameraRig();
+    const position = { x: 0, y: 400, z: 0 };
+    rig.update(position, { x: 0, y: 1, z: 0 }, () => 0.2, 1 / 60);
+    expect(distance(rig.position, { x: 0, y: 401.5, z: 0 })).toBeLessThan(0.2);
+  });
   it('does not whip around when walking across the old movement-frame latitude boundary', () => {
     const rig = new CameraRig();
     rig.distance = 8;

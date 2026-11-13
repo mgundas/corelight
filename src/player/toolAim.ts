@@ -9,6 +9,7 @@ import { distance, normalize, sub, type Vec3d } from '../core/math.js';
 import type { PlanetConfig } from '../planets/PlanetConfig.js';
 import { upAt } from '../sim/physics/frames.js';
 import type { DensityField } from '../terrain/density.js';
+import { raycastDensity } from '../terrain/raycast.js';
 import type { ToolAim } from './terrainTool.js';
 
 export interface AimInput {
@@ -68,33 +69,12 @@ export function computeAim(input: AimInput): ToolAim {
   // Fallback march along the ray (quarter-meter steps). When the origin
   // itself starts inside rock, report t = 0 so the brush (and preview)
   // keep working instead of vanishing.
-  const at = (t: number): Vec3d => ({
-    x: origin.x + viewDir.x * t - planet.center.x,
-    y: origin.y + viewDir.y * t - planet.center.y,
-    z: origin.z + viewDir.z * t - planet.center.z,
+  const distanceToGround = raycastDensity(field, sub(origin, planet.center), viewDir, maxDist);
+  if (distanceToGround !== null) return resultAt({
+    x: origin.x + viewDir.x * distanceToGround,
+    y: origin.y + viewDir.y * distanceToGround,
+    z: origin.z + viewDir.z * distanceToGround,
   });
-  const start = at(0);
-  let prevT = 0;
-  let prevD = field.density(start.x, start.y, start.z);
-  if (prevD >= 0) {
-    return resultAt({ ...origin });
-  }
-  for (let t = Math.min(0.25, maxDist); prevT < maxDist; t = Math.min(t + 0.25, maxDist)) {
-    const p = at(t);
-    const d = field.density(p.x, p.y, p.z);
-    if (d >= 0) {
-      const f = prevD / (prevD - d);
-      const ht = prevT + f * (t - prevT);
-      const hit: Vec3d = {
-        x: origin.x + viewDir.x * ht,
-        y: origin.y + viewDir.y * ht,
-        z: origin.z + viewDir.z * ht,
-      };
-      return resultAt(hit);
-    }
-    prevT = t;
-    prevD = d;
-  }
   return { ...NO_AIM, ray, planet };
 }
 

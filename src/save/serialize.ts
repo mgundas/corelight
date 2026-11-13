@@ -239,6 +239,9 @@ function deserializeEntity(data: unknown): Entity {
     if (shuttle['lastLookYaw'] !== undefined && !isFiniteNumber(shuttle['lastLookYaw'])) {
       throw new Error('bad save: shuttle.lastLookYaw malformed');
     }
+    if (shuttle['lastLookPitch'] !== undefined && !isFiniteNumber(shuttle['lastLookPitch'])) {
+      throw new Error('bad save: shuttle.lastLookPitch malformed');
+    }
     if (
       !isFiniteNumber(shuttle['launchChargeS']) ||
       shuttle['launchChargeS'] < 0 ||

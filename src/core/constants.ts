@@ -358,6 +358,12 @@ export const SHUTTLE_GROUND_CLEARANCE_M = 0.15;
 export const SHUTTLE_ENTER_RANGE_M = 4.5;
 /** E exit is allowed below this speed (and only while landed). */
 export const SHUTTLE_EXIT_SPEED_MPS = 1;
+/** Exit clearance search and terrain fallback use metre-scale sampling. */
+export const SHUTTLE_EXIT_SEARCH_M = 8;
+export const TERRAIN_QUERY_STEP_M = 0.25;
+export const SHUTTLE_APPROACH_BRAKE_RATE = 3;
+/** Small camera distance must never extend beyond a nearer terrain hit. */
+export const SHUTTLE_CAMERA_MIN_M = 0.15;
 /** Cone half-angle for the on-foot shuttle pick (no cursor ray). */
 export const SHUTTLE_AIM_DEG = 35;
 /** Chase camera distance/height behind the shuttle. */

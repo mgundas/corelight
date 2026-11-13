@@ -31,12 +31,15 @@ import {
   SHUTTLE_THRUST_ACCEL,
   SHUTTLE_YAW_RATE,
   SHUTTLE_FUEL_MAX,
+  SHUTTLE_APPROACH_BRAKE_RATE,
+  SHUTTLE_MAX_SPEED_SPACE,
+  SHUTTLE_MAX_SPEED_SURFACE,
 } from '../../core/constants.js';
 import { add, clampScalar, dot, scale, type Vec3d } from '../../core/math.js';
 import type { PlanetConfig } from '../../planets/PlanetConfig.js';
 import type { Entity, EntityId } from '../entities.js';
 import { upAt } from '../physics/frames.js';
-import { gravityAt } from '../physics/gravity.js';
+import { gravityAt, sphereOfInfluence } from '../physics/gravity.js';
 import { ShuttleBody } from '../physics/shuttleBody.js';
 import {
   altitudeAbove,
@@ -86,6 +89,9 @@ export function makeShuttleSystem(opts: ShuttleSystemOptions): (world: World, dt
       if (entity.kind !== 'shuttle' || !entity.components.shuttle) continue;
       let body = bodies.get(entity.id);
       if (!body) {
+        // Restoring a piloted save starts a fresh input device/camera frame.
+        delete entity.components.shuttle.lastLookYaw;
+        delete entity.components.shuttle.lastLookPitch;
         body = new ShuttleBody(opts.worldFor);
         bodies.set(entity.id, body);
       }
@@ -145,13 +151,15 @@ function updateShuttle(
     // Mouse look is absolute; A/D is a continuous rate. Accumulate the look
     // delta and the yaw rate so holding A/D actually turns instead of
     // nudging once and then holding the same absolute heading.
-    const lastLook = shuttle.lastLookYaw ?? shuttle.yaw;
+    const lastLook = shuttle.lastLookYaw ?? input.lookYaw;
     const lookDelta = shortestAngle(input.lookYaw - lastLook);
     // Positive yaw turns toward local east in the shared basis; a positive
     // yawRate means "steer right" (D), which is the opposite sign.
     shuttle.yaw = shortestAngle(shuttle.yaw + lookDelta - input.yawRate * SHUTTLE_YAW_RATE * dt);
     shuttle.lastLookYaw = input.lookYaw;
-    shuttle.pitch = clampScalar(input.lookPitch, -SHUTTLE_PITCH_LIMIT, SHUTTLE_PITCH_LIMIT);
+    const lastPitch = shuttle.lastLookPitch ?? input.lookPitch;
+    shuttle.pitch = clampScalar(shuttle.pitch + input.lookPitch - lastPitch, -SHUTTLE_PITCH_LIMIT, SHUTTLE_PITCH_LIMIT);
+    shuttle.lastLookPitch = input.lookPitch;
   } else if (piloted) {
     // A missing input tick (pause/UI) means "no stick", never a stuck one.
     shuttle.pitch = clampScalar(shuttle.pitch, -SHUTTLE_PITCH_LIMIT, SHUTTLE_PITCH_LIMIT);
@@ -202,14 +210,25 @@ function updateShuttle(
   // 8) Landing assist + touchdown/bounce. AGL comes from the same terrain
   // colliders the player stands on; a null hit means open air.
   if (planet) {
-    const descender = -dot(shuttle.velocity, shuttle.up);
+    // Contact/approach must use the actual planet radial, not the gradually
+    // rotating visual basis carried across the interplanetary handoff.
+    const landingUp = radialUp;
+    const descender = -dot(shuttle.velocity, landingUp);
     const ground = opts.probe.castTerrainRay(
       entity.position,
-      scale(shuttle.up, -1),
+      scale(landingUp, -1),
       opts.planets,
       SHUTTLE_LANDING_ASSIST_M + 25,
     );
     const altitude = altitudeAbove(planet, entity.position);
+    if (descender > 0 && !lifting && shuttleSpeed(shuttle) > SHUTTLE_MAX_SPEED_SURFACE &&
+        (ground === null || ground > SHUTTLE_LANDING_ASSIST_M)) {
+      // Brake progressively throughout arrival, rather than carrying cruise
+      // momentum into a collider ring only 48 metres wide.
+      const approach = Math.min(1, altitude / (sphereOfInfluence(planet) - planet.radius));
+      const cap = Math.max(SHUTTLE_ASSIST_SPEED_MPS, SHUTTLE_MAX_SPEED_SPACE * approach * approach);
+      shuttle.velocity = clampSpeed(shuttle.velocity, cap);
+    }
     // No ground hit while low means the collider ring has not caught up
     // (or the ship is over a deep hole). Do not let a fast ship outrun the
     // worker stream into a hill: fall back to the assist speed.
@@ -222,16 +241,22 @@ function updateShuttle(
     if (assist) {
       // Level out and cap the approach.
       shuttle.pitch = assistPitch(shuttle.pitch, dt);
-      if (descender > SHUTTLE_ASSIST_DESCENT_MPS) {
-        const excess = descender - SHUTTLE_ASSIST_DESCENT_MPS;
+      const currentDescent = -dot(shuttle.velocity, landingUp);
+      if (currentDescent > SHUTTLE_ASSIST_DESCENT_MPS) {
+        const excess = currentDescent - SHUTTLE_ASSIST_DESCENT_MPS;
         // descender is positive downward; add the upward correction.
-        shuttle.velocity = add(shuttle.velocity, scale(shuttle.up, excess));
+        shuttle.velocity = add(shuttle.velocity, scale(landingUp, excess));
       }
-      const horizontal = add(shuttle.velocity, scale(shuttle.up, -dot(shuttle.velocity, shuttle.up)));
+      const horizontal = add(shuttle.velocity, scale(landingUp, -dot(shuttle.velocity, landingUp)));
       const horizontalSpeed = Math.hypot(horizontal.x, horizontal.y, horizontal.z);
       if (horizontalSpeed > SHUTTLE_ASSIST_SPEED_MPS) {
         const damped = Math.max(0, SHUTTLE_ASSIST_SPEED_MPS / horizontalSpeed);
-        shuttle.velocity = add(scale(horizontal, damped), scale(shuttle.up, dot(shuttle.velocity, shuttle.up)));
+        shuttle.velocity = add(scale(horizontal, damped), scale(landingUp, dot(shuttle.velocity, landingUp)));
+      }
+      if (!lifting && thrust === 0) {
+        const vertical = scale(landingUp, dot(shuttle.velocity, landingUp));
+        const lateral = add(shuttle.velocity, scale(vertical, -1));
+        shuttle.velocity = add(vertical, scale(lateral, Math.exp(-SHUTTLE_APPROACH_BRAKE_RATE * dt)));
       }
       // Legs on a slope can rest a little above the center ray's hit; a
       // stopped ship within a meter is also contact, otherwise it would sit
@@ -243,17 +268,19 @@ function updateShuttle(
       if (ground !== null && contact && descender >= 0) {
         if (descender <= SHUTTLE_SAFE_TOUCHDOWN_MPS) {
           // Safe touchdown: seat the origin on its legs and rest.
-          entity.position = add(entity.position, scale(shuttle.up, SHUTTLE_GROUND_CLEARANCE_M - ground));
+          entity.position = add(entity.position, scale(landingUp, SHUTTLE_GROUND_CLEARANCE_M - ground));
           shuttle.velocity = { ...ZERO };
           shuttle.airborne = false;
           shuttle.launchChargeS = 0;
+          shuttle.up = landingUp;
+          shuttle.pitch = 0;
         } else {
           // Fast contact bounces instead of damaging (out of scope v1). The
           // pre-clamp descender sizes the bounce; the vertical component is
           // replaced so the assist correction cannot double it.
           const bounce = descender * SHUTTLE_BOUNCE_DAMP;
-          const vertical = dot(shuttle.velocity, shuttle.up);
-          shuttle.velocity = add(shuttle.velocity, scale(shuttle.up, bounce - vertical));
+          const vertical = dot(shuttle.velocity, landingUp);
+          shuttle.velocity = add(shuttle.velocity, scale(landingUp, bounce - vertical));
         }
       }
     }

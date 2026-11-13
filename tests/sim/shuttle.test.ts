@@ -35,6 +35,11 @@ function shuttle(overrides: Partial<ShuttleComponent> = {}): ShuttleComponent {
 }
 
 describe('shuttle speed caps', () => {
+  it('rotates out of an antipodal arrival rather than leaving up locked in the old hemisphere', () => {
+    let up = { x: 0, y: 1, z: 0 };
+    for (let i = 0; i < 120; i++) up = easeUp(up, { x: 0, y: -1, z: 0 }, 3, 1 / 30);
+    expect(up.y).toBeLessThan(-0.999);
+  });
   it('caps at 120 m/s near the surface and grows to 600 with altitude', () => {
     const surface = { x: 0, y: SELA.radius, z: 0 };
     expect(shuttleMaxSpeed(SELA, surface, false)).toBe(120);

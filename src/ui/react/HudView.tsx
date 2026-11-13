@@ -84,6 +84,7 @@ export function HudView() {
             </div>
             <div className="flight-hint">
               Mouse steer · A/D yaw · RMB free-look<br />
+              W/S thrust · Release thrust to brake near ground<br />
               <kbd>Space</kbd> {flight.landed ? 'hold 2 s to launch' : 'lift'} · <kbd>Shift</kbd> boost · <kbd>E</kbd> {flight.landed ? 'disembark' : 'land to disembark'}
             </div>
           </aside>

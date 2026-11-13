@@ -8,6 +8,17 @@ import { resetOrigin } from '../../src/render/floatingOrigin.js';
 import { PlayerView } from '../../src/render/views/playerView.js';
 
 describe('PlayerView.interpolatedWorld', () => {
+  it('snaps samples when boarding or exiting rather than blending through terrain', () => {
+    const view = new PlayerView();
+    view.pushSample({ x: 0, y: 401, z: 0 }, IDENTITY_QUAT);
+    view.pushSample({ x: 3, y: 400, z: 0 }, IDENTITY_QUAT);
+    view.setSuitVisible(false);
+    expect(view.interpolatedWorld(0)).toEqual({ x: 3, y: 400, z: 0 });
+    view.pushSample({ x: 6, y: 401.2, z: 0 }, IDENTITY_QUAT);
+    view.setSuitVisible(true);
+    expect(view.interpolatedWorld(0)).toEqual({ x: 6, y: 401.2, z: 0 });
+    view.dispose();
+  });
   it('returns null before any sample', () => {
     resetOrigin();
     const view = new PlayerView();

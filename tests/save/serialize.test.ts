@@ -447,6 +447,7 @@ describe('save round trip', () => {
       { launchChargeS: 3 },
       { up: { x: 0, y: 0, z: 0 } },
       { airborne: 'yes' },
+      { lastLookPitch: 'up' },
     ]) {
       const bad = JSON.parse(JSON.stringify(good)) as typeof good;
       const entry = bad.entities.find((e) => e.id === shuttleId);

@@ -127,6 +127,7 @@ d += editDelta(localPos)                                        // player edits
 - Character controller: Rapier `KinematicCharacterController` with a capsule. Its "up" is the direction away from the planet center, updated every tick. The player body is rotated so its local up matches.
 - Movement and orbit camera share `moveBasis`: rotate the spawn +X heading from +Y onto radial up, then apply yaw/pitch. Do not switch projection reference axes at a latitude threshold: that reverses held movement and snaps the camera when crossing it.
 - Items and machines are dynamic bodies with custom gravity applied each tick (Rapier global gravity is zero; we apply forces ourselves).
+- Shuttle attitude is owned by the arcade controller; its dynamic compound body locks physical rotation to prevent contact torque fighting steering. Arrival/contact probes use actual planet radial down, independently of the eased visual up. `shuttleGroundProbe` prefers worker-built colliders, with a bounded live-density fallback near the ground while they stream; flight and camera share that fallback. Density ray sampling is shared with terrain-tool aiming in `terrain/raycast.ts`. Disembarking converts ground feet positions into capsule-centre positions and checks clearance against live edits before releasing the pilot.
 
 ## Simulation model
 

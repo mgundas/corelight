@@ -70,6 +70,12 @@ export class PlayerView {
 
   /** Hide the whole astronaut (pilot inside a shuttle); samples keep flowing. */
   setSuitVisible(visible: boolean): void {
+    // Boarding changes the meaning of the position (capsule centre -> ship
+    // base). Blending those frames drags the camera through the ground.
+    if (this.hidden === visible) {
+      this.prev = this.curr;
+      this.lastRenderPos = null;
+    }
     this.hidden = !visible;
     this.suit.group.visible = visible;
     if (this.hidden) this.group.visible = false;

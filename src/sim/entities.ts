@@ -232,6 +232,8 @@ export interface ShuttleComponent {
   launchChargeS: number;
   /** Last absolute mouse-look yaw, so A/D steering can accumulate. */
   lastLookYaw?: number;
+  /** Mouse pitch reference is rebased on boarding, like yaw. */
+  lastLookPitch?: number;
   /** False while resting on its legs; true once launched. */
   airborne: boolean;
   /** Latest shuttleInput, consumed once per tick by the shuttle system. */

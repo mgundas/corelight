@@ -220,10 +220,10 @@ export class PlayerInput {
     };
   }
 
-  private releaseOrbit(): void {
+  private releaseOrbit(keepPilotLock = false): void {
     this.orbiting = false;
     this.dragging = false;
-    if (document.pointerLockElement === this.canvas) {
+    if (!keepPilotLock && document.pointerLockElement === this.canvas) {
       try {
         document.exitPointerLock();
       } catch {
@@ -378,7 +378,7 @@ export class PlayerInput {
 
   private handleMouseUp = (e: MouseEvent): void => {
     this.mouseButtons.delete(e.button);
-    if (e.button === 1 || e.button === 2) this.releaseOrbit();
+    if (e.button === 1 || e.button === 2) this.releaseOrbit(this.pilotLook.isActive());
   };
 
   private handleWheel = (e: WheelEvent): void => {

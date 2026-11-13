@@ -26,6 +26,7 @@ import { updateOxygen } from '../sim/systems/oxygen.js';
 import { updatePower } from '../sim/systems/power.js';
 import { updateResearch } from '../sim/systems/research.js';
 import { makeShuttleSystem } from '../sim/systems/shuttle.js';
+import { shuttleGroundProbe } from '../sim/shuttleGround.js';
 import { updateTethers } from '../sim/systems/tethers.js';
 import { updateSun } from '../sim/systems/sun.js';
 import { TerrainColliders } from '../sim/physics/terrainColliders.js';
@@ -289,7 +290,7 @@ export function setupWorldSystems(
   // Shuttle flight (M14), after research per ARCHITECTURE.md's system order.
   // The collider ring is the same probe the player stands on, and it follows
   // the attached pilot, so terrain colliders load around a low shuttle.
-  world.addSystem(makeShuttleSystem({ planets, probe: colliders }));
+  world.addSystem(makeShuttleSystem({ planets, probe: shuttleGroundProbe(world, colliders) }));
   // Placed light sticks follow terrain edits (dig out from under them).
   world.addSystem((tickWorld) => updateLightsticks(tickWorld));
   // Environment clock (order-free: only re-derives sunDirection from time).
