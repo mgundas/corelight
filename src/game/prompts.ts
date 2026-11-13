@@ -72,18 +72,18 @@ export function interactPrompt(
     const itemId = world.entities.get(cursorItemId)?.components.item?.itemId;
     if (itemId) return `Click: grab ${nameForId(itemId)}`;
   }
-  if (cursorPackId) {
+  if (cursorPackId && findAimedStation(world, playerId, aim) !== cursorPackId) {
     const placeableId = world.entities.get(cursorPackId)?.components.placeable?.placeableId;
     return `Click: move ${placeableId ? nameForId(placeableId) : 'structure'}`;
   }
-  const packTarget = primaryPackTarget(world, playerId);
+  const packTarget = primaryPackTarget(world, playerId, aim);
   if (packTarget) {
     const placeableId = world.entities.get(packTarget)?.components.placeable?.placeableId;
     const def = placeableId ? placeableById(placeableId) : undefined;
-    const isStation = findAimedStation(world, playerId) === packTarget;
+    const isStation = findAimedStation(world, playerId, aim) === packTarget;
     return `Hold E: pack up ${def?.name ?? 'structure'}${isStation ? ' (tap E: open)' : ''}`;
   }
-  const stationId = findAimedStation(world, playerId);
+  const stationId = findAimedStation(world, playerId, aim);
   if (stationId) {
     const station = world.entities.get(stationId);
     if (isResearchStation(station)) {

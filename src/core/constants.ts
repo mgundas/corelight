@@ -246,6 +246,8 @@ export const TETHER_PLACE_AHEAD_M = 1.5;
 
 /** Station interaction range: E opens/deposits/collects within this (m). */
 export const STATION_RANGE_M = 4.5;
+/** Forgiving cursor margin around the catalog building body. */
+export const STRUCTURE_PICK_MARGIN_M = 0.15;
 /** Station input slots: the largest recipe (shuttle) needs 8 item units. */
 export const STATION_INPUT_SLOTS = 8;
 /** Furnace (M12): one recipe input slot plus one optional biomass fuel slot. */

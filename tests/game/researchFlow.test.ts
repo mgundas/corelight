@@ -2,7 +2,11 @@
 // sample > open the tree, and empty stations still support hold-E packing.
 
 import { describe, expect, it } from 'vitest';
-import { IDENTITY_QUAT } from '../../src/core/math.js';
+import { IDENTITY_QUAT, normalize, sub } from '../../src/core/math.js';
+import { STATION_RANGE_M } from '../../src/core/constants.js';
+import { findAimedStation } from '../../src/game/pickup.js';
+import { primaryPackTarget } from '../../src/game/packTarget.js';
+import { powerStatusFor } from '../../src/game/powerStatus.js';
 import { SELA } from '../../src/planets/configs/sela.js';
 import type { PlanetConfig } from '../../src/planets/PlanetConfig.js';
 import { moveBasis } from '../../src/sim/physics/frames.js';
@@ -121,6 +125,82 @@ function pressE(ctx: Ctx): { opens: EntityId[]; researchOpens: EntityId[] } {
 }
 
 describe('research station interaction', () => {
+  for (const spacing of [0.2, 2, 4]) {
+    it(`opens the cursor-targeted body at ${spacing} m regardless of facing or orbit`, () => {
+      const ctx = context();
+      const player = ctx.world.entities.get(ctx.playerId);
+      const station = ctx.world.entities.get(ctx.stationId);
+      if (!player?.components.player || !station) throw new Error('missing entities');
+      player.components.player.yaw = Math.PI;
+      player.components.player.pitch = 1.4;
+      station.position = { x: player.position.x + spacing, y: player.position.y - 0.4, z: player.position.z };
+      for (const offset of [{ x: 0, y: 2, z: -8 }, { x: 8, y: 3, z: 0 }, { x: -4, y: 6, z: 4 }, { x: 0, y: 8, z: 0 }]) {
+        // Upper side of the model, far from the old base-only pick point.
+        const target = { x: station.position.x + 1.1, y: station.position.y + 1.5, z: station.position.z };
+        const origin = { x: target.x + offset.x, y: target.y + offset.y, z: target.z + offset.z };
+        ctx.aim = { hit: null, normal: null, planet: null, ray: { origin, dir: normalize(sub(target, origin)) } };
+        expect(findAimedStation(ctx.world, ctx.playerId, ctx.aim)).toBe(ctx.stationId);
+        expect(primaryPackTarget(ctx.world, ctx.playerId, ctx.aim)).toBe(ctx.stationId);
+        expect(powerStatusFor(ctx.world, ctx.playerId, ctx.aim)?.entityId).toBe(ctx.stationId);
+        // A click-to-move hover must not hide how to open the station.
+        expect(interactPrompt(ctx.world, ctx.playerId, ctx.aim, new PlacementMode(), undefined, null, ctx.stationId)).toContain('tap E: open');
+        expect(pressE(ctx).researchOpens).toEqual([ctx.stationId]);
+      }
+    });
+  }
+
+  it('does not open a station when the cursor misses or it is out of reach', () => {
+    const ctx = context();
+    const station = ctx.world.entities.get(ctx.stationId);
+    const player = ctx.world.entities.get(ctx.playerId);
+    if (!station || !player) throw new Error('missing entities');
+    ctx.aim.ray = { origin: { x: station.position.x, y: station.position.y + 5, z: station.position.z }, dir: { x: 0, y: 1, z: 0 } };
+    expect(findAimedStation(ctx.world, ctx.playerId, ctx.aim)).toBeNull();
+    expect(pressE(ctx).researchOpens).toEqual([]);
+    station.position.x = player.position.x + STATION_RANGE_M + 1;
+    const target = { ...station.position, y: station.position.y + 0.8 };
+    const origin = { ...target, z: target.z - 8 };
+    ctx.aim.ray = { origin, dir: normalize(sub(target, origin)) };
+    expect(findAimedStation(ctx.world, ctx.playerId, ctx.aim)).toBeNull();
+    expect(pressE(ctx).researchOpens).toEqual([]);
+  });
+
+  it('preserves loading and collection priority with cursor targeting', () => {
+    const ctx = context();
+    const origin = { x: ctx.focus.x, y: ctx.focus.y + 4, z: ctx.focus.z - 8 };
+    const target = { ...ctx.focus, y: ctx.focus.y + 1 };
+    ctx.aim.ray = { origin, dir: normalize(sub(target, origin)) };
+    giveSample(ctx);
+    expect(interactPrompt(ctx.world, ctx.playerId, ctx.aim, new PlacementMode())).toBe('E: load Research sample');
+    expect(pressE(ctx).researchOpens).toEqual([]);
+    ctx.world.tick();
+    const research = ctx.world.entities.get(ctx.stationId)?.components.research;
+    if (!research) throw new Error('missing research');
+    expect(research.inputId).not.toBeNull();
+    research.inputId = null;
+    research.dataReady = 10;
+    expect(interactPrompt(ctx.world, ctx.playerId, ctx.aim, new PlacementMode())).toBe('E: collect 10 Data');
+    pressE(ctx);
+    ctx.world.tick();
+    expect(ctx.world.research.data).toBe(10);
+  });
+
+  it('also opens printers, furnaces and refineries under the cursor', () => {
+    for (const machineType of ['small_printer', 'medium_printer', 'furnace', 'refinery'] as const) {
+      const ctx = context();
+      const station = ctx.world.entities.get(ctx.stationId);
+      if (!station?.components.machine || !station.components.placeable) throw new Error('missing station');
+      station.components.machine.machineType = machineType;
+      station.components.placeable.placeableId = machineType;
+      delete station.components.research;
+      station.components.printer = { recipeId: null, progressS: 0, inputs: [], outputReady: null };
+      const target = { ...station.position, y: station.position.y + 0.8 };
+      const origin = { ...target, x: target.x + 8, y: target.y + 3 };
+      ctx.aim.ray = { origin, dir: normalize(sub(target, origin)) };
+      expect(pressE(ctx).opens).toEqual([ctx.stationId]);
+    }
+  });
+
   it('opens the tree when empty, loads a sample, collects ready Data', () => {
     const ctx = context();
     const empty = pressE(ctx);

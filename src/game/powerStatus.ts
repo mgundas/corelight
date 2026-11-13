@@ -7,6 +7,7 @@ import { placeableForMachineType } from '../data/loadPlaceables.js';
 import type { EntityId } from '../sim/entities.js';
 import { solarOutput } from '../sim/systems/power.js';
 import type { World } from '../sim/world.js';
+import type { ToolAim } from '../player/terrainTool.js';
 import { findAimedMachine } from './pickup.js';
 
 export interface PowerStatus {
@@ -24,11 +25,10 @@ export interface AimedPowerStatus {
 }
 
 /** Read the aimed machine's network stats, or null when nothing is aimed. */
-export function powerStatusFor(world: World, playerId: EntityId | null): AimedPowerStatus | null {
-  // The machine cone uses the player's look, not the terrain hit: the readout
-  // must appear while aiming at a machine body even when the ray misses.
+export function powerStatusFor(world: World, playerId: EntityId | null, aim?: ToolAim): AimedPowerStatus | null {
+  // Buildings remain targetable when the cursor ray misses the terrain.
   if (!playerId) return null;
-  const machineId = findAimedMachine(world, playerId);
+  const machineId = findAimedMachine(world, playerId, aim);
   if (!machineId) return null;
   const entity = world.entities.get(machineId);
   const power = entity?.components.power;

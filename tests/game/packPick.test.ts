@@ -4,11 +4,12 @@
 import { describe, expect, it } from 'vitest';
 import { SELA } from '../../src/planets/configs/sela.js';
 import type { PlanetConfig } from '../../src/planets/PlanetConfig.js';
-import { IDENTITY_QUAT, normalize, sub } from '../../src/core/math.js';
+import { IDENTITY_QUAT, add, normalize, quatFromAxisAngle, rotateVector, sub } from '../../src/core/math.js';
+import { STATION_RANGE_M } from '../../src/core/constants.js';
 import type { EntityId } from '../../src/sim/entities.js';
 import { spawnPlaceableEntity } from '../../src/sim/placeActions.js';
 import { World } from '../../src/sim/world.js';
-import { findPackableAlongRay } from '../../src/game/packPick.js';
+import { findPackableAlongRay, findStructureAlongRay } from '../../src/game/packPick.js';
 
 function flatPlanet(): PlanetConfig {
   return {
@@ -47,6 +48,23 @@ function context(): {
 }
 
 describe('findPackableAlongRay', () => {
+  it('targets a rotated building body using world doubles and picks the front station', () => {
+    const ctx = context();
+    const rotation = quatFromAxisAngle({ x: 1, y: 0, z: 1 }, 1.2);
+    const position = { x: 12000, y: 1500, z: 4000 };
+    const player = ctx.world.entities.get(ctx.playerId);
+    if (!player) throw new Error('missing player');
+    player.position = { ...position };
+    const origin = add(position, rotateVector({ x: 1.1, y: 1.4, z: -8 }, rotation));
+    const dir = rotateVector({ x: 0, y: 0, z: 1 }, rotation);
+    // Insert the far station first so map order cannot decide the pick.
+    spawnPlaceableEntity(ctx.world, ctx.planet.id, 'research_station', add(position, rotateVector({ x: 0, y: 0, z: 3 }, rotation)), { rotation });
+    const front = spawnPlaceableEntity(ctx.world, ctx.planet.id, 'research_station', position, { rotation });
+    expect(findStructureAlongRay(ctx.world, ctx.playerId, { origin, dir }, STATION_RANGE_M, (entity) => entity.kind === 'machine')).toBe(front);
+    const miss = add(origin, rotateVector({ x: 3, y: 0, z: 0 }, rotation));
+    expect(findStructureAlongRay(ctx.world, ctx.playerId, { origin: miss, dir }, STATION_RANGE_M, (entity) => entity.kind === 'machine')).toBeNull();
+  });
+
   it('picks an empty platform under the cursor', () => {
     const ctx = context();
     const platform = spawnPlaceableEntity(ctx.world, ctx.planet.id, 'platform', {

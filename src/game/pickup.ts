@@ -12,6 +12,8 @@ import { isStationMachine } from '../sim/craftingActions.js';
 import { isResearchStation } from '../sim/researchActions.js';
 import { moveBasis, upAt } from '../sim/physics/frames.js';
 import type { World } from '../sim/world.js';
+import type { ToolAim } from '../player/terrainTool.js';
+import { findStructureAlongRay } from './packPick.js';
 
 /** Cosine of the aim cone half-angle (25 degrees off-center still grabs). */
 const AIM_COS = Math.cos((25 * Math.PI) / 180);
@@ -31,12 +33,12 @@ export function findAimedTether(world: World, playerId: EntityId): EntityId | nu
   return findAimed(world, playerId, 'tether');
 }
 
-/**
- * Nearest station machine in range and inside the (wider) look cone. The
- * aim point is the model's mid-height, not its base, so looking at the body
- * of a printer registers.
- */
-export function findAimedStation(world: World, playerId: EntityId): EntityId | null {
+/** Cursor body pick; a facing-cone fallback supports callers without a view ray. */
+export function findAimedStation(world: World, playerId: EntityId, aim?: ToolAim): EntityId | null {
+  if (aim?.ray) {
+    return findStructureAlongRay(world, playerId, aim.ray, STATION_RANGE_M,
+      (entity) => isStationMachine(entity) || isResearchStation(entity));
+  }
   return findAimedMachineMatching(
     world,
     playerId,
@@ -46,7 +48,11 @@ export function findAimedStation(world: World, playerId: EntityId): EntityId | n
 }
 
 /** Nearest machine (any type) for the HUD power readout. */
-export function findAimedMachine(world: World, playerId: EntityId): EntityId | null {
+export function findAimedMachine(world: World, playerId: EntityId, aim?: ToolAim): EntityId | null {
+  if (aim?.ray) {
+    return findStructureAlongRay(world, playerId, aim.ray, POWER_VIEW_RANGE_M,
+      (entity) => entity.kind === 'machine');
+  }
   return findAimedMachineMatching(world, playerId, POWER_VIEW_RANGE_M, () => true);
 }
 

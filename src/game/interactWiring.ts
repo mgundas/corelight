@@ -69,7 +69,7 @@ export function tickInteraction(deps: InteractDeps): void {
   }
   let forceInteract = deps.interact;
   if (deps.packHold) {
-    const packTarget = primaryPackTarget(world, playerId);
+    const packTarget = primaryPackTarget(world, playerId, aim);
     if (packTarget && deps.interact) {
       deps.packHold.press(packTarget, deps.nowMs ?? 0);
     }
@@ -88,7 +88,7 @@ export function tickInteraction(deps: InteractDeps): void {
     if (result === 'release') forceInteract = true;
   }
   if (!forceInteract) return;
-  const stationId = findAimedStation(world, playerId);
+  const stationId = findAimedStation(world, playerId, aim);
   if (stationId) {
     const station = world.entities.get(stationId);
     const inventory = world.entities.get(playerId)?.components.inventory;

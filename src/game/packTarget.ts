@@ -14,6 +14,8 @@ import { isResearchStation, researchSampleCandidate } from '../sim/researchActio
 import { moveBasis, upAt } from '../sim/physics/frames.js';
 import { defForEntity } from '../sim/snapUtils.js';
 import type { World } from '../sim/world.js';
+import type { ToolAim } from '../player/terrainTool.js';
+import { findStructureAlongRay } from './packPick.js';
 import { findAimedItem, findAimedStation, findAimedTether } from './pickup.js';
 
 const AIM_COS = Math.cos((35 * Math.PI) / 180);
@@ -30,7 +32,8 @@ function holdingSomething(world: World, playerId: EntityId): boolean {
 }
 
 /** Nearest machine/platform whose body is inside the look cone. */
-function findAimedStructure(world: World, playerId: EntityId): EntityId | null {
+function findAimedStructure(world: World, playerId: EntityId, aim?: ToolAim): EntityId | null {
+  if (aim?.ray) return findStructureAlongRay(world, playerId, aim.ray, STATION_RANGE_M, isPackableEntity);
   const player = world.entities.get(playerId);
   const playerComp = player?.components.player;
   if (!player || player.kind !== 'player' || !playerComp) return null;
@@ -62,9 +65,9 @@ function findAimedStructure(world: World, playerId: EntityId): EntityId | null {
 }
 
 /** The entity hold-E would pack right now, or null. Read-only. */
-export function primaryPackTarget(world: World, playerId: EntityId): EntityId | null {
+export function primaryPackTarget(world: World, playerId: EntityId, aim?: ToolAim): EntityId | null {
   if (holdingSomething(world, playerId)) return null;
-  const stationId = findAimedStation(world, playerId);
+  const stationId = findAimedStation(world, playerId, aim);
   if (stationId) {
     const station = world.entities.get(stationId);
     if (!station || !isEntityEmpty(world, station)) return null;
@@ -79,7 +82,7 @@ export function primaryPackTarget(world: World, playerId: EntityId): EntityId | 
   }
   if (findAimedItem(world, playerId)) return null;
   if (findAimedTether(world, playerId)) return null;
-  const structure = findAimedStructure(world, playerId);
+  const structure = findAimedStructure(world, playerId, aim);
   if (!structure) return null;
   const entity = world.entities.get(structure);
   return entity && isEntityEmpty(world, entity) ? entity.id : null;

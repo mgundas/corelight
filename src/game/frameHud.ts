@@ -41,7 +41,7 @@ export function updateFrameHud(deps: FrameHudDeps): void {
   const activePlayer = deps.flying ? null : deps.playerId;
   const frame = backpackFrame(deps.world, activePlayer, deps.flying);
   const o2 = oxygenStatusFor(deps.world, activePlayer);
-  const power = powerStatusFor(deps.world, activePlayer);
+  const power = powerStatusFor(deps.world, activePlayer, deps.aim);
   const grabbed = activePlayer ? deps.world.entities.get(activePlayer)?.components.player?.grabbed : null;
   deps.renderer.renderEntities(
     deps.world.entities.values(),
