@@ -12,6 +12,7 @@ export interface UiCommands {
   printBackpack(recipeId: string): void;
   printStation(stationId: string, recipeId: string): void;
   collectStation(stationId: string): void;
+  unloadStationInput(stationId: string, itemId: string): void;
   closePrinter(): void;
   unlockResearch(id: string): void;
   depositResearchSample(stationId: string): void;

@@ -31,6 +31,8 @@ export function installUiCommands(
       withPlayer((id) => world.dispatch({ type: 'printAtStation', playerId: id, stationId, recipeId })),
     collectStation: (stationId) =>
       withPlayer((id) => world.dispatch({ type: 'collectStation', playerId: id, stationId })),
+    unloadStationInput: (stationId, itemId) =>
+      withPlayer((id) => world.dispatch({ type: 'unloadStationInput', playerId: id, stationId, itemId })),
     closePrinter,
     unlockResearch: (id) =>
       withPlayer((player) => world.dispatch({ type: 'unlockResearch', playerId: player, id })),

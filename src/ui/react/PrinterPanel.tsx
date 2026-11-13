@@ -38,13 +38,18 @@ function StationSlots({ station }: { station: StationPanel }) {
           stationId={station.stationId}
           index={index}
           name={name}
+          itemId={station.inputIds[index] ?? null}
+          canUnload={station.canUnload}
         />
       ))}
     </div>
   );
 }
 
-function StationSlot({ stationId, index, name }: { stationId: string; index: number; name: string | null }) {
+function StationSlot({ stationId, index, name, itemId, canUnload }: {
+  stationId: string; index: number; name: string | null; itemId: string | null; canUnload: boolean;
+}) {
+  const commands = useCommandsStore((s) => s.commands);
   const hoverKey = slotHoverKey('station', index, stationId);
   const hovered = useDragStore((s) => s.hoverKey === hoverKey);
   const hoverOk = useDragStore((s) => s.hoverOk);
@@ -54,6 +59,18 @@ function StationSlot({ stationId, index, name }: { stationId: string; index: num
   return (
     <div className={classes.join(' ')} data-drop={`station:${stationId}:${index}`}>
       {name ?? '·'}
+      {name && itemId ? (
+        <button
+          type="button"
+          className="printer-unload"
+          aria-label={`Unload ${name}`}
+          title={canUnload ? `Return ${name} to backpack` : 'Backpack full — free a slot to unload'}
+          disabled={!canUnload}
+          onClick={() => commands?.unloadStationInput(stationId, itemId)}
+        >
+          Unload
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -100,6 +117,9 @@ export function PrinterPanel() {
       {station ? (
         <div id="printer-station">
           <StationSlots station={station} />
+          {!station.canUnload && station.inputIds.some(Boolean) ? (
+            <p className="printer-unload-hint">Backpack full — free a slot to unload materials.</p>
+          ) : null}
           {station.job ? (
             <div className="printer-job">
               <span>

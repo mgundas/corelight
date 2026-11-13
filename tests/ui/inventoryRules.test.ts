@@ -86,6 +86,7 @@ describe('inventory drag rules', () => {
       printBackpack: () => undefined,
       printStation: () => undefined,
       collectStation: () => undefined,
+      unloadStationInput: () => undefined,
       closePrinter: () => undefined,
       unlockResearch: () => undefined,
       depositResearchSample: () => undefined,

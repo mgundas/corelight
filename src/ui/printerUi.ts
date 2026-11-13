@@ -25,6 +25,9 @@ export interface StationPanel {
   name: string;
   /** Loaded input item names, padded with null to the station's input slots. */
   slots: (string | null)[];
+  /** Stable input entity IDs aligned with the displayed slots. */
+  inputIds: (string | null)[];
+  canUnload: boolean;
   /** Item ids this station's recipes consume (drag-and-drop validation). */
   acceptsItemIds: string[];
   job: { name: string; progress: number; time: number } | null;

@@ -31,6 +31,7 @@ import {
   loadShuttleFuel,
 } from './shuttleActions.js';
 import type { World } from './world.js';
+import { unloadStationInput } from './stationUnloadAction.js';
 
 // All gameplay changes go through Actions (ARCHITECTURE.md hard rule 2).
 // M00 skeleton: noop + a debug marker spawner used by tests/debug tools.
@@ -89,6 +90,7 @@ export type Action =
   | { type: 'depositSlotToStation'; playerId: EntityId; stationId: EntityId; slot: number }
   | { type: 'printAtStation'; playerId: EntityId; stationId: EntityId; recipeId: string }
   | { type: 'collectStation'; playerId: EntityId; stationId: EntityId }
+  | { type: 'unloadStationInput'; playerId: EntityId; stationId: EntityId; itemId: EntityId }
   | {
       type: 'placePlaceable';
       playerId: EntityId;
@@ -302,6 +304,10 @@ export function applyAction(world: World, action: Action): void {
     }
     case 'printAtStation': {
       printAtStation(world, action.playerId, action.stationId, action.recipeId);
+      return;
+    }
+    case 'unloadStationInput': {
+      unloadStationInput(world, action.playerId, action.stationId, action.itemId);
       return;
     }
     case 'collectStation': {

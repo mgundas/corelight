@@ -95,7 +95,7 @@ function stationState(world: World, playerId: EntityId, stationId: EntityId): Pr
       ? paused
         ? 'Paused — no power. Progress resumes when the network can afford it.'
         : `Printing… (${jobRecipe.power} power/s while working${printer.boosted === true ? ', biomass boost 2x' : ''})`
-      : 'Press E while holding an input to load it. Tab closes.';
+      : 'Press E or drag a backpack item to load. Click Unload to take an input back. Tab closes.';
   return {
     mode: 'station',
     title: stationDef?.name ?? 'Station',
@@ -104,6 +104,8 @@ function stationState(world: World, playerId: EntityId, stationId: EntityId): Pr
       stationId,
       name: stationDef?.name ?? 'Station',
       slots,
+      inputIds: slots.map((_, index) => printer.inputs[index] ?? null),
+      canUnload: player.components.inventory?.slots.includes(null) === true,
       acceptsItemIds,
       job: jobRecipe
         ? {

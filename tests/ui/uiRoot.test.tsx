@@ -66,6 +66,8 @@ describe('React UI root', () => {
           stationId: 'machine_x',
           name: 'Small printer',
           slots: [null, null],
+          inputIds: [null, null],
+          canUnload: true,
           acceptsItemIds: ['silicate'],
           job: null,
           outputName: null,
