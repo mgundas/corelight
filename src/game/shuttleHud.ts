@@ -4,11 +4,11 @@
 // The React HUD renders this; nothing here mutates the sim.
 
 import { SHUTTLE_FUEL_MAX, SHUTTLE_LAUNCH_HOLD_S } from '../core/constants.js';
-import { distance, dot, normalize, sub, type Vec3d } from '../core/math.js';
+import { cross, distance, dot, normalize, sub, type Vec3d } from '../core/math.js';
 import type { PlanetConfig } from '../planets/PlanetConfig.js';
 import { nearestPlanet } from '../planets/solarSystem.js';
 import type { EntityId } from '../sim/entities.js';
-import { moveBasis, upAt } from '../sim/physics/frames.js';
+import { moveBasis } from '../sim/physics/frames.js';
 import { altitudeAbove, isLanded, pilotedShuttle, shuttleFuel, shuttleSpeed } from '../sim/shuttle.js';
 import type { World } from '../sim/world.js';
 
@@ -17,7 +17,9 @@ export interface FlightMarker {
   distanceM: number;
   /** Bearing right of the ship's nose, degrees in [-180, 180]; 0 when unreachable by bearing. */
   bearingDeg: number;
-  /** False for another planet (bearing is not meaningful in deep space). */
+  /** Pitch correction above/below the actual nose, including in deep space. */
+  elevationDeg: number;
+  /** Whether this marker belongs to the current physics planet. */
   samePlanet: boolean;
 }
 
@@ -33,19 +35,20 @@ export interface FlightStatus {
   habitats: FlightMarker[];
 }
 
-function bearingTo(
+export function flightDirectionTo(
   origin: Vec3d,
   yaw: number,
+  pitch: number,
   up: Vec3d,
   target: Vec3d,
-): number {
-  const to = sub(target, origin);
-  const flat = sub(to, { x: up.x * dot(to, up), y: up.y * dot(to, up), z: up.z * dot(to, up) });
-  if (dot(flat, flat) < 1e-6) return 0;
-  const { forward, right } = moveBasis(up, yaw, 0);
-  const n = normalize(flat);
-  const fwd = normalize(sub(forward, { x: up.x * dot(forward, up), y: up.y * dot(forward, up), z: up.z * dot(forward, up) }));
-  return (Math.atan2(dot(n, right), dot(n, fwd)) * 180) / Math.PI;
+): Pick<FlightMarker, 'bearingDeg' | 'elevationDeg'> {
+  const to = normalize(sub(target, origin));
+  const { forward, right } = moveBasis(up, yaw, pitch);
+  const f = dot(to, forward);
+  const r = dot(to, right);
+  const u = dot(to, normalize(cross(right, forward)));
+  return { bearingDeg: Math.atan2(r, f) * 180 / Math.PI,
+    elevationDeg: Math.atan2(u, Math.hypot(f, r)) * 180 / Math.PI };
 }
 
 /** Flight readout for the piloted shuttle, or null when on foot. */
@@ -60,15 +63,15 @@ export function flightStatusFor(
   if (!entity || !shuttle) return null;
   const planet =
     planets.find((p) => p.id === entity.planetId) ?? nearestPlanet(planets, entity.position);
-  const up = planet ? upAt(planet, entity.position) : normalize(shuttle.up);
+  const up = normalize(shuttle.up);
   const shippedPlanets: FlightMarker[] = planets.map((p) => ({
     label: p.name,
     distanceM: Math.max(
       0,
       distance(entity.position, p.center) - p.radius,
     ),
-    bearingDeg: bearingTo(entity.position, shuttle.yaw, up, p.center),
-    samePlanet: p.id === planet.id,
+    ...flightDirectionTo(entity.position, shuttle.yaw, shuttle.pitch, up, p.center),
+    samePlanet: p.id === entity.planetId,
   }));
   const habitats: FlightMarker[] = [];
   for (const other of world.entities.values()) {
@@ -77,13 +80,14 @@ export function flightStatusFor(
     habitats.push({
       label: otherPlanet ? `Base · ${otherPlanet.name}` : 'Base',
       distanceM: distance(entity.position, other.position),
-      bearingDeg: bearingTo(
+      ...flightDirectionTo(
         entity.position,
         shuttle.yaw,
+        shuttle.pitch,
         up,
         other.position,
       ),
-      samePlanet: other.planetId === planet.id,
+      samePlanet: other.planetId === entity.planetId,
     });
   }
   habitats.sort((a, b) => a.distanceM - b.distanceM);

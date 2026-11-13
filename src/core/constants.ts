@@ -339,7 +339,11 @@ export const SHUTTLE_THRUST_ACCEL = 30;
 export const SHUTTLE_LIFT_ACCEL = 35;
 /** A/D yaw rate (rad/s) and mouse pitch clamp. */
 export const SHUTTLE_YAW_RATE = 1.5;
-export const SHUTTLE_PITCH_LIMIT = 1;
+export const SHUTTLE_PITCH_LIMIT = Math.PI / 2;
+/** Powered arcade steering redirects momentum toward the pilot's heading. */
+export const SHUTTLE_STEERING_RESPONSE = 4;
+/** S brakes existing drift before settling into slow reverse thrust. */
+export const SHUTTLE_BRAKE_RATE = 3;
 /** Below this altitude the landing assist clamps descent and levels out. */
 export const SHUTTLE_LANDING_ASSIST_M = 40;
 /** If the ground probe misses below this altitude, the ring is still loading:

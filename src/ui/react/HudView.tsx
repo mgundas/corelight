@@ -71,20 +71,20 @@ export function HudView() {
             <div className="flight-markers">
               {flight.planets.map((marker) => (
                 <div key={`planet:${marker.label}`} className="flight-marker">
-                  <span>{!flight.landed ? arrowForBearing(marker.bearingDeg) : '●'} {marker.label}</span>
+                  <span>{!flight.landed ? arrowForBearing(marker.bearingDeg) : '●'} {marker.label} · {Math.abs(Math.round(marker.elevationDeg))}° {marker.elevationDeg >= 0 ? 'up' : 'down'}</span>
                   <span>{distanceText(marker.distanceM)}</span>
                 </div>
               ))}
               {flight.habitats.map((marker, index) => (
                 <div key={`base:${marker.label}:${index}`} className="flight-marker base">
-                  <span>{marker.samePlanet ? arrowForBearing(marker.bearingDeg) : '◆'} {marker.label}</span>
+                  <span>{arrowForBearing(marker.bearingDeg)} {marker.label} · {Math.abs(Math.round(marker.elevationDeg))}° {marker.elevationDeg >= 0 ? 'up' : 'down'}</span>
                   <span>{distanceText(marker.distanceM)}</span>
                 </div>
               ))}
             </div>
             <div className="flight-hint">
               Mouse steer · A/D yaw · RMB free-look<br />
-              W/S thrust · Release thrust to brake near ground<br />
+              W fly toward nose · S brake / reverse<br />
               <kbd>Space</kbd> {flight.landed ? 'hold 2 s to launch' : 'lift'} · <kbd>Shift</kbd> boost · <kbd>E</kbd> {flight.landed ? 'disembark' : 'land to disembark'}
             </div>
           </aside>

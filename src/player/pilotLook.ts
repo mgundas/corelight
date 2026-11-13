@@ -3,11 +3,16 @@
 // steer the ship; holding RMB diverts movement into this buffer so the chase
 // camera can look around without changing the ship's heading.
 
+import { CAMERA_LOOK_RADIANS_PER_PIXEL } from '../core/constants.js';
+import { getSettings } from '../core/settings.js';
+
 export class PilotLook {
   private canvas: HTMLCanvasElement | null = null;
   private active = false;
   private freeX = 0;
   private freeY = 0;
+  private steeringYaw = 0;
+  private steeringPitch = 0;
 
   attach(canvas: HTMLCanvasElement): void {
     this.canvas = canvas;
@@ -26,6 +31,8 @@ export class PilotLook {
   setActive(enabled: boolean): void {
     if (this.active === enabled) return;
     this.active = enabled;
+    this.steeringYaw = 0;
+    this.steeringPitch = 0;
     this.freeX = 0;
     this.freeY = 0;
     if (enabled) this.requestLock();
@@ -58,6 +65,19 @@ export class PilotLook {
     this.freeY += dy;
   }
 
+  /** Flight mouse history must not saturate at the on-foot orbit limit.
+   * The simulation limits actual nose pitch after applying these deltas. */
+  steer(dx: number, dy: number): void {
+    const settings = getSettings();
+    const sensitivity = CAMERA_LOOK_RADIANS_PER_PIXEL * settings.sensitivity;
+    this.steeringYaw -= dx * sensitivity;
+    this.steeringPitch -= dy * sensitivity * (settings.invertY ? -1 : 1);
+  }
+
+  steering(): { yaw: number; pitch: number } {
+    return { yaw: this.steeringYaw, pitch: this.steeringPitch };
+  }
+
   /** Consume the accumulated free-look deltas (CSS pixels). */
   consume(): { dx: number; dy: number } {
     const delta = { dx: this.freeX, dy: this.freeY };
@@ -74,6 +94,8 @@ export class PilotLook {
   /** Full teardown (detach): no pointer-lock request on the dead canvas. */
   reset(): void {
     this.active = false;
+    this.steeringYaw = 0;
+    this.steeringPitch = 0;
     this.freeX = 0;
     this.freeY = 0;
   }

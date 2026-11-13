@@ -34,6 +34,17 @@ beforeEach(() => {
 });
 
 describe('React UI root', () => {
+  it('shows vertical planet guidance and manual flight controls', () => {
+    useHudStore.setState({ flight: {
+      speedMps: 300, altitudeM: 1000, fuel: 0, maxFuel: 2, launchCharge: 0, landed: false,
+      planets: [{ label: 'Vorn', distanceM: 12000, bearingDeg: 30, elevationDeg: 25, samePlanet: false },
+        { label: 'Sela', distanceM: 1500, bearingDeg: -150, elevationDeg: -15, samePlanet: false }], habitats: [],
+    } });
+    const html = renderUi().replace(/<!--.*?-->/g, '');
+    expect(html).toContain('Vorn · 25° up');
+    expect(html).toContain('Sela · 15° down');
+    expect(html).toContain('W fly toward nose · S brake / reverse');
+  });
   it('renders the HUD slot bar as bag drop targets', () => {
     useHudStore.setState({
       slots: [{ itemId: 'resin', name: 'Resin', color: '#c58b4a' }],

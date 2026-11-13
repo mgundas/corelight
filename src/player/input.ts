@@ -352,6 +352,7 @@ export class PlayerInput {
         if (delta) this.pilotLook.addLook(delta.dx, delta.dy);
       } else if (document.pointerLockElement === this.canvas) {
         // Pointer-locked pilot steering (no button needed).
+        this.pilotLook.steer(e.movementX, e.movementY);
         this.lookTarget?.addLook(e.movementX, e.movementY);
       }
       return;

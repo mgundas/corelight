@@ -10,18 +10,19 @@ import {
   SHUTTLE_CHASE_HEIGHT_M,
   SHUTTLE_CAMERA_MIN_M,
 } from '../core/constants.js';
-import { add, clampScalar, normalize, scale, sub, type Vec3d } from '../core/math.js';
+import { add, clampScalar, cross, normalize, scale, sub, type Vec3d } from '../core/math.js';
 import { getSettings } from '../core/settings.js';
 import type { PlanetConfig } from '../planets/PlanetConfig.js';
 import type { ShuttleComponent } from '../sim/entities.js';
 import { moveBasis } from '../sim/physics/frames.js';
-import { easeUp } from '../sim/shuttle.js';
+import { easeUp, shuttleForward } from '../sim/shuttle.js';
+import { shuttleHeadingFor } from '../sim/shuttleSteering.js';
 import type { TerrainColliders } from '../sim/physics/terrainColliders.js';
 
 /** Keep the camera off the terrain surface. */
 const WALL_MARGIN = 0.6;
 const WALL_MIN = SHUTTLE_CAMERA_MIN_M;
-/** Ease render yaw/up toward sim values (frame-rate independent). */
+/** Ease world heading/up toward sim values (frame-rate independent). */
 const CAMERA_EASE_RATE = 12;
 /** RMB free-look pitch limit (radians). */
 const FREE_LOOK_PITCH_LIMIT = 1.1;
@@ -36,18 +37,16 @@ export interface ShuttleCameraView {
 }
 
 export class ShuttleCamera {
-  private yaw: number | null = null;
+  private forward: Vec3d | null = null;
   private up: Vec3d | null = null;
-  private pitch: number | null = null;
   /** Camera-only RMB look offset, relative to the ship's steering heading. */
   private freeLookYaw = 0;
   private freeLookPitch = 0;
 
   /** Forget the previous session/planet basis (new game, exit to menu). */
   reset(): void {
-    this.yaw = null;
+    this.forward = null;
     this.up = null;
-    this.pitch = null;
     this.freeLookYaw = 0;
     this.freeLookPitch = 0;
   }
@@ -72,16 +71,14 @@ export class ShuttleCamera {
     freeLookActive: boolean,
   ): ShuttleCameraView {
     const targetUp = normalize(shuttle.up);
-    if (this.yaw === null || this.up === null) {
-      this.yaw = shuttle.yaw;
+    const targetForward = shuttleForward(shuttle.up, shuttle.yaw, shuttle.pitch);
+    if (this.forward === null || this.up === null) {
+      this.forward = targetForward;
       this.up = { ...targetUp };
-      this.pitch = shuttle.pitch;
     } else {
-      const k = 1 - Math.exp(-CAMERA_EASE_RATE * Math.max(0, frameDt));
-      const dy = wrapAngle(shuttle.yaw - this.yaw);
-      this.yaw += dy * k;
+      // Smooth world heading, not angles belonging to different up frames.
+      this.forward = easeUp(this.forward, targetForward, CAMERA_EASE_RATE, frameDt);
       this.up = easeUp(this.up, targetUp, CAMERA_EASE_RATE, frameDt);
-      this.pitch = (this.pitch ?? shuttle.pitch) + (shuttle.pitch - (this.pitch ?? shuttle.pitch)) * k;
     }
     if (!freeLookActive) {
       // Release RMB: ease the look offset back behind the ship.
@@ -90,7 +87,8 @@ export class ShuttleCamera {
       this.freeLookPitch *= 1 - k;
     }
     const up = this.up;
-    const { forward } = moveBasis(up, this.yaw + this.freeLookYaw, (this.pitch ?? 0) + this.freeLookPitch);
+    const heading = shuttleHeadingFor(up, this.forward, shuttle.yaw);
+    const { forward, right } = moveBasis(up, heading.yaw + this.freeLookYaw, heading.pitch + this.freeLookPitch);
     const focus = add(anchorWorld, scale(up, 1.6));
     const desired = add(
       add(anchorWorld, scale(forward, -SHUTTLE_CHASE_DISTANCE_M)),
@@ -104,14 +102,8 @@ export class ShuttleCamera {
       if (hit !== null) actual = Math.max(Math.min(WALL_MIN, hit / 2), Math.min(distance, hit - WALL_MARGIN));
     }
     const position = add(focus, scale(normalize(toCamera), actual));
-    return { position, up, focus, anchor: anchorWorld };
+    // Looking straight up/down must not pass a parallel camera-up vector
+    // to lookAt, which otherwise chooses an arbitrary roll at the pole.
+    return { position, up: normalize(cross(right, forward)), focus, anchor: anchorWorld };
   }
-}
-
-/** Shortest signed angle in [-PI, PI]. */
-function wrapAngle(a: number): number {
-  const twoPi = Math.PI * 2;
-  let x = (a + Math.PI) % twoPi;
-  if (x < 0) x += twoPi;
-  return x - Math.PI;
 }

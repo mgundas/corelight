@@ -99,6 +99,16 @@ function tickInput(world: World, playerId: EntityId, input: PlayerInput): void {
 
 describe('piloting input branch', () => {
   beforeEach(() => events.clear());
+  it('uses continuous pilot mouse history rather than clamped on-foot camera pitch', () => {
+    const { world, playerId, shuttleId } = spawnWorld();
+    world.dispatch({ type: 'enterShuttle', playerId, shuttleId });
+    world.tick();
+    const input = new StubInput();
+    Object.assign(input.pilotLook, { steering: () => ({ yaw: 3, pitch: 8 }) });
+    tickInput(world, playerId, input as unknown as PlayerInput);
+    world.tick();
+    expect(world.entities.get(shuttleId)?.components.shuttle?.input).toMatchObject({ lookYaw: 3, lookPitch: 8 });
+  });
 
   it('turns WASD/Space/Shift/mouse into one shuttleInput per tick', () => {
     const { world, playerId, shuttleId } = spawnWorld();

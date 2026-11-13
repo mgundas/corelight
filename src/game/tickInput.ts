@@ -76,6 +76,7 @@ export function dispatchTickInput(deps: TickInputDeps): void {
     }
     if (!deps.flying && !deps.uiOpen && deps.playerId) {
       const move = deps.input.move();
+      const look = deps.input.pilotLook?.steering?.() ?? deps.rig;
       deps.world.dispatch({
         type: 'shuttleInput',
         playerId: deps.playerId,
@@ -85,8 +86,8 @@ export function dispatchTickInput(deps: TickInputDeps): void {
           yawRate: move.x,
           lift: deps.input.spaceHeld(),
           boost: deps.input.sprint(),
-          lookYaw: deps.rig.yaw,
-          lookPitch: deps.rig.pitch,
+          lookYaw: look.yaw,
+          lookPitch: look.pitch,
         },
       });
     }

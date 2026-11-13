@@ -54,6 +54,7 @@ import {
   shortestAngle,
 } from '../shuttle.js';
 import { attachPilotToShuttle } from '../shuttleActions.js';
+import { shuttleHeadingFor, steerShuttleVelocity } from '../shuttleSteering.js';
 import type { World } from '../world.js';
 
 export interface ShuttleSystemOptions {
@@ -139,9 +140,15 @@ function updateShuttle(
   // flight the basis eases so entering an SOI gently rolls "down" toward the
   // planet instead of snapping a hemisphere.
   const radialUp = planet ? upAt(planet, entity.position) : shuttle.up;
+  const previousForward = shuttleForward(shuttle.up, shuttle.yaw, shuttle.pitch);
   shuttle.up = !shuttle.airborne && planet
     ? radialUp
     : easeUp(shuttle.up, radialUp, SHUTTLE_AUTO_ORIENT_RATE, dt);
+  if (shuttle.airborne) {
+    const heading = shuttleHeadingFor(shuttle.up, previousForward, shuttle.yaw);
+    shuttle.yaw = heading.yaw;
+    shuttle.pitch = heading.pitch;
+  }
 
   // 4) Consume one tick of pilot input (all of it arrived as Actions).
   const input = shuttle.input;
@@ -196,6 +203,7 @@ function updateShuttle(
   // 7) Airborne arcade step: thrust + lift + SOI gravity, then the speed cap.
   const forward = shuttleForward(shuttle.up, shuttle.yaw, shuttle.pitch);
   const liftAccel = lifting ? SHUTTLE_LIFT_ACCEL : 0;
+  shuttle.velocity = steerShuttleVelocity(shuttle.velocity, forward, shuttle.up, thrust, lifting, dt);
   shuttle.velocity = integrateShuttleVelocity(
     shuttle.velocity,
     planet ? sample.vector : ZERO,

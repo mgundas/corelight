@@ -195,8 +195,8 @@ export interface PlayerInputState {
 /**
  * One-tick flight intent (M14). All values come from `shuttleInput` Actions,
  * so a future co-op server runs the identical vehicle model. `lookYaw` and
- * `lookPitch` are absolute steering angles in the current up basis (the mouse
- * look), while `yawRate` is the A/D nudge applied on top for this tick.
+ * `lookPitch` are continuous mouse-history readings; their tick deltas steer
+ * the nose independently of planetary frame changes. `yawRate` adds A/D.
  */
 export interface ShuttleInputState {
   /** W/S: +1 forward, -1 reverse, 0 idle. */

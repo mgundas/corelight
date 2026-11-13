@@ -2,7 +2,8 @@
 // behind the ship, and a session reset that forgets the previous basis.
 
 import { describe, expect, it } from 'vitest';
-import { distance } from '../../src/core/math.js';
+import { add, distance, dot, normalize, scale, sub } from '../../src/core/math.js';
+import { shuttleHeadingFor } from '../../src/sim/shuttleSteering.js';
 import { SELA } from '../../src/planets/configs/sela.js';
 import { ShuttleCamera } from '../../src/game/shuttleCamera.js';
 import type { ShuttleComponent } from '../../src/sim/entities.js';
@@ -32,6 +33,18 @@ const anchor = { x: 0, y: SELA.radius, z: 0 };
 const frame = 1 / 60;
 
 describe('ShuttleCamera', () => {
+  it('preserves a world heading when the planetary up frame changes, including a vertical view', () => {
+    const camera = new ShuttleCamera();
+    const forward = { x: 1, y: 0, z: 0 };
+    for (const up of [{ x: 0, y: 1, z: 0 }, normalize({ x: 1, y: 1, z: 0 }), forward]) {
+      const heading = shuttleHeadingFor(up, forward);
+      let view = camera.update(anchor, shuttle({ up, ...heading }), [SELA], colliders, frame, SELA, false);
+      for (let i = 0; i < 180; i++) view = camera.update(anchor, shuttle({ up, ...heading }), [SELA], colliders, frame, SELA, false);
+      const behind = normalize(sub(add(anchor, scale(up, 3)), view.position));
+      expect(dot(behind, forward)).toBeGreaterThan(0.999);
+      expect(Math.abs(dot(view.up, forward))).toBeLessThan(0.001);
+    }
+  });
   it('follows flight pitch and never extends beyond a close terrain hit', () => {
     const camera = new ShuttleCamera();
     const level = camera.update(anchor, shuttle(), [SELA], colliders, frame, SELA, false);
