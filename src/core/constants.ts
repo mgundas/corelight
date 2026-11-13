@@ -118,7 +118,7 @@ export const EMBED_ESCAPE_SPEED = 50;
 /** Soil counter cap (PROJECT.md: max 200; add mode consumes it). */
 export const SOIL_MAX = 200;
 /** Terrain tool range in meters (tool hit must be this close to work). */
-export const TOOL_RANGE_M = 6;
+export const TOOL_RANGE_M = 24;
 /** Slack on the sim-side range check: the aim is measured from the
  * astronaut's head (HEAD_HEIGHT above the capsule center), so a max-range
  * downward stroke lands slightly farther from the feet. */
@@ -260,8 +260,8 @@ export const PRINTER_UI_SYNC_INTERVAL_MS = 100;
 export const CARRY_SLOW_MULT = 0.7;
 /** Placement rejects ground whose normal is more than this off local up. */
 export const PLACE_MAX_SLOPE_DEG = 20;
-/** Placement must be within tool reach of the player (m). */
-export const PLACE_RANGE_M = TOOL_RANGE_M + TOOL_RANGE_SLACK_M;
+/** Structure placement reach stays independent of the longer terrain beam (m). */
+export const PLACE_RANGE_M = 7.5;
 /** Live density at the ghost must be near the surface (abs density <= this). */
 export const PLACE_SURFACE_TOLERANCE = 0.6;
 
@@ -289,7 +289,7 @@ export const GRAB_DISTANCE_M = 2.2;
 /** Lift the grabbed item slightly above the aim line (Astroneer feel). */
 export const GRAB_LEVITATE_M = 0.35;
 /** Max distance a released item may land from the player (m). */
-export const GRAB_RELEASE_RANGE_M = TOOL_RANGE_M + TOOL_RANGE_SLACK_M;
+export const GRAB_RELEASE_RANGE_M = PLACE_RANGE_M;
 
 /** Research samples (M11): deterministic cave pods, rarer than nodes. */
 export const SAMPLE_SPAWN_RANGE_M = 96;

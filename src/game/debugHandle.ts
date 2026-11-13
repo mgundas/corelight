@@ -10,7 +10,7 @@ import type { World } from '../sim/world.js';
 import type { Renderer } from '../render/Renderer.js';
 
 /** Bump on every user-visible fix so stale tabs are instantly detectable. */
-export const DEBUG_BUILD = 'cursor-terrain-aim';
+export const DEBUG_BUILD = 'terrain-reach-24m';
 
 export interface ViewItemStat {
   type: string;

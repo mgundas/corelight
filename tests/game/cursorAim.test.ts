@@ -18,7 +18,10 @@ describe('cursor terrain aim', () => {
         camera.lookAt(head);
         camera.updateMatrixWorld();
         const groundY = planet.center.y + planet.radius;
-        for (const cursor of [new Vector2(0, 0), new Vector2(-0.2, -0.2), new Vector2(0.2, -0.3)]) {
+        for (const cursor of [
+          new Vector2(0, 0), new Vector2(-0.2, -0.2), new Vector2(0.2, -0.3),
+          new Vector2(-0.85, -0.2), new Vector2(0.85, -0.3), new Vector2(0, 0.4),
+        ]) {
           const screen = new Raycaster();
           screen.setFromCamera(cursor, camera);
           const base: CursorAimArgs = {

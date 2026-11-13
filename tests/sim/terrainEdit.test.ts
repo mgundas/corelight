@@ -29,6 +29,21 @@ function makeWorld(): { world: World; playerId: string } {
 }
 
 describe('terrainEdit action', () => {
+  it('applies a dig 18 meters away, beyond the former cursor cutoff', () => {
+    // Flat surface isolates reach from hills at the distant target.
+    const planet = { ...SELA, surfaceAmplitude: 0 };
+    const world = new World(1337, { planets: [planet] });
+    world.dispatch({ type: 'spawnPlayer', planetId: planet.id, position: { x: 0, y: planet.radius + 1, z: 0 } });
+    world.tick();
+    const player = [...world.entities.values()].find((entity) => entity.kind === 'player');
+    if (!player) throw new Error('missing player');
+    const center = { x: 18, y: planet.radius - 0.5, z: 0 };
+    world.dispatch({ type: 'terrainEdit', playerId: player.id, planetId: planet.id, mode: 'dig', center, radius: 2, strength: 5 });
+    world.tick();
+    expect(world.terrainEdits.sampleCount).toBeGreaterThan(0);
+    expect(player.components.player?.soil).toBeGreaterThan(0);
+  });
+
   it('rejects NaN center/radius without touching edits', () => {
     const { world, playerId } = makeWorld();
     const player = world.entities.get(playerId);
@@ -182,7 +197,7 @@ describe('terrainEdit action', () => {
     const off = events.on('actionApplied', (payload) => {
       applied.push(payload.type);
     });
-    // Far outside the 6 m tool range: rejected, nothing stored.
+    // Far outside tool range: rejected, nothing stored.
     world.dispatch({
       type: 'terrainEdit',
       playerId,

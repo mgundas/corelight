@@ -83,16 +83,14 @@ describe('computeAim', () => {
   });
 
   it('reaches the ground at the feet even when zoomed far out', () => {
-    // Reported bug: with the ray starting at the orbit camera (8 m
-    // behind), the 6 m budget expired before reaching the ground the
-    // player aims down at, so the brush never fired. The ray starts at
-    // the head; the camera only sets the direction.
+    // Keep camera distance beyond the current tool budget: measuring reach
+    // from the camera must not consume the astronaut's digging distance.
     const head = { x: 0, y: 1.5, z: 0 };
-    const cam = { x: 0, y: 5, z: -8 };
+    const cam = { x: 0, y: 5, z: -(TOOL_RANGE_M + 2) };
     const { origin, dir } = aimFromOrbitCamera(head, cam);
     expect(origin).toEqual(head);
     // Thin solid slab at y in [-0.5, 0], air elsewhere: both origins
-    // start in air, but only the head is within 6 m of the slab.
+    // start in air, but only the head ray reaches the slab within budget.
     const field = {
       config: SELA,
       density: (_x: number, y: number) => Math.min(y + 0.5, -y),
