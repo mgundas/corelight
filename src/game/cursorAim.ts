@@ -1,5 +1,5 @@
-// Cursor aim assembly (React/cursor-mode port): screen ray -> head-origin
-// tool aim + hovered loose item. Pure assembly over injected renderer/sim
+// Cursor aim assembly: exact screen ray with reach measured from the head,
+// plus hovered loose item. Pure assembly over injected renderer/sim
 // reads, so Game.frame stays short and the math is unit-testable.
 
 import type { Vec3d } from '../core/math.js';
@@ -44,7 +44,8 @@ export function computeCursorAim(args: CursorAimArgs): CursorAimResult {
   };
   const ray: WorldRay = { origin: { ...args.cursorOrigin }, dir: { ...args.cursorDir } };
   const aim = computeAim({
-    origin: head,
+    origin: ray.origin,
+    reachOrigin: head,
     viewDir: ray.dir,
     planet: args.followed.planet,
     field: args.field,

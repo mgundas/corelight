@@ -5,20 +5,17 @@
 // Actions, which carry the range/hardness checks).
 
 import { TOOL_RANGE_M } from '../core/constants.js';
-import { normalize, sub, type Vec3d } from '../core/math.js';
+import { distance, normalize, sub, type Vec3d } from '../core/math.js';
 import type { PlanetConfig } from '../planets/PlanetConfig.js';
 import { upAt } from '../sim/physics/frames.js';
 import type { DensityField } from '../terrain/density.js';
 import type { ToolAim } from './terrainTool.js';
 
 export interface AimInput {
-  /**
-   * Ray origin: the astronaut's head (player pos + up x HEAD_HEIGHT), not
-   * the camera. The orbit camera sits 2–8 m behind the player; measuring
-   * the 6 m tool budget from the camera would spend the reach on the zoom
-   * distance and make the ground at one's feet unreachable.
-   */
+  /** Ray origin; cursor aiming must keep this at the camera for correct parallax. */
   origin: Vec3d;
+  /** Measure reach from here instead of spending it on camera zoom distance. */
+  reachOrigin?: Vec3d;
   /** View direction: camera forward through the crosshair. */
   viewDir: Vec3d;
   planet: PlanetConfig;
@@ -52,14 +49,20 @@ export function computeAim(input: AimInput): ToolAim {
   // The view ray is useful even when the terrain ray misses (platforms have
   // no colliders, so cable snapping must project onto them directly).
   const ray = { origin: { ...origin }, dir: { ...viewDir } };
-  const toi = input.castRay(origin, viewDir, TOOL_RANGE_M);
-  if (toi !== null && toi <= TOOL_RANGE_M) {
+  const reachOrigin = input.reachOrigin ?? origin;
+  const maxDist = distance(origin, reachOrigin) + TOOL_RANGE_M;
+  const resultAt = (hit: Vec3d): ToolAim => {
+    if (distance(hit, reachOrigin) > TOOL_RANGE_M) return { ...NO_AIM, ray, planet };
+    return { hit, normal: input.detailed ? surfaceNormal(field, planet, hit) : null, planet, ray };
+  };
+  const toi = input.castRay(origin, viewDir, maxDist);
+  if (toi !== null && toi >= 0 && toi <= maxDist) {
     const hit: Vec3d = {
       x: origin.x + viewDir.x * toi,
       y: origin.y + viewDir.y * toi,
       z: origin.z + viewDir.z * toi,
     };
-    return { hit, normal: input.detailed ? surfaceNormal(field, planet, hit) : null, planet, ray };
+    return resultAt(hit);
   }
   if (!input.detailed) return { ...NO_AIM, ray, planet };
   // Fallback march along the ray (quarter-meter steps). When the origin
@@ -74,9 +77,9 @@ export function computeAim(input: AimInput): ToolAim {
   let prevT = 0;
   let prevD = field.density(start.x, start.y, start.z);
   if (prevD >= 0) {
-    return { hit: { ...origin }, normal: surfaceNormal(field, planet, origin), planet, ray };
+    return resultAt({ ...origin });
   }
-  for (let t = 0.25; t <= TOOL_RANGE_M; t += 0.25) {
+  for (let t = Math.min(0.25, maxDist); prevT < maxDist; t = Math.min(t + 0.25, maxDist)) {
     const p = at(t);
     const d = field.density(p.x, p.y, p.z);
     if (d >= 0) {
@@ -87,7 +90,7 @@ export function computeAim(input: AimInput): ToolAim {
         y: origin.y + viewDir.y * ht,
         z: origin.z + viewDir.z * ht,
       };
-      return { hit, normal: surfaceNormal(field, planet, hit), planet, ray };
+      return resultAt(hit);
     }
     prevT = t;
     prevD = d;
